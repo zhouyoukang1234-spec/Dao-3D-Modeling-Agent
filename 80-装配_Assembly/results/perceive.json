@@ -1,0 +1,2272 @@
+{
+  "Arm.stl": {
+    "name": "Arm.stl",
+    "extents": [
+      27.958,
+      70.978,
+      11.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          -0.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          24.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.6,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          -0.0,
+          46.9
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.6,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          24.0,
+          46.9
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 1.886,
+        "length": 3.333,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          50.0,
+          51.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          -0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          0.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          -0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          67.5,
+          24.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      }
+    ]
+  },
+  "MainLink_Alpha.stl": {
+    "name": "MainLink_Alpha.stl",
+    "extents": [
+      4.0,
+      190.955,
+      16.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 5.98,
+        "length": 0.5,
+        "axis": [
+          1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          3.25,
+          -175.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 353.3,
+        "n_faces": 72
+      },
+      {
+        "kind": "hole",
+        "radius": 5.98,
+        "length": 0.5,
+        "axis": [
+          -1.0,
+          0.0,
+          -0.0
+        ],
+        "center": [
+          3.25,
+          0.0,
+          0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 353.3,
+        "n_faces": 72
+      },
+      {
+        "kind": "hole",
+        "radius": 3.479,
+        "length": 0.833,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          1.25,
+          -175.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.1,
+        "n_faces": 54
+      },
+      {
+        "kind": "hole",
+        "radius": 3.479,
+        "length": 0.833,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          1.25,
+          0.0,
+          0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.1,
+        "n_faces": 54
+      }
+    ]
+  },
+  "PitcherLink_Alpha.stl": {
+    "name": "PitcherLink_Alpha.stl",
+    "extents": [
+      64.0,
+      191.0,
+      16.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 5.98,
+        "length": 0.5,
+        "axis": [
+          1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          63.25,
+          -175.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 353.3,
+        "n_faces": 72
+      },
+      {
+        "kind": "hole",
+        "radius": 5.98,
+        "length": 0.5,
+        "axis": [
+          -1.0,
+          0.0,
+          -0.0
+        ],
+        "center": [
+          3.25,
+          0.0,
+          0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 353.3,
+        "n_faces": 72
+      },
+      {
+        "kind": "hole",
+        "radius": 3.479,
+        "length": 0.833,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          1.25,
+          0.0,
+          0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.1,
+        "n_faces": 54
+      },
+      {
+        "kind": "hole",
+        "radius": 3.479,
+        "length": 0.833,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          61.25,
+          -175.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.1,
+        "n_faces": 54
+      }
+    ]
+  },
+  "BearingMainLink.stl": {
+    "name": "BearingMainLink.stl",
+    "extents": [
+      141.769,
+      23.789,
+      7.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.985,
+        "length": 2.0,
+        "axis": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          67.5,
+          -0.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.985,
+        "length": 114.794,
+        "axis": [
+          -1.0,
+          -0.0,
+          -0.0
+        ],
+        "center": [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 528
+      },
+      {
+        "kind": "hole",
+        "radius": 1.985,
+        "length": 2.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -67.5,
+          0.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      }
+    ]
+  },
+  "BearingPitcherLink.stl": {
+    "name": "BearingPitcherLink.stl",
+    "extents": [
+      141.0,
+      16.0,
+      68.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.985,
+        "length": 2.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          67.5,
+          0.0,
+          60.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.985,
+        "length": 2.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -67.5,
+          0.0,
+          -0.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      }
+    ]
+  },
+  "LPitcher.stl": {
+    "name": "LPitcher.stl",
+    "extents": [
+      60.23,
+      95.707,
+      13.5
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          54.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          30.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.933,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          54.0,
+          46.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.933,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          30.0,
+          46.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 1.886,
+        "length": 3.5,
+        "axis": [
+          -0.0,
+          -0.0,
+          -1.0
+        ],
+        "center": [
+          -39.742,
+          97.716,
+          50.25
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 18.985,
+        "length": 7.333,
+        "axis": [
+          0.0,
+          -0.0004,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          29.999,
+          53.049
+        ],
+        "err": 0.0007,
+        "wrap_deg": 332.0,
+        "n_faces": 125
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          54.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -7.5,
+          30.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      }
+    ]
+  },
+  "RPitcher.stl": {
+    "name": "RPitcher.stl",
+    "extents": [
+      60.23,
+      95.707,
+      13.5
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          54.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.588,
+        "length": 0.9,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          30.0,
+          50.15
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.933,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          54.0,
+          46.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 3.681,
+        "length": 0.933,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          30.0,
+          46.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 351.7,
+        "n_faces": 58
+      },
+      {
+        "kind": "hole",
+        "radius": 1.886,
+        "length": 3.5,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          39.742,
+          97.716,
+          50.25
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 18.985,
+        "length": 7.333,
+        "axis": [
+          -0.0,
+          -0.0004,
+          1.0
+        ],
+        "center": [
+          7.5,
+          29.999,
+          53.049
+        ],
+        "err": 0.0007,
+        "wrap_deg": 332.0,
+        "n_faces": 125
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          54.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      },
+      {
+        "kind": "hole",
+        "radius": 2.867,
+        "length": 0.333,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          7.5,
+          30.001,
+          48.284
+        ],
+        "err": 0.2568,
+        "wrap_deg": 349.8,
+        "n_faces": 53
+      }
+    ]
+  },
+  "Receiver.stl": {
+    "name": "Receiver.stl",
+    "extents": [
+      140.0,
+      110.0,
+      88.125
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 12.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -61.0,
+          -14.235,
+          53.126
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 96
+      },
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 12.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          61.0,
+          -14.235,
+          53.126
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 96
+      },
+      {
+        "kind": "hole",
+        "radius": 1.788,
+        "length": 13.355,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -59.475,
+          0.0,
+          -0.0
+        ],
+        "err": 0.0024,
+        "wrap_deg": 352.6,
+        "n_faces": 104
+      },
+      {
+        "kind": "hole",
+        "radius": 1.788,
+        "length": 13.355,
+        "axis": [
+          -1.0,
+          -0.0,
+          -0.0
+        ],
+        "center": [
+          59.475,
+          0.0,
+          0.0
+        ],
+        "err": 0.0024,
+        "wrap_deg": 352.6,
+        "n_faces": 104
+      },
+      {
+        "kind": "hole",
+        "radius": 1.037,
+        "length": 0.43,
+        "axis": [
+          -0.0,
+          -1.0,
+          -0.0
+        ],
+        "center": [
+          7.472,
+          -52.718,
+          -13.219
+        ],
+        "err": 0.0846,
+        "wrap_deg": 340.7,
+        "n_faces": 56
+      },
+      {
+        "kind": "hole",
+        "radius": 1.024,
+        "length": 0.39,
+        "axis": [
+          -0.0,
+          1.0,
+          -0.0004
+        ],
+        "center": [
+          7.49,
+          -52.739,
+          -10.775
+        ],
+        "err": 0.0945,
+        "wrap_deg": 165.2,
+        "n_faces": 26
+      },
+      {
+        "kind": "hole",
+        "radius": 0.877,
+        "length": 0.184,
+        "axis": [
+          -0.0,
+          1.0,
+          -0.0
+        ],
+        "center": [
+          0.303,
+          -53.241,
+          -10.614
+        ],
+        "err": 0.1158,
+        "wrap_deg": 277.6,
+        "n_faces": 46
+      },
+      {
+        "kind": "boss",
+        "radius": 2.782,
+        "length": 1.02,
+        "axis": [
+          0.0009,
+          -1.0,
+          -0.0008
+        ],
+        "center": [
+          -7.025,
+          -52.775,
+          -13.152
+        ],
+        "err": 0.2872,
+        "wrap_deg": 285.1,
+        "n_faces": 91
+      },
+      {
+        "kind": "boss",
+        "radius": 3.018,
+        "length": 0.28,
+        "axis": [
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "center": [
+          0.18,
+          -53.186,
+          -11.032
+        ],
+        "err": 0.3374,
+        "wrap_deg": 172.0,
+        "n_faces": 32
+      }
+    ]
+  },
+  "LFrame.stl": {
+    "name": "LFrame.stl",
+    "extents": [
+      62.5,
+      111.966,
+      54.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 1.967,
+        "axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "center": [
+          -99.4,
+          -3.05,
+          59.9
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 0.667,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -108.9,
+          30.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 0.667,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -108.9,
+          -30.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          25.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          35.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          35.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          25.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -25.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -35.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -35.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -25.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 2.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -50.4,
+          50.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 2.0,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          -50.4,
+          -50.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          -51.9,
+          35.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          -51.9,
+          25.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          -100.9,
+          25.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          -100.9,
+          35.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -35.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -51.9,
+          -25.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -25.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -100.9,
+          -35.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      }
+    ]
+  },
+  "RFrame.stl": {
+    "name": "RFrame.stl",
+    "extents": [
+      62.5,
+      111.966,
+      54.0
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 0.667,
+        "axis": [
+          -1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          108.9,
+          30.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 0.667,
+        "axis": [
+          -1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          108.9,
+          -30.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          25.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          35.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          35.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          25.0,
+          30.75
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          -5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          -0.0,
+          -0.0,
+          -1.0
+        ],
+        "center": [
+          51.9,
+          5.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -25.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          -35.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -35.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.737,
+        "length": 1.433,
+        "axis": [
+          -0.0,
+          -0.0,
+          -1.0
+        ],
+        "center": [
+          51.9,
+          -25.0,
+          14.05
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.235,
+        "length": 1.867,
+        "axis": [
+          -0.0,
+          -1.0,
+          -0.0
+        ],
+        "center": [
+          99.4,
+          2.9,
+          59.9
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.9,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 2.0,
+        "axis": [
+          -1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          50.4,
+          50.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 2.0,
+        "axis": [
+          -1.0,
+          -0.0,
+          0.0
+        ],
+        "center": [
+          50.4,
+          -50.0,
+          22.4
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          -1.0
+        ],
+        "center": [
+          51.9,
+          35.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          25.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          100.9,
+          25.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          100.9,
+          35.0,
+          19.893
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          -0.0,
+          -1.0
+        ],
+        "center": [
+          51.9,
+          -5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -5.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          51.9,
+          -35.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          51.9,
+          -25.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -25.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.727,
+        "length": 5.533,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          100.9,
+          -35.0,
+          24.907
+        ],
+        "err": 0.0878,
+        "wrap_deg": 351.6,
+        "n_faces": 118
+      },
+      {
+        "kind": "hole",
+        "radius": 1.239,
+        "length": 0.1,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "center": [
+          105.55,
+          1.959,
+          22.886
+        ],
+        "err": 0.145,
+        "wrap_deg": 262.1,
+        "n_faces": 46
+      }
+    ]
+  },
+  "Base.stl": {
+    "name": "Base.stl",
+    "extents": [
+      116.6,
+      137.017,
+      71.5
+    ],
+    "holes": [
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 0.833,
+        "axis": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "center": [
+          -33.0,
+          -64.25,
+          21.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 0.833,
+        "axis": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "center": [
+          -33.0,
+          -64.25,
+          67.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 1.6,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -37.5,
+          50.0,
+          10.1
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.183,
+        "length": 1.667,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -50.0,
+          50.0,
+          5.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 1.6,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          -37.5,
+          -50.0,
+          10.1
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.183,
+        "length": 1.667,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -50.0,
+          -50.0,
+          5.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 0.833,
+        "axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "center": [
+          33.0,
+          -64.25,
+          21.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 1.786,
+        "length": 0.833,
+        "axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "center": [
+          33.0,
+          -64.25,
+          67.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 1.6,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          37.5,
+          50.0,
+          10.1
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.183,
+        "length": 1.667,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          50.0,
+          50.0,
+          5.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.233,
+        "length": 1.6,
+        "axis": [
+          -0.0,
+          0.0,
+          -1.0
+        ],
+        "center": [
+          37.5,
+          -50.0,
+          10.1
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 2.183,
+        "length": 1.667,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          50.0,
+          -50.0,
+          5.0
+        ],
+        "err": 0.0,
+        "wrap_deg": 350.0,
+        "n_faces": 48
+      },
+      {
+        "kind": "hole",
+        "radius": 3.073,
+        "length": 0.43,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -37.5,
+          50.0,
+          7.216
+        ],
+        "err": 0.235,
+        "wrap_deg": 351.4,
+        "n_faces": 60
+      },
+      {
+        "kind": "hole",
+        "radius": 3.073,
+        "length": 0.43,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          -37.5,
+          -50.0,
+          7.216
+        ],
+        "err": 0.235,
+        "wrap_deg": 351.4,
+        "n_faces": 60
+      },
+      {
+        "kind": "hole",
+        "radius": 3.073,
+        "length": 0.43,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "center": [
+          37.5,
+          50.0,
+          7.216
+        ],
+        "err": 0.235,
+        "wrap_deg": 351.4,
+        "n_faces": 60
+      },
+      {
+        "kind": "hole",
+        "radius": 3.073,
+        "length": 0.43,
+        "axis": [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "center": [
+          37.5,
+          -50.0,
+          7.216
+        ],
+        "err": 0.235,
+        "wrap_deg": 351.4,
+        "n_faces": 60
+      }
+    ]
+  }
+}

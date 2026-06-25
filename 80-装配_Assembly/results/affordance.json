@@ -1,0 +1,2454 @@
+{
+ "Arm.stl": {
+  "name": "Arm.stl",
+  "n_holes": 3,
+  "types": {
+   "M3": 2,
+   "M4": 1
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     67.5,
+     -0.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.9,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     67.5,
+     24.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.9,
+    "rings": 3
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     67.5,
+     50.0,
+     51.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 3.333,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     67.5,
+     -0.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.9,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     67.5,
+     24.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.9,
+    "rings": 3
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     67.5,
+     50.0,
+     51.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 3.333,
+    "rings": 1
+   }
+  ]
+ },
+ "MainLink_Alpha.stl": {
+  "name": "MainLink_Alpha.stl",
+  "n_holes": 2,
+  "types": {
+   "rod_pivot": 2
+  },
+  "pivots": [
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     -175.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   },
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     0.0,
+     0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   }
+  ],
+  "fasteners": [],
+  "features": [
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     -175.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   },
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     0.0,
+     0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   }
+  ]
+ },
+ "PitcherLink_Alpha.stl": {
+  "name": "PitcherLink_Alpha.stl",
+  "n_holes": 2,
+  "types": {
+   "rod_pivot": 2
+  },
+  "pivots": [
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     61.25,
+     -175.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   },
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     0.0,
+     0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   }
+  ],
+  "fasteners": [],
+  "features": [
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     61.25,
+     -175.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   },
+   {
+    "type": "rod_pivot",
+    "radius": 3.479,
+    "head_radius": 5.98,
+    "center": [
+     1.25,
+     0.0,
+     0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 2
+   }
+  ]
+ },
+ "BearingMainLink.stl": {
+  "name": "BearingMainLink.stl",
+  "n_holes": 1,
+  "types": {
+   "M4": 1
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     67.5,
+     -0.0,
+     -0.0
+    ],
+    "axis": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "length": 114.794,
+    "rings": 3
+   }
+  ],
+  "features": [
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     67.5,
+     -0.0,
+     -0.0
+    ],
+    "axis": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "length": 114.794,
+    "rings": 3
+   }
+  ]
+ },
+ "BearingPitcherLink.stl": {
+  "name": "BearingPitcherLink.stl",
+  "n_holes": 2,
+  "types": {
+   "M4": 2
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     67.5,
+     0.0,
+     60.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     -67.5,
+     0.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     67.5,
+     0.0,
+     60.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 1.985,
+    "head_radius": 1.985,
+    "center": [
+     -67.5,
+     0.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   }
+  ]
+ },
+ "LPitcher.stl": {
+  "name": "LPitcher.stl",
+  "n_holes": 3,
+  "types": {
+   "M3": 2,
+   "M4": 1
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     -7.5,
+     54.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.933,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 18.985,
+    "center": [
+     -7.5,
+     30.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 7.333,
+    "rings": 4
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     -39.742,
+     97.716,
+     50.25
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 3.5,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     -7.5,
+     54.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.933,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 18.985,
+    "center": [
+     -7.5,
+     30.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 7.333,
+    "rings": 4
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     -39.742,
+     97.716,
+     50.25
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 3.5,
+    "rings": 1
+   }
+  ]
+ },
+ "RPitcher.stl": {
+  "name": "RPitcher.stl",
+  "n_holes": 3,
+  "types": {
+   "M3": 2,
+   "M4": 1
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     7.5,
+     54.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.933,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 18.985,
+    "center": [
+     7.5,
+     30.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 7.333,
+    "rings": 4
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     39.742,
+     97.716,
+     50.25
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 3.5,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 3.681,
+    "center": [
+     7.5,
+     54.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 0.933,
+    "rings": 3
+   },
+   {
+    "type": "M3",
+    "radius": 1.588,
+    "head_radius": 18.985,
+    "center": [
+     7.5,
+     30.0,
+     50.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 7.333,
+    "rings": 4
+   },
+   {
+    "type": "M4",
+    "radius": 1.886,
+    "head_radius": 1.886,
+    "center": [
+     39.742,
+     97.716,
+     50.25
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 3.5,
+    "rings": 1
+   }
+  ]
+ },
+ "Receiver.stl": {
+  "name": "Receiver.stl",
+  "n_holes": 5,
+  "types": {
+   "M3": 2,
+   "M2": 3
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -61.0,
+     -14.235,
+     53.126
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 12.0,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.788,
+    "head_radius": 1.788,
+    "center": [
+     -59.475,
+     0.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 13.355,
+    "rings": 2
+   },
+   {
+    "type": "M2",
+    "radius": 1.037,
+    "head_radius": 1.037,
+    "center": [
+     7.472,
+     -52.718,
+     -13.219
+    ],
+    "axis": [
+     -0.0,
+     -1.0,
+     -0.0
+    ],
+    "length": 0.43,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 1.024,
+    "head_radius": 1.024,
+    "center": [
+     7.49,
+     -52.739,
+     -10.775
+    ],
+    "axis": [
+     -0.0,
+     1.0,
+     -0.0004
+    ],
+    "length": 0.39,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 0.877,
+    "head_radius": 0.877,
+    "center": [
+     0.303,
+     -53.241,
+     -10.614
+    ],
+    "axis": [
+     -0.0,
+     1.0,
+     -0.0
+    ],
+    "length": 0.184,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -61.0,
+     -14.235,
+     53.126
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 12.0,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.788,
+    "head_radius": 1.788,
+    "center": [
+     -59.475,
+     0.0,
+     -0.0
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 13.355,
+    "rings": 2
+   },
+   {
+    "type": "M2",
+    "radius": 1.037,
+    "head_radius": 1.037,
+    "center": [
+     7.472,
+     -52.718,
+     -13.219
+    ],
+    "axis": [
+     -0.0,
+     -1.0,
+     -0.0
+    ],
+    "length": 0.43,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 1.024,
+    "head_radius": 1.024,
+    "center": [
+     7.49,
+     -52.739,
+     -10.775
+    ],
+    "axis": [
+     -0.0,
+     1.0,
+     -0.0004
+    ],
+    "length": 0.39,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 0.877,
+    "head_radius": 0.877,
+    "center": [
+     0.303,
+     -53.241,
+     -10.614
+    ],
+    "axis": [
+     -0.0,
+     1.0,
+     -0.0
+    ],
+    "length": 0.184,
+    "rings": 1
+   }
+  ]
+ },
+ "LFrame.stl": {
+  "name": "LFrame.stl",
+  "n_holes": 17,
+  "types": {
+   "M4": 3,
+   "M3": 14
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -99.4,
+     -3.05,
+     59.9
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 1.967,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     -108.9,
+     30.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     -108.9,
+     -30.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -50.4,
+     50.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -50.4,
+     -50.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -99.4,
+     -3.05,
+     59.9
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 1.967,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     -108.9,
+     30.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     -108.9,
+     -30.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -100.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     -51.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -50.4,
+     50.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     -50.4,
+     -50.0,
+     22.4
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   }
+  ]
+ },
+ "RFrame.stl": {
+  "name": "RFrame.stl",
+  "n_holes": 18,
+  "types": {
+   "M3": 14,
+   "M4": 3,
+   "M2": 1
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     108.9,
+     30.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     108.9,
+     -30.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.235,
+    "head_radius": 2.235,
+    "center": [
+     99.4,
+     2.9,
+     59.9
+    ],
+    "axis": [
+     -0.0,
+     -1.0,
+     -0.0
+    ],
+    "length": 1.867,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     50.4,
+     50.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     50.4,
+     -50.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 1.239,
+    "head_radius": 1.239,
+    "center": [
+     105.55,
+     1.959,
+     22.886
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.1,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     108.9,
+     30.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.737,
+    "head_radius": 1.737,
+    "center": [
+     108.9,
+     -30.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 0.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     35.0,
+     19.893
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     25.0,
+     19.893
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     5.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     100.9,
+     -35.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M3",
+    "radius": 1.727,
+    "head_radius": 1.737,
+    "center": [
+     51.9,
+     -25.0,
+     24.907
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 5.533,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.235,
+    "head_radius": 2.235,
+    "center": [
+     99.4,
+     2.9,
+     59.9
+    ],
+    "axis": [
+     -0.0,
+     -1.0,
+     -0.0
+    ],
+    "length": 1.867,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     50.4,
+     50.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 2.233,
+    "center": [
+     50.4,
+     -50.0,
+     22.4
+    ],
+    "axis": [
+     -1.0,
+     -0.0,
+     0.0
+    ],
+    "length": 2.0,
+    "rings": 1
+   },
+   {
+    "type": "M2",
+    "radius": 1.239,
+    "head_radius": 1.239,
+    "center": [
+     105.55,
+     1.959,
+     22.886
+    ],
+    "axis": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "length": 0.1,
+    "rings": 1
+   }
+  ]
+ },
+ "Base.stl": {
+  "name": "Base.stl",
+  "n_holes": 12,
+  "types": {
+   "M3": 4,
+   "M4": 8
+  },
+  "pivots": [],
+  "fasteners": [
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -33.0,
+     -64.25,
+     21.0
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -33.0,
+     -64.25,
+     67.0
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     -37.5,
+     50.0,
+     10.1
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     -50.0,
+     50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     -37.5,
+     -50.0,
+     10.1
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     -50.0,
+     -50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     33.0,
+     -64.25,
+     21.0
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     33.0,
+     -64.25,
+     67.0
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     37.5,
+     50.0,
+     10.1
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     50.0,
+     50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     37.5,
+     -50.0,
+     10.1
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     50.0,
+     -50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   }
+  ],
+  "features": [
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -33.0,
+     -64.25,
+     21.0
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     -33.0,
+     -64.25,
+     67.0
+    ],
+    "axis": [
+     0.0,
+     -1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     -37.5,
+     50.0,
+     10.1
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     -50.0,
+     50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     -37.5,
+     -50.0,
+     10.1
+    ],
+    "axis": [
+     0.0,
+     -0.0,
+     1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     -50.0,
+     -50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     33.0,
+     -64.25,
+     21.0
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M3",
+    "radius": 1.786,
+    "head_radius": 1.786,
+    "center": [
+     33.0,
+     -64.25,
+     67.0
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "length": 0.833,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     37.5,
+     50.0,
+     10.1
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     50.0,
+     50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   },
+   {
+    "type": "M4",
+    "radius": 2.233,
+    "head_radius": 3.073,
+    "center": [
+     37.5,
+     -50.0,
+     10.1
+    ],
+    "axis": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "length": 1.6,
+    "rings": 2
+   },
+   {
+    "type": "M4",
+    "radius": 2.183,
+    "head_radius": 2.183,
+    "center": [
+     50.0,
+     -50.0,
+     5.0
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "length": 1.667,
+    "rings": 1
+   }
+  ]
+ }
+}

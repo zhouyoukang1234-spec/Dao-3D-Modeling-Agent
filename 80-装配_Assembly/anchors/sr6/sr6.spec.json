@@ -1,0 +1,489 @@
+{
+  "name": "sr6_home_6leg",
+  "parts": [
+    {
+      "name": "ground",
+      "fixed": true,
+      "connectors": {
+        "shaft::main-L-lower": {
+          "point": [
+            -59.5,
+            15.0,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "shaft::main-L-upper": {
+          "point": [
+            -59.5,
+            -15.0,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "shaft::main-R-lower": {
+          "point": [
+            59.5,
+            15.0,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "shaft::main-R-upper": {
+          "point": [
+            59.5,
+            -15.0,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "shaft::pitch-L": {
+          "point": [
+            -59.5,
+            61.25,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "shaft::pitch-R": {
+          "point": [
+            59.5,
+            61.25,
+            46.0
+          ],
+          "axis": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::main-L-lower",
+      "seed": {
+        "t": [
+          -59.5,
+          65.0,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.656521,
+          -0.262641,
+          0.707107
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            175.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::main-L-upper",
+      "seed": {
+        "t": [
+          -59.5,
+          -65.0,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.656521,
+          0.262641,
+          0.707107
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            175.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::main-R-lower",
+      "seed": {
+        "t": [
+          59.5,
+          65.0,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.656521,
+          -0.262641,
+          0.707107
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            175.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::main-R-upper",
+      "seed": {
+        "t": [
+          59.5,
+          -65.0,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.656521,
+          0.262641,
+          0.707107
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            175.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::pitch-L",
+      "seed": {
+        "t": [
+          -59.5,
+          136.25,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.642309,
+          -0.302126,
+          0.704386
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            185.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "rod::pitch-R",
+      "seed": {
+        "t": [
+          59.5,
+          136.25,
+          46.0
+        ],
+        "q": [
+          0.0,
+          -0.637394,
+          -0.299814,
+          0.709817
+        ]
+      },
+      "connectors": {
+        "s": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        },
+        "r": {
+          "point": [
+            185.0,
+            0,
+            0
+          ],
+          "axis": [
+            1,
+            0,
+            0
+          ]
+        }
+      }
+    }
+  ],
+  "world_points": {
+    "piv::main-L-lower": [
+      -59.5,
+      0.0,
+      208.48
+    ],
+    "piv::main-L-upper": [
+      -59.5,
+      0.0,
+      208.48
+    ],
+    "piv::main-R-lower": [
+      59.5,
+      0.0,
+      208.48
+    ],
+    "piv::main-R-upper": [
+      59.5,
+      0.0,
+      208.48
+    ],
+    "piv::pitch-L": [
+      -61.0,
+      53.13,
+      222.71
+    ],
+    "piv::pitch-R": [
+      61.0,
+      53.13,
+      222.71
+    ]
+  },
+  "constraints": [
+    {
+      "type": "distance",
+      "a": [
+        "rod::main-L-lower",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::main-L-lower"
+      ],
+      "d": 50.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::main-L-lower",
+        "r"
+      ],
+      "target": "world.piv::main-L-lower"
+    },
+    {
+      "type": "distance",
+      "a": [
+        "rod::main-L-upper",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::main-L-upper"
+      ],
+      "d": 50.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::main-L-upper",
+        "r"
+      ],
+      "target": "world.piv::main-L-upper"
+    },
+    {
+      "type": "distance",
+      "a": [
+        "rod::main-R-lower",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::main-R-lower"
+      ],
+      "d": 50.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::main-R-lower",
+        "r"
+      ],
+      "target": "world.piv::main-R-lower"
+    },
+    {
+      "type": "distance",
+      "a": [
+        "rod::main-R-upper",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::main-R-upper"
+      ],
+      "d": 50.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::main-R-upper",
+        "r"
+      ],
+      "target": "world.piv::main-R-upper"
+    },
+    {
+      "type": "distance",
+      "a": [
+        "rod::pitch-L",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::pitch-L"
+      ],
+      "d": 75.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::pitch-L",
+        "r"
+      ],
+      "target": "world.piv::pitch-L"
+    },
+    {
+      "type": "distance",
+      "a": [
+        "rod::pitch-R",
+        "s"
+      ],
+      "b": [
+        "ground",
+        "shaft::pitch-R"
+      ],
+      "d": 75.0
+    },
+    {
+      "type": "point_at",
+      "a": [
+        "rod::pitch-R",
+        "r"
+      ],
+      "target": "world.piv::pitch-R"
+    }
+  ]
+}

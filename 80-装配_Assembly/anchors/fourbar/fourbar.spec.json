@@ -1,0 +1,51 @@
+{
+  "name": "planar_fourbar_handwritten",
+  "_note": "A brand-new mechanism authored entirely by hand as data — no Python, no build(), no geometry shared with SR6 or Stewart. Ground link 120, crank 40, coupler 70, rocker 70. Each revolute joint = Coincident (shared hinge point) + Parallel (shared z hinge axis), keeping the loop planar in z=0. Seeds are a deliberately OPEN configuration so the solver must actually close the loop.",
+  "parts": [
+    {
+      "name": "ground",
+      "fixed": true,
+      "connectors": {
+        "A": { "point": [0, 0, 0],   "axis": [0, 0, 1] },
+        "B": { "point": [120, 0, 0], "axis": [0, 0, 1] }
+      }
+    },
+    {
+      "name": "crank",
+      "seed": { "t": [0, 0, 0], "q": [0, 0, 0.46175, 0.88701] },
+      "connectors": {
+        "o": { "point": [0, 0, 0],  "axis": [0, 0, 1] },
+        "p": { "point": [40, 0, 0], "axis": [0, 0, 1] }
+      }
+    },
+    {
+      "name": "coupler",
+      "seed": { "t": [22.94, 32.766, 0], "q": [0, 0, 0.13053, 0.99144] },
+      "connectors": {
+        "o": { "point": [0, 0, 0],  "axis": [0, 0, 1] },
+        "p": { "point": [70, 0, 0], "axis": [0, 0, 1] }
+      }
+    },
+    {
+      "name": "rocker",
+      "seed": { "t": [120, 0, 0], "q": [0, 0, 0.84339, 0.53730] },
+      "connectors": {
+        "o": { "point": [0, 0, 0],  "axis": [0, 0, 1] },
+        "p": { "point": [70, 0, 0], "axis": [0, 0, 1] }
+      }
+    }
+  ],
+  "constraints": [
+    { "type": "coincident", "a": ["crank", "o"],   "b": ["ground", "A"] },
+    { "type": "parallel",   "a": ["crank", "o"],   "b": ["ground", "A"] },
+
+    { "type": "coincident", "a": ["coupler", "o"], "b": ["crank", "p"] },
+    { "type": "parallel",   "a": ["coupler", "o"], "b": ["crank", "p"] },
+
+    { "type": "coincident", "a": ["rocker", "o"],  "b": ["ground", "B"] },
+    { "type": "parallel",   "a": ["rocker", "o"],  "b": ["ground", "B"] },
+
+    { "type": "coincident", "a": ["rocker", "p"],  "b": ["coupler", "p"] },
+    { "type": "parallel",   "a": ["rocker", "p"],  "b": ["coupler", "p"] }
+  ]
+}

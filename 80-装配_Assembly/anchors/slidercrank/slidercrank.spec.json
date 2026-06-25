@@ -1,0 +1,42 @@
+{
+  "name": "planar_slider_crank_handwritten",
+  "_note": "A 4th brand-new mechanism authored entirely by hand as data, sharing no geometry/constants with SR6, Stewart or the four-bar. It is the first machine to use a lower pair the four primitives could not express before: the PRISMATIC / slider joint (uam.assembly.PointOnLine). Ground crank-pivot at origin, crank r=30, connecting rod L=90; the rod's far wrist-pin must slide on the ground's x-axis guide. Two revolute joints (Coincident + Parallel about z, keeping the loop in z=0) + one slider (rod.b on the x line). 1 real DOF (crank angle); seeds are a deliberately OPEN pose so the solver must actually close the loop, not sit on the answer.",
+  "world_points": {
+    "O": [0, 0, 0]
+  },
+  "parts": [
+    {
+      "name": "ground",
+      "fixed": true,
+      "connectors": {
+        "O":     { "point": [0, 0, 0], "axis": [0, 0, 1] },
+        "guide": { "point": [0, 0, 0], "axis": [1, 0, 0] }
+      }
+    },
+    {
+      "name": "crank",
+      "seed": { "t": [0, 0, 0], "q": [0, 0, 0.70711, 0.70711] },
+      "connectors": {
+        "o": { "point": [0, 0, 0],  "axis": [0, 0, 1] },
+        "p": { "point": [30, 0, 0], "axis": [0, 0, 1] }
+      }
+    },
+    {
+      "name": "rod",
+      "seed": { "t": [0, 30, 0], "q": [0, 0, 0, 1] },
+      "connectors": {
+        "a": { "point": [0, 0, 0],  "axis": [0, 0, 1] },
+        "b": { "point": [90, 0, 0], "axis": [0, 0, 1] }
+      }
+    }
+  ],
+  "constraints": [
+    { "type": "coincident", "a": ["crank", "o"], "b": ["ground", "O"] },
+    { "type": "parallel",   "a": ["crank", "o"], "b": ["ground", "O"] },
+
+    { "type": "coincident", "a": ["rod", "a"],   "b": ["crank", "p"] },
+    { "type": "parallel",   "a": ["rod", "a"],   "b": ["crank", "p"] },
+
+    { "type": "on_line",    "a": ["rod", "b"],   "line": { "point": [0, 0, 0], "dir": [1, 0, 0] } }
+  ]
+}
