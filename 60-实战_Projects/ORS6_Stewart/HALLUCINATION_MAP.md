@@ -150,6 +150,38 @@ axle 真位置 (按 PDF p.22 "main outward, pitch inward" + 标准 servo lug 5-1
 
 具体: 用 `tools/_dao_axis_v2.py` 输出 `_stl_axis_truth.json`, `parts.py` 加载, viewer API `/api/parts` 返回, viewer/index.html 删除所有硬编码改读 API。
 
+## 7. closed_loop/true_kinematics.py 根治 (2026-06-25 · 反者道之动)
+
+> 前文 (§3,§4) 是旧 `viewer/kinematics.py` 的幻觉。`closed_loop/true_kinematics.py`
+> 是从根本重建的 3D 并联运动学, 本节记录它的**最后一处幻觉**及其根治。
+
+### 7.1 幻觉: 主舵机 world X = ±85 (再加 ±99.6/±108 等)
+- 旧 `closed_loop/true_kinematics.py` 把主舵机轴猜在 `X=±85`, 俯仰在 `X=±84.4`。
+- 由此凭空得出每腿 **~25mm 平面外偏移** → "不可消除差 ~1.78mm/腿"。
+- 这个 1.78mm 被当成"固件 2D vs 3D 刚体的真实差"写进闭环报告 —— **实为猜测坐标的产物**。
+
+### 7.2 真值: 舵机与其球铰**同 X 平面** (X=±60 主 / ±61 俯仰)
+- 实测 `SR6 臂` STL 是平面件 (hub 与 tip 同 X=67.5); 装在 ‖X 舵机轴上, 臂尖恒在该 X 平面内。
+- 连杆从臂尖连到接收器主销 (§2.3 实测 **X=±59.98**)。固件 `SetMainServo` 是**纯平面 IK**,
+  其成立前提 = "杆落在摆动平面内" = home 时臂尖 X == 主销 X ⇒ **舵机轴必在 X=±60**。
+- 面内 (Y,Z) 仍由固件 home 给定: `SetMainServo(16248,1500)` ⇒ (竖直 162.48mm, 水平 15mm)
+  ⇒ Z=HOME_H−162.48=30.52, Y=±15。俯仰同理在 X=±61 平面 (§2.3 pitch mount X=±61)。
+
+### 7.3 根治后的诚实闭环 (实跑数, `python closure_report.py`)
+```
+(A) 刚体自洽:      worst dt=1.3e-10mm   rod-err=2.8e-14mm   (机器精度)
+(B) 固件平面差:    home=0.000mm   主腿worst=1.141mm   俯仰worst=1.525mm
+```
+- **home 平面外偏移 = 0 ⇒ 6 杆精确 175.000mm, home 差 = 0** (旧的 1.78mm 假象消失)。
+- 纯 thrust / fwd / pitch-rotation 等**面内**运动: 差 = 0 (固件 2D-IK 精确)。
+- 仅 side / roll 等**真正离面**运动: 差 = √(175²+h²)−175, h = 接收器离面位移 (side 20mm⇒h=20mm⇒1.14mm)。
+  这才是固件 2D 控制 vs 3D 刚体的**真实(且很小)差**, 非标定失败、非自指恒等式、非猜测坐标产物。
+
+### 7.4 拓扑确认 (与 §2.3 一致)
+- 主销 **2 个** (左右各 1, X=±60), 4 条主腿两两共享 ⇒ `true_kinematics.B_LOCAL` 中 LL/UL 同点、LR/UR 同点 ✓。
+- `closed_loop/assembly/assemble.py` 仍按旧的"4 个独立主球(X=60/33)"渲染, 是**遗留渲染件**,
+  与已根治的运动学拓扑不一致, 列为后续对齐项 (不影响 `true_kinematics` 闭环)。
+
 ---
 
 **版本**: v∞ · 2026-05-12 · 反者审视

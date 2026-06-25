@@ -56,10 +56,14 @@ def build_report():
         "home_height_mm": tk.HOME_H,
         "interpretation": (
             "(A) rigid IK->FK self-closure ~ machine eps (mechanism is geometrically "
-            "self-consistent on measured truth). (B) firmware is 2D planar IK ignoring "
-            "the measured ~25mm out-of-plane servo<->pivot offset; the irreducible per-leg "
-            "rod-constraint violation = sqrt(175^2+h^2)-175. This is the honest firmware-"
-            "vs-rigid gap (NOT a calibration failure, NOT a self-referential tautology)."
+            "self-consistent on measured truth). (B) servos lie in the SAME X-plane as "
+            "their receiver pivots (X=+-60 main / +-61 pitch), so at home and for in-plane "
+            "motions (thrust/fwd/pitch-rotation) the out-of-plane offset h=0 and rods are "
+            "EXACTLY 175 (gap=0). A gap appears ONLY for genuinely out-of-plane motions "
+            "(side, roll): moving the pivot off its plane by h gives the irreducible 2D-"
+            "planar-IK violation sqrt(175^2+h^2)-175. This is the honest firmware-vs-rigid "
+            "gap (NOT a calibration failure, NOT a self-referential tautology, NOT a "
+            "guessed-coordinate artifact)."
         ),
     }
     return {"aggregate": agg, "poses": rows}
