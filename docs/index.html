@@ -69,13 +69,14 @@
 </head>
 <body>
 <header>
-  <h1>ORS6 / SR6 · 闭环可视化</h1>
-  <span class="sub">实测真值锚定的 6-RUS 并联机构 · 舵机与球铰同面 (X=±60/±61) · 6 杆恒 175.000mm</span>
+  <h1>SR6 · 真实零件装配 + 机构仿真</h1>
+  <span class="sub">真实 STL 零件装配 · 舵机锚定真实框架几何 (主舵机 Y=±30,Z=22) · 6 连杆恒 175.000mm</span>
   <span class="sub">· <a href="https://github.com/zhouyoukang1234-spec/Dao-3D-Modeling-Agent/pull/1" target="_blank">PR #1</a></span>
 </header>
 <nav>
-  <button data-tab="live" class="active">交互机构 (Live)</button>
-  <button data-tab="glb">真实装配 (3D)</button>
+  <button data-tab="live" class="active">真实零件机构 (可动)</button>
+  <button data-tab="glb">装配体 (静态 3D)</button>
+  <button data-tab="compare">对照实拍</button>
   <button data-tab="data">闭环数据</button>
   <button data-tab="gallery">渲染画廊</button>
   <button data-tab="prov">真值溯源</button>
@@ -106,19 +107,29 @@
         <thead><tr><th>腿</th><th>杆长 mm</th><th>固件差 mm</th><th>h mm</th></tr></thead>
         <tbody id="legtable"></tbody>
       </table>
-      <p class="note" style="margin-top:12px">蓝=主连杆 · 橙=俯仰连杆 · 红=球铰 · 绿=接收平台。
-      拖动滑杆移动平台：刚体杆长恒为 175.000（机器精度），固件 2D 差仅随离面运动 h 增长，
-      严格落在 √(175²+h²)−175。</p>
+      <p class="note" style="margin-top:12px">全部为你的真实 STL 零件：红=底座/框架/接收器 · 灰=舵机臂 · 红/橙=连杆。
+      拖动滑杆，舵机臂绕真实舵机轴转动、连杆跟随、接收器联动；6 根刚性连杆恒为 175.000mm。</p>
     </aside>
   </div>
 </section>
 
 <section id="tab-glb" class="tab">
   <div class="wrap">
-    <h2>真实零件装配 (33 STL → GLB)</h2>
-    <p class="note">由实测 STL 装配生成的 home 位姿模型，可旋转/缩放查看。6 连杆 = 175/186mm 精确，无干涉。</p>
-    <model-viewer src="assets/sr6_assembly.glb" camera-controls auto-rotate
+    <h2>真实零件装配体 (STL → GLB)</h2>
+    <p class="note">由你的真实 STL 装配的 home 位姿整机，可旋转/缩放查看。舵机位置锚定真实框架几何，6 连杆精确 175mm。</p>
+    <model-viewer src="assets/sr6_real_assembly.glb" camera-controls auto-rotate
       shadow-intensity="1" exposure="1.1" environment-image="neutral"></model-viewer>
+  </div>
+</section>
+
+<section id="tab-compare" class="tab">
+  <div class="wrap">
+    <h2>装配体 vs 官方实拍</h2>
+    <p class="note">左：本项目用真实 STL 装配的整机四视图；右：官方 Build Instructions 封面实拍。架构一致。</p>
+    <div class="gallery">
+      <figure><img src="assets/assembly_render.png"><figcaption>真实零件装配体 (四视图)</figcaption></figure>
+      <figure><img src="assets/sr6_real_cover.png"><figcaption>官方实拍 (TempestMAx SR6)</figcaption></figure>
+    </div>
   </div>
 </section>
 
