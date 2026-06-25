@@ -1,201 +1,255 @@
-// SR6 real-part interactive mechanism.
-// Loads the real STL parts and animates them with the frame-anchored kinematics
-// (servos from the real frame geometry; 6 rigid links span exactly 175 mm).
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const PARTS_URL = "assets/parts/";
-const LEGS = ["L_mainA","L_mainB","R_mainA","R_mainB","L_pitch","R_pitch"];
-
-const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
-
-// ---- kinematics ------------------------------------------------------------
-let RIG = null;
-const prevTh = {};            // branch continuity per leg
-
-function eulerR(rollDeg, pitchDeg) {
-  // R = Ry(roll) * Rx(pitch)  (yaw=0); roll about Y, pitch about X (matches python)
-  const ro = rollDeg * Math.PI/180, pi = pitchDeg * Math.PI/180;
-  const cx=Math.cos(pi), sx=Math.sin(pi), cy=Math.cos(ro), sy=Math.sin(ro);
-  const Rx=new THREE.Matrix3().set(1,0,0, 0,cx,-sx, 0,sx,cx);
-  const Ry=new THREE.Matrix3().set(cy,0,sy, 0,1,0, -sy,0,cy);
-  return mul3(Ry, Rx);
+// ---------- math helpers (port of build_h.py) ----------
+const V = (x,y,z)=>new THREE.Vector3(x,y,z);
+function rotvecToMat(rv){
+  const a=Math.hypot(rv[0],rv[1],rv[2]);
+  const m=new THREE.Matrix4();
+  if(a<1e-9) return m;
+  const ax=new THREE.Vector3(rv[0]/a,rv[1]/a,rv[2]/a);
+  m.makeRotationAxis(ax,a); return m;
 }
-function mul3(a,b){ const r=new THREE.Matrix3(); const ae=a.elements,be=b.elements,re=r.elements;
-  // column-major 3x3
-  for(let c=0;c<3;c++)for(let row=0;row<3;row++){let s=0;for(let k=0;k<3;k++)s+=ae[k*3+row]*be[c*3+k];re[c*3+row]=s;}
-  return r;
+function frameFrom(p0,p1,ax){
+  const e1=p1.clone().sub(p0).normalize();
+  const e3=ax.clone().sub(e1.clone().multiplyScalar(ax.dot(e1))).normalize();
+  const e2=e3.clone().cross(e1);
+  return new THREE.Matrix4().makeBasis(e1,e2,e3);
 }
-function applyM3(m,v){ return v.clone().applyMatrix3(m); }
-
-function legState(pose){
-  // pose = {thrust,fwd,side,roll,pitch}
-  const R = eulerR(pose.roll, pose.pitch);
-  const t = new THREE.Vector3(pose.side, pose.fwd, RIG.HOME_H + pose.thrust);
-  const ROD = RIG.ROD;
-  const out = {R, t, legs:{}, reachable:true};
-  for(const k of LEGS){
-    const o = V(RIG.servo[k]); const L = RIG.armlen[k];
-    const piv = applyM3(R, V(RIG.blocal[k])).add(t);
-    const h = piv.x - o.x;                       // out-of-plane (axis = X)
-    const dy = piv.y - o.y, dz = piv.z - o.z;
-    const rho = Math.hypot(dy, dz);
-    const d2dsq = ROD*ROD - h*h;
-    let th=null, reachable=true;
-    if(d2dsq<=0){ reachable=false; }
-    else{
-      const d2d=Math.sqrt(d2dsq);
-      const cosd=(L*L+rho*rho-d2d*d2d)/(2*L*rho);
-      if(Math.abs(cosd)>1){ reachable=false; }
-      else{
-        const base=Math.atan2(dz,dy), d=Math.acos(cosd);
-        const cands=[base+d, base-d];
-        const pv = (prevTh[k]!==undefined)?prevTh[k]:Math.PI/2;
-        th = cands.reduce((a,b)=> Math.abs(Math.atan2(Math.sin(a-pv),Math.cos(a-pv))) <=
-                                  Math.abs(Math.atan2(Math.sin(b-pv),Math.cos(b-pv))) ? a:b);
-        prevTh[k]=th;
-      }
-    }
-    if(!reachable){ out.reachable=false; }
-    const ball = (th===null)? o.clone() : new THREE.Vector3(o.x, o.y+L*Math.cos(th), o.z+L*Math.sin(th));
-    const len = ball.distanceTo(piv);
-    out.legs[k]={o, piv, ball, th, reachable, len, h:Math.abs(h)};
-  }
-  return out;
+// rigid transform mapping (H,B,axL)->(S,Bw,axW)
+function alignMat(H,B,axL,S,Bw,axW){
+  const Rl=frameFrom(H,B,axL), Rw=frameFrom(S,Bw,axW);
+  const R=Rw.multiply(Rl.transpose());
+  const t=S.clone().sub(applyR(R,H));
+  const m=R.clone(); m.setPosition(t); return m;
+}
+function applyR(m,v){ // rotation part only
+  const e=m.elements;
+  return new THREE.Vector3(
+    e[0]*v.x+e[4]*v.y+e[8]*v.z,
+    e[1]*v.x+e[5]*v.y+e[9]*v.z,
+    e[2]*v.x+e[6]*v.y+e[10]*v.z);
+}
+// 2-bar IK: ball in plane through servo perpendicular to axis
+function solveBall(servo,pivot,arm,rod,axis,branch){
+  const ax=axis.clone().normalize();
+  let u=ax.clone().cross(V(0,0,1));
+  if(u.length()<1e-6) u=ax.clone().cross(V(0,1,0));
+  u.normalize();
+  const w=ax.clone().cross(u);
+  const rel=pivot.clone().sub(servo);
+  const dz=rel.dot(ax);
+  const ir2=rod*rod-dz*dz; if(ir2<=0) return null;
+  const ir=Math.sqrt(ir2);
+  const px=rel.dot(u), py=rel.dot(w), L=Math.hypot(px,py);
+  if(L>arm+ir||L<Math.abs(arm-ir)) return {ball:null,reach:false};
+  const a=(arm*arm-ir*ir+L*L)/(2*L), h=Math.sqrt(Math.max(0,arm*arm-a*a));
+  const mx=a*px/L, my=a*py/L, ex=-py/L, ey=px/L;
+  const bx=mx+branch*h*ex, by=my+branch*h*ey;
+  const ball=servo.clone().add(u.clone().multiplyScalar(bx)).add(w.clone().multiplyScalar(by));
+  return {ball,reach:true};
 }
 
-// rigid transform mapping local point a->A and dir (b-a)->(B-A); returns Matrix4
-function alignMatrix(la, lb, wa, wb){
-  const v1=lb.clone().sub(la).normalize();
-  const v2=wb.clone().sub(wa).normalize();
-  const q=new THREE.Quaternion().setFromUnitVectors(v1,v2);
-  const m=new THREE.Matrix4().makeRotationFromQuaternion(q);
-  // translation: wa - R*la
-  const Rla=la.clone().applyMatrix4(m);
-  m.setPosition(wa.x-Rla.x, wa.y-Rla.y, wa.z-Rla.z);
-  return m;
-}
-
-// ---- scene -----------------------------------------------------------------
-const vp = document.getElementById("viewport");
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-vp.appendChild(renderer.domElement);
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0d1117);
-const camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
-camera.up.set(0,0,1); camera.position.set(330, -360, 330);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0,0,120); controls.enableDamping=true;
-
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-const d1=new THREE.DirectionalLight(0xffffff,0.8); d1.position.set(1,-1.2,1.4); scene.add(d1);
-const d2=new THREE.DirectionalLight(0xffffff,0.35); d2.position.set(-1,0.6,0.4); scene.add(d2);
-const grid=new THREE.GridHelper(600,12,0x30363d,0x21262d); grid.rotation.x=Math.PI/2; scene.add(grid);
-
-const MAT = {
-  frame: new THREE.MeshStandardMaterial({color:0xc0392b, metalness:.1, roughness:.7}),
-  base:  new THREE.MeshStandardMaterial({color:0x8e2b22, metalness:.1, roughness:.8}),
-  arm:   new THREE.MeshStandardMaterial({color:0xe9e9ee, metalness:.2, roughness:.5}),
-  mlink: new THREE.MeshStandardMaterial({color:0xd23b2f, metalness:.2, roughness:.5}),
-  plink: new THREE.MeshStandardMaterial({color:0xe07a3c, metalness:.2, roughness:.5}),
-  recv:  new THREE.MeshStandardMaterial({color:0xb83228, metalness:.1, roughness:.7}),
+// ---------- globals ----------
+let RIG=null, scene, camera, renderer, controls, root;
+const dyn={}; // dynamic part objects
+const MAT={
+  housing:new THREE.MeshStandardMaterial({color:0xd6291c,metalness:.05,roughness:.6,emissive:0x2a0805,side:THREE.DoubleSide}),
+  housing2:new THREE.MeshStandardMaterial({color:0xc8221a,metalness:.05,roughness:.6,emissive:0x260704,side:THREE.DoubleSide}),
+  receiver:new THREE.MeshStandardMaterial({color:0xee3b2a,metalness:.05,roughness:.55,emissive:0x300906,side:THREE.DoubleSide}),
+  arm:new THREE.MeshStandardMaterial({color:0xf4f5f9,metalness:.1,roughness:.5,side:THREE.DoubleSide}),
+  rod:new THREE.MeshStandardMaterial({color:0xe2e6ed,metalness:.25,roughness:.4}),
+  sleeve:new THREE.MeshStandardMaterial({color:0x26262c,metalness:.3,roughness:.4,side:THREE.DoubleSide}),
 };
+const pose={stroke:0,surge:0,sway:0,roll:0,pitch:0};
+let branchCache={};
 
-const loader = new STLLoader();
-function loadSTL(name){
-  return new Promise((res,rej)=> loader.load(PARTS_URL+name+".stl", g=>{g.computeVertexNormals();res(g);}, undefined, rej));
+const loader=new GLTFLoader();
+function loadPart(name){
+  return new Promise((res,rej)=>loader.load(`./models/${name}.glb`,g=>{
+    let mesh=null; g.scene.traverse(o=>{if(o.isMesh&&!mesh)mesh=o;});
+    const geo=mesh.geometry; geo.deleteAttribute('normal'); geo.computeVertexNormals();
+    res(geo);
+  },undefined,rej));
 }
 
-const dyn = {}; // dynamic meshes by leg + receiver
-let geomCache = {};
+async function init(){
+  RIG=await fetch('./models/rig.json').then(r=>r.json());
+  const vp=document.getElementById('viewport');
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x0d1117);
+  camera=new THREE.PerspectiveCamera(42, vp.clientWidth/vp.clientHeight, 1, 5000);
+  camera.position.set(430,300,540);
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(vp.clientWidth,vp.clientHeight); renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+  vp.appendChild(renderer.domElement);
+  controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
+  controls.target.set(0,120,0);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x2a2a34,1.5));
+  scene.add(new THREE.AmbientLight(0xffffff,0.45));
+  const d=new THREE.DirectionalLight(0xffffff,2.0); d.position.set(250,450,350); scene.add(d);
+  const d2=new THREE.DirectionalLight(0xbcd4ff,.8); d2.position.set(-350,180,-220); scene.add(d2);
+  const d3=new THREE.DirectionalLight(0xffffff,.7); d3.position.set(0,120,-400); scene.add(d3);
+  // root: housing Z-up -> world Y-up
+  root=new THREE.Group(); root.rotation.x=-Math.PI/2; scene.add(root);
+  // grid
+  const grid=new THREE.GridHelper(800,16,0x30363d,0x21262d); grid.position.y=0; scene.add(grid);
 
-async function build(){
-  RIG = await (await fetch(PARTS_URL+"rig.json")).json();
-  const names=["base","Lframe","Rframe","recv","arm","Lpitch","Rpitch","mlink","plink"];
-  const gs = await Promise.all(names.map(loadSTL));
-  names.forEach((n,i)=> geomCache[n]=gs[i]);
+  // geometries
+  const G={};
+  for(const n of ['base','frameL','frameR','cover','receiver','arm','pitcherL','pitcherR'])
+    G[n]=await loadPart(n);
 
-  // static frames + base
-  const Lf=new THREE.Mesh(geomCache.Lframe, MAT.frame); Lf.position.x=RIG.Lframe_dx; scene.add(Lf);
-  const Rf=new THREE.Mesh(geomCache.Rframe, MAT.frame); Rf.position.x=RIG.Rframe_dx; scene.add(Rf);
-  const baseB=new THREE.Box3().setFromObject(new THREE.Mesh(geomCache.base));
-  const bmesh=new THREE.Mesh(geomCache.base, MAT.base);
-  // drop base under frames
-  const lfB=new THREE.Box3().setFromObject(Lf);
-  bmesh.position.set(-(baseB.max.x+baseB.min.x)/2, -(baseB.max.y+baseB.min.y)/2, lfB.min.z - baseB.max.z);
-  scene.add(bmesh);
-
-  // dynamic arms + links
-  for(const k of LEGS){
-    const isP = k.includes("pitch");
-    const arm = new THREE.Mesh(isP? (k[0]==="L"?geomCache.Lpitch:geomCache.Rpitch) : geomCache.arm, MAT.arm);
-    arm.matrixAutoUpdate=false; scene.add(arm);
-    const link = new THREE.Mesh(isP?geomCache.plink:geomCache.mlink, isP?MAT.plink:MAT.mlink);
-    link.matrixAutoUpdate=false; scene.add(link);
-    dyn[k]={arm, link};
+  // static housing (native coords)
+  add(root,G.base,MAT.housing,'base');
+  add(root,G.frameL,MAT.housing2,'frameL');
+  add(root,G.frameR,MAT.housing2,'frameR');
+  add(root,G.cover,MAT.housing,'cover');
+  // dynamic
+  dyn.receiver=add(root,G.receiver,MAT.receiver,'receiver');
+  dyn.arms={};
+  for(const k of RIG.legs){
+    const geo = k[0]==='P' ? (k==='PL'?G.pitcherL:G.pitcherR) : G.arm;
+    dyn.arms[k]=add(root,geo,MAT.arm,'arm_'+k);
   }
-  dyn.recv = new THREE.Mesh(geomCache.recv, MAT.recv); dyn.recv.matrixAutoUpdate=false; scene.add(dyn.recv);
+  // rods (cylinders, rebuilt each frame)
+  dyn.rods={};
+  for(const k of RIG.legs){
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(3,3,1,16),MAT.rod);
+    root.add(m); dyn.rods[k]=m;
+  }
+  // sleeve
+  dyn.sleeve=new THREE.Mesh(new THREE.CylinderGeometry(24,27,120,40),MAT.sleeve);
+  root.add(dyn.sleeve);
 
-  resize(); update(currentPose()); animate();
+  buildUI();
+  update();
+  window.addEventListener('resize',onResize);
+  animate();
+  document.getElementById('loading')?.remove();
+}
+function add(parent,geo,mat,name){
+  const m=new THREE.Mesh(geo,mat); m.name=name; parent.add(m); return m;
 }
 
-function currentPose(){
-  return {thrust:+S.thrust.value, fwd:+S.fwd.value, side:+S.side.value, roll:+S.roll.value, pitch:+S.pitch.value};
+// receiver world matrix from pose
+function receiverMat(){
+  const rvHome=rotvecToMat(RIG.rec_home_rotvec);
+  const tHome=RIG.rec_home_t;
+  // extra rotations: pitch about X, roll about Y (housing axes)
+  const Rp=new THREE.Matrix4().makeRotationX(pose.pitch*Math.PI/180);
+  const Rr=new THREE.Matrix4().makeRotationY(pose.roll*Math.PI/180);
+  const R=new THREE.Matrix4().multiplyMatrices(Rp,Rr).multiply(rvHome);
+  R.setPosition(tHome[0]+pose.sway, tHome[1]+pose.surge, tHome[2]+pose.stroke);
+  return R;
+}
+function pivotWorld(Rm, local){
+  const p=new THREE.Vector3(local[0],local[1],local[2]).applyMatrix4(Rm);
+  return p;
 }
 
-function update(pose){
-  const st = legState(pose);
-  // receiver
-  const Rm=new THREE.Matrix4().setFromMatrix3(st.R); Rm.setPosition(st.t.x,st.t.y,st.t.z);
-  dyn.recv.matrix.copy(Rm);
-  let worstRod=0, worstH=0;
+function update(){
+  const Rm=receiverMat();
+  dyn.receiver.matrixAutoUpdate=false; dyn.receiver.matrix.copy(Rm);
+  // sleeve along receiver local Z
+  const sMat=Rm.clone();
+  const off=new THREE.Matrix4().makeTranslation(0,0,78); // up the cup axis
+  dyn.sleeve.matrixAutoUpdate=false; dyn.sleeve.matrix.multiplyMatrices(Rm,off)
+     .multiply(new THREE.Matrix4().makeRotationX(Math.PI/2));
   const rows=[];
-  for(const k of LEGS){
-    const ls=st.legs[k]; const isP=k.includes("pitch");
-    const pivLocal = V(isP?RIG.arm_pivot_pitch:RIG.arm_pivot_main);
-    const ballLocal= V(isP?RIG.arm_ball_pitch:RIG.arm_ball_main);
-    dyn[k].arm.matrix.copy(alignMatrix(pivLocal, ballLocal, ls.o, ls.ball));
-    const e0=V(RIG.meta[isP?"plink":"mlink"].eye0), e1=V(RIG.meta[isP?"plink":"mlink"].eye1);
-    dyn[k].link.matrix.copy(alignMatrix(e0,e1, ls.ball, ls.piv));
-    worstRod=Math.max(worstRod, Math.abs(ls.len-RIG.ROD)); worstH=Math.max(worstH, ls.h);
-    rows.push(`<tr><td>${k}</td><td>${ls.len.toFixed(3)}</td><td>${ls.reachable?"✓":"✗"}</td><td>${ls.h.toFixed(1)}</td></tr>`);
+  let allReach=true;
+  for(const k of RIG.legs){
+    const sv=new THREE.Vector3(...RIG.servo[k]);
+    const piv=pivotWorld(Rm, RIG.rec_local[RIG.assign[k]]);
+    const arm=RIG.armlen[k];
+    const axis=V(Math.sign(sv.x)||1,0,0);
+    // branch: pick higher-Z ball at home, cache
+    if(branchCache[k]===undefined){
+      let best=null;
+      for(const br of [1,-1]){ const r=solveBall(sv,piv,arm,RIG.rod,axis,br);
+        if(r&&r.reach&&(best===null||r.ball.z>best.b.z)) best={br,b:r.ball}; }
+      branchCache[k]=best?best.br:1;
+    }
+    const r=solveBall(sv,piv,arm,RIG.rod,axis,branchCache[k]);
+    let rodLen=RIG.rod, reach=r&&r.reach;
+    const feat = k[0]==='P' ? (k==='PL'?RIG.pitchL_feat:RIG.pitchR_feat) : RIG.arm_feat;
+    if(reach){
+      const ball=r.ball; rodLen=ball.distanceTo(piv);
+      // arm transform
+      const H=new THREE.Vector3(...feat.H), B=new THREE.Vector3(...feat.B), axL=new THREE.Vector3(...feat.axis);
+      const Am=alignMat(H,B,axL, sv,ball,axis);
+      const o=dyn.arms[k]; o.matrixAutoUpdate=false; o.matrix.copy(Am);
+      // rod cylinder ball->pivot
+      placeCyl(dyn.rods[k],ball,piv,k[0]==='P'?2.6:3.0);
+      dyn.rods[k].visible=true; dyn.arms[k].visible=true;
+    } else { allReach=false; dyn.rods[k].visible=false; }
+    rows.push([k,rodLen,reach]);
   }
-  document.getElementById("legtable").innerHTML=rows.join("");
-  document.getElementById("m_rod").textContent=worstRod.toExponential(1)+" mm";
-  document.getElementById("m_oop").textContent=worstH.toFixed(1)+" mm";
-  const badge=document.getElementById("reach");
-  badge.textContent = st.reachable? "可达 · 6 杆闭合 175" : "不可达 · 超出工作空间";
-  badge.className = "badge "+(st.reachable?"ok":"bad");
+  renderReadout(rows,allReach);
+}
+function placeCyl(mesh,a,b,rad){
+  const dir=b.clone().sub(a); const len=dir.length();
+  mesh.matrixAutoUpdate=false;
+  const mid=a.clone().add(b).multiplyScalar(.5);
+  const up=V(0,1,0); const q=new THREE.Quaternion().setFromUnitVectors(up,dir.clone().normalize());
+  const m=new THREE.Matrix4().compose(mid,q,new THREE.Vector3(rad/3,len,rad/3));
+  mesh.matrix.copy(m);
 }
 
-function resize(){ const w=vp.clientWidth,h=vp.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
-window.__sr6_resize=resize; addEventListener("resize",resize);
-let demoT=null;
+function renderReadout(rows,allReach){
+  const el=document.getElementById('readout'); if(!el) return;
+  let h=`<div class="badge ${allReach?'ok':'bad'}">${allReach?'工作空间内 · 6杆闭合':'超出工作空间'}</div>`;
+  h+='<table class="rod"><tr><th>连杆</th><th>长度(mm)</th><th>状态</th></tr>';
+  for(const [k,len,reach] of rows){
+    const ok=Math.abs(len-175)<1e-3;
+    h+=`<tr><td>${k}</td><td>${len.toFixed(3)}</td><td class="${reach?'g':'r'}">${reach?'✓ 175':'—'}</td></tr>`;
+  }
+  h+='</table>';
+  el.innerHTML=h;
+}
+
+function buildUI(){
+  const defs=[['stroke','冲程 Stroke',-55,55],['surge','前后 Surge',-35,35],
+    ['sway','左右 Sway',-35,35],['roll','滚转 Roll°',-18,18],['pitch','俯仰 Pitch°',-18,18]];
+  const box=document.getElementById('sliders'); box.innerHTML='';
+  for(const [key,label,mn,mx] of defs){
+    const w=document.createElement('div'); w.className='ctl';
+    w.innerHTML=`<label>${label} <span id="v_${key}">0</span></label>
+      <input type="range" id="s_${key}" min="${mn}" max="${mx}" step="0.5" value="0">`;
+    box.appendChild(w);
+    w.querySelector('input').addEventListener('input',e=>{
+      pose[key]=parseFloat(e.target.value); document.getElementById('v_'+key).textContent=e.target.value;
+      update();
+    });
+  }
+  document.getElementById('btnHome').onclick=()=>{
+    for(const k in pose) pose[k]=0;
+    for(const [key] of defs){document.getElementById('s_'+key).value=0;document.getElementById('v_'+key).textContent='0';}
+    update();
+  };
+  let demo=null;
+  document.getElementById('btnDemo').onclick=(e)=>{
+    if(demo){clearInterval(demo);demo=null;e.target.textContent='▶ 自动演示';return;}
+    e.target.textContent='⏸ 停止'; let t=0;
+    demo=setInterval(()=>{ t+=0.05;
+      pose.stroke=40*Math.sin(t); pose.surge=18*Math.sin(t*0.7);
+      pose.pitch=12*Math.sin(t*0.9); pose.roll=10*Math.sin(t*1.3); pose.sway=18*Math.sin(t*1.1);
+      for(const key of ['stroke','surge','sway','roll','pitch']){
+        const s=document.getElementById('s_'+key); if(s){s.value=pose[key].toFixed(1);document.getElementById('v_'+key).textContent=pose[key].toFixed(1);}}
+      update();
+    },33);
+  };
+  document.getElementById('chkEnc').onchange=e=>{
+    for(const n of ['base','frameL','frameR','cover']){
+      const o=root.getObjectByName(n); if(o) o.visible=e.target.checked;
+    }
+  };
+}
+function onResize(){
+  const vp=document.getElementById('viewport');
+  camera.aspect=vp.clientWidth/vp.clientHeight; camera.updateProjectionMatrix();
+  renderer.setSize(vp.clientWidth,vp.clientHeight);
+}
 function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
 
-// ---- sliders ---------------------------------------------------------------
-const SPEC=[["thrust","推力 Z",-30,30,0],["fwd","前后 Y",-25,25,0],["side","左右 X",-25,25,0],
-            ["roll","Roll°",-15,15,0],["pitch","Pitch°",-15,15,0]];
-const S={};
-const box=document.getElementById("sliders");
-box.innerHTML=SPEC.map(([id,lab,mn,mx,v])=>`<div class="ctl"><label>${lab}<span id="lab_${id}">${v}</span></label>
-  <input type="range" id="s_${id}" min="${mn}" max="${mx}" step="0.5" value="${v}"></div>`).join("");
-SPEC.forEach(([id])=>{ S[id]=document.getElementById("s_"+id);
-  S[id].oninput=()=>{ document.getElementById("lab_"+id).textContent=(+S[id].value).toFixed(1); update(currentPose()); }; });
-
-function setPose(p){ for(const id in p){ S[id].value=p[id]; document.getElementById("lab_"+id).textContent=(+p[id]).toFixed(1);} update(currentPose()); }
-const zero={thrust:0,fwd:0,side:0,roll:0,pitch:0};
-document.getElementById("p_home").onclick=()=>setPose(zero);
-document.getElementById("p_side").onclick=()=>setPose({...zero,side:20});
-document.getElementById("p_pitch").onclick=()=>setPose({...zero,pitch:12});
-document.getElementById("p_combo").onclick=()=>setPose({thrust:15,fwd:10,side:12,roll:8,pitch:-6});
-document.getElementById("reset").onclick=()=>setPose(zero);
-document.getElementById("demo").onclick=()=>{
-  if(demoT){clearInterval(demoT);demoT=null;return;}
-  let a=0; demoT=setInterval(()=>{ a+=0.04;
-    setPose({thrust:18*Math.sin(a*0.8), fwd:16*Math.sin(a*0.6+1), side:18*Math.sin(a),
-             roll:12*Math.sin(a*0.7), pitch:10*Math.sin(a*0.9+2)}); }, 40);
-};
-
-build().catch(e=>{ document.getElementById("reach").textContent="加载失败: "+e; console.error(e); });
+init().catch(err=>{console.error(err); const l=document.getElementById('loading'); if(l)l.textContent='加载失败: '+err;});

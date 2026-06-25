@@ -3,211 +3,128 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ORS6 / SR6 — 闭环可视化</title>
+<title>SR6 真实装配 · 交互仿真</title>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 }}
 </script>
-<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#c9d1d9; --mut:#8b949e;
-          --acc:#4ea1ff; --ok:#2ea043; --warn:#ffb000; --bad:#f85149; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt);
-         font:14px/1.5 -apple-system,Segoe UI,Roboto,"Microsoft YaHei",sans-serif; }
-  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex;
-           align-items:baseline; gap:14px; flex-wrap:wrap; }
-  header h1 { font-size:18px; margin:0; }
-  header .sub { color:var(--mut); font-size:13px; }
-  header a { color:var(--acc); text-decoration:none; }
-  nav { display:flex; gap:4px; padding:0 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-  nav button { background:none; border:none; color:var(--mut); padding:10px 14px;
-               cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
-  nav button.active { color:var(--txt); border-bottom-color:var(--acc); }
-  .tab { display:none; }
-  .tab.active { display:block; }
-  /* live */
-  #live { display:grid; grid-template-columns:1fr 340px; height:calc(100vh - 110px); }
-  #viewport { position:relative; min-height:300px; }
-  #viewport canvas { display:block; width:100%; height:100%; }
-  #reach { position:absolute; top:12px; left:12px; }
-  .badge { padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; }
-  .badge.ok { background:rgba(46,160,67,.18); color:var(--ok); }
-  .badge.bad { background:rgba(248,81,73,.18); color:var(--bad); }
-  aside { border-left:1px solid var(--line); padding:16px; overflow:auto; }
-  .ctl { margin-bottom:12px; }
-  .ctl label { display:flex; justify-content:space-between; font-size:13px; color:var(--mut); margin-bottom:4px; }
-  .ctl label span { color:var(--txt); font-variant-numeric:tabular-nums; }
-  .ctl input[type=range] { width:100%; accent-color:var(--acc); }
-  .btnrow { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px; }
-  .btnrow button { flex:1; min-width:60px; background:var(--panel); color:var(--txt);
-                   border:1px solid var(--line); border-radius:6px; padding:7px; cursor:pointer; }
-  .btnrow button:hover { border-color:var(--acc); }
-  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
-  .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
-  .metric .k { color:var(--mut); font-size:11px; }
-  .metric .v { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
-  table { width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
-  th, td { text-align:right; padding:4px 6px; border-bottom:1px solid var(--line); }
-  th:first-child, td:first-child { text-align:left; }
-  th { color:var(--mut); font-weight:600; }
-  /* content tabs */
-  .wrap { max-width:1100px; margin:0 auto; padding:24px 20px 60px; }
-  .wrap h2 { font-size:16px; border-left:3px solid var(--acc); padding-left:10px; }
-  .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
-  .gallery figure { margin:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-  .gallery img { width:100%; display:block; }
-  .gallery figcaption { padding:8px 10px; color:var(--mut); font-size:12px; }
-  model-viewer { width:100%; height:calc(100vh - 160px); background:#0d1117; border:1px solid var(--line); border-radius:8px; }
-  pre { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; overflow:auto; font-size:12px; }
-  .note { color:var(--mut); }
-  .big { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:16px 0; }
-  .big .metric .v { font-size:20px; }
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--txt:#c9d1d9;--mut:#8b949e;
+        --acc:#4ea1ff;--ok:#2ea043;--bad:#f85149;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 -apple-system,Segoe UI,Roboto,"Microsoft YaHei",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  header h1{font-size:17px;margin:0;}
+  header .sub{color:var(--mut);font-size:12.5px;}
+  header a{color:var(--acc);text-decoration:none;}
+  nav{display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  nav button{background:none;border:none;color:var(--mut);padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:2px solid transparent;}
+  nav button.active{color:var(--txt);border-bottom-color:var(--acc);}
+  .tab{display:none;}.tab.active{display:block;}
+  #live{display:grid;grid-template-columns:1fr 330px;height:calc(100vh - 104px);}
+  #viewport{position:relative;min-height:320px;background:#0d1117;}
+  #viewport canvas{display:block;width:100%;height:100%;}
+  #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--mut);}
+  aside{border-left:1px solid var(--line);padding:16px;overflow:auto;}
+  .ctl{margin-bottom:11px;}
+  .ctl label{display:flex;justify-content:space-between;color:var(--mut);font-size:12.5px;margin-bottom:3px;}
+  .ctl input[type=range]{width:100%;}
+  .btns{display:flex;gap:8px;margin:10px 0;}
+  .btns button{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:6px;cursor:pointer;}
+  .btns button:hover{border-color:var(--acc);}
+  .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:8px;}
+  .badge.ok{background:rgba(46,160,67,.18);color:var(--ok);}
+  .badge.bad{background:rgba(248,81,73,.18);color:var(--bad);}
+  table.rod{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.rod th,table.rod td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;}
+  table.rod td.g{color:var(--ok);}table.rod td.r{color:var(--bad);}
+  .chk{margin:8px 0;color:var(--mut);font-size:12.5px;}
+  .pad{padding:20px;max-width:1100px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px;}
+  .card h3{margin:0 0 10px;font-size:15px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .grid2 img{width:100%;border-radius:6px;border:1px solid var(--line);}
+  code{background:#0b0f14;padding:1px 5px;border-radius:4px;color:#9fd0ff;font-size:12.5px;}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--mut);}
+  ul{margin:6px 0;padding-left:20px;} li{margin:3px 0;}
 </style>
 </head>
 <body>
 <header>
-  <h1>SR6 · 真实零件装配 + 机构仿真</h1>
-  <span class="sub">真实 STL 零件装配 · 舵机锚定真实框架几何 (主舵机 Y=±30,Z=22) · 6 连杆恒 175.000mm</span>
+  <h1>SR6 真实装配 · 交互仿真</h1>
+  <span class="sub">真实 STL 零件 · 固件运动学 · 6 杆精确闭合 175mm</span>
   <span class="sub">· <a href="https://github.com/zhouyoukang1234-spec/Dao-3D-Modeling-Agent/pull/1" target="_blank">PR #1</a></span>
 </header>
 <nav>
-  <button data-tab="live" class="active">真实零件机构 (可动)</button>
-  <button data-tab="glb">装配体 (静态 3D)</button>
-  <button data-tab="compare">对照实拍</button>
-  <button data-tab="data">闭环数据</button>
-  <button data-tab="gallery">渲染画廊</button>
-  <button data-tab="prov">真值溯源</button>
+  <button class="active" data-tab="t_live">交互机构 (实时)</button>
+  <button data-tab="t_compare">对照官方实拍</button>
+  <button data-tab="t_truth">真值溯源</button>
 </nav>
 
-<section id="tab-live" class="tab active">
+<section id="t_live" class="tab active">
   <div id="live">
-    <div id="viewport"><div id="reach" class="badge ok">可达 · 刚体闭环</div></div>
+    <div id="viewport"><div id="loading">加载真实零件中…</div></div>
     <aside>
+      <div id="readout"></div>
+      <hr style="border-color:var(--line);margin:14px 0">
       <div id="sliders"></div>
-      <div class="btnrow">
-        <button id="p_home">Home</button>
-        <button id="p_side">Side</button>
-        <button id="p_pitch">Pitch</button>
-        <button id="p_combo">Combo</button>
+      <div class="btns">
+        <button id="btnHome">Home 归位</button>
+        <button id="btnDemo">▶ 自动演示</button>
       </div>
-      <div class="btnrow">
-        <button id="reset">重置</button>
-        <button id="demo">自动演示</button>
-      </div>
-      <div class="metrics">
-        <div class="metric"><div class="k">最大杆长误差 (刚体)</div><div class="v" id="m_rod">—</div></div>
-        <div class="metric"><div class="k">最大离面偏移 h</div><div class="v" id="m_oop">—</div></div>
-        <div class="metric"><div class="k">固件差 · 主腿</div><div class="v" id="m_gapm">—</div></div>
-        <div class="metric"><div class="k">固件差 · 俯仰</div><div class="v" id="m_gapp">—</div></div>
-      </div>
-      <table>
-        <thead><tr><th>腿</th><th>杆长 mm</th><th>固件差 mm</th><th>h mm</th></tr></thead>
-        <tbody id="legtable"></tbody>
-      </table>
-      <p class="note" style="margin-top:12px">全部为你的真实 STL 零件：红=底座/框架/接收器 · 灰=舵机臂 · 红/橙=连杆。
-      拖动滑杆，舵机臂绕真实舵机轴转动、连杆跟随、接收器联动；6 根刚性连杆恒为 175.000mm。</p>
+      <div class="chk"><label><input type="checkbox" id="chkEnc" checked> 显示红色外壳 (框架/底座/盖)</label></div>
+      <p class="mono">舵机由真实框架 STL 卡槽固定；接收器 home 位姿由"每个舵机到其球铰=固件距离"反解得到（与固件内置 15° 独立吻合）。拖动滑块时，臂随舵机转、连杆始终保持 175mm。</p>
     </aside>
   </div>
 </section>
 
-<section id="tab-glb" class="tab">
-  <div class="wrap">
-    <h2>真实零件装配体 (STL → GLB)</h2>
-    <p class="note">由你的真实 STL 装配的 home 位姿整机，可旋转/缩放查看。舵机位置锚定真实框架几何，6 连杆精确 175mm。</p>
-    <model-viewer src="assets/sr6_real_assembly.glb" camera-controls auto-rotate
-      shadow-intensity="1" exposure="1.1" environment-image="neutral"></model-viewer>
-  </div>
-</section>
-
-<section id="tab-compare" class="tab">
-  <div class="wrap">
-    <h2>装配体 vs 官方实拍</h2>
-    <p class="note">左：本项目用真实 STL 装配的整机四视图；右：官方 Build Instructions 封面实拍。架构一致。</p>
-    <div class="gallery">
-      <figure><img src="assets/assembly_render.png"><figcaption>真实零件装配体 (四视图)</figcaption></figure>
-      <figure><img src="assets/sr6_real_cover.png"><figcaption>官方实拍 (TempestMAx SR6)</figcaption></figure>
+<section id="t_compare" class="tab">
+  <div class="pad">
+    <div class="card">
+      <h3>真实装配模型 vs 官方 Build Instructions 实拍</h3>
+      <div class="grid2">
+        <div><div class="mono">本模型（真实 STL，home 位姿）</div><img src="./assets/sr6_assembly_h.png"></div>
+        <div><div class="mono">官方实拍（TempestMAx SR6, June 2022）</div><img src="./assets/pdf_cover.png"></div>
+      </div>
+      <p class="mono">架构一致：红色外壳箱体 + 黑色插筒（home 前倾 15°）+ 红色接收器杯 + 6 连杆从箱体内扇形展开（俯仰连杆中央交叉）。</p>
     </div>
   </div>
 </section>
 
-<section id="tab-data" class="tab">
-  <div class="wrap">
-    <h2>闭环验证数据</h2>
-    <div class="big" id="agg"></div>
-    <p class="note" id="interp"></p>
-    <h2 style="margin-top:28px">闭环图</h2>
-    <img src="assets/closure_figure.png" style="width:100%;border:1px solid var(--line);border-radius:8px" alt="closure figure" />
-    <h2 style="margin-top:28px">采样位姿 (19)</h2>
-    <table id="posetable"><thead><tr>
-      <th>pose (tx,ty,tz,roll,pitch)</th><th>可达</th><th>杆误差 mm</th>
-      <th>闭环 dt mm</th><th>固件差·主 mm</th><th>固件差·俯仰 mm</th><th>h·主/俯仰 mm</th>
-    </tr></thead><tbody></tbody></table>
-  </div>
-</section>
-
-<section id="tab-gallery" class="tab">
-  <div class="wrap">
-    <h2>渲染画廊</h2>
-    <div class="gallery">
-      <figure><img src="assets/sr6v2_hero.png"><figcaption>Hero</figcaption></figure>
-      <figure><img src="assets/sr6v2_iso.png"><figcaption>等轴测</figcaption></figure>
-      <figure><img src="assets/sr6v2_front.png"><figcaption>正视</figcaption></figure>
-      <figure><img src="assets/sr6v2_side.png"><figcaption>侧视</figcaption></figure>
-      <figure><img src="assets/sr6v2_top.png"><figcaption>俯视</figcaption></figure>
-      <figure><img src="assets/compare_pdf_vs_model.png"><figcaption>模型 vs PDF 对比</figcaption></figure>
+<section id="t_truth" class="tab">
+  <div class="pad">
+    <div class="card">
+      <h3>双权威源 · 互相印证</h3>
+      <ul>
+        <li><b>设计者固件</b> (SR6-Alpha4_ESP32.ino)：主臂 horn=50mm，俯仰臂=75mm，连杆=175mm；俯仰偏置 <code>55mm @ 15°</code>。</li>
+        <li><b>实测 STL 特征</b> (RANSAC 拟合 bore)：接收器主球铰 (±60,0,0)、俯仰球铰 (±61,−14.235,53.13)；55.0mm @ 15° — 与固件<b>逐位吻合</b>。</li>
+        <li><b>真实框架 STL</b>：6 个舵机仓固定舵机位置（主舵机 Y=±40.7、Z=15.5）。</li>
+        <li><b>装配反解</b>：以"舵机↔球铰=固件距离"为约束解接收器 6-DOF 位姿 → home 前倾 <b>−15.0°</b>（与固件内置 0.2618rad 独立一致），残差 &lt;0.7mm。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>闭合验证</h3>
+      <ul>
+        <li>home 6 连杆精确 = <b>175.000mm</b>（机器精度 e-14）</li>
+        <li>接收器 4 球铰作为刚体与骨架完全吻合（边长误差 &lt; 0.01mm）</li>
+        <li>运动范围内拖动：连杆始终保持 175mm（舵机角自适应）</li>
+      </ul>
+      <p class="mono">坐标系：原生外壳装配系 H（底座居中、L/R 框架分列、盖在上）。全部真实 STL，无猜测坐标。</p>
     </div>
   </div>
 </section>
 
-<section id="tab-prov" class="tab">
-  <div class="wrap">
-    <h2>真值溯源 (ground_truth.json)</h2>
-    <p class="note">全部锚定 30 个官方 STL + SR6-Alpha4 固件，无猜测坐标。详见
-      <a href="https://github.com/zhouyoukang1234-spec/Dao-3D-Modeling-Agent/blob/devin/1782357705-sr6-closure-phase1/60-%E5%AE%9E%E6%88%98_Projects/ORS6_Stewart/HALLUCINATION_MAP.md" target="_blank">HALLUCINATION_MAP.md §7</a>。</p>
-    <pre id="gt">加载中…</pre>
-  </div>
-</section>
-
-<script type="module" src="./app.js"></script>
-<script type="module">
-  // tab switching
-  const tabs = document.querySelectorAll("nav button");
-  tabs.forEach(b => b.onclick = () => {
-    tabs.forEach(x => x.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    document.getElementById("tab-" + b.dataset.tab).classList.add("active");
-    if (b.dataset.tab === "live" && window.__sr6_resize) setTimeout(window.__sr6_resize, 0);
-  });
-
-  // closure data
-  const num = (x, d=3) => (Math.abs(x) < 1e-3 && x !== 0) ? x.toExponential(1) : x.toFixed(d);
-  fetch("assets/closure_report.json").then(r => r.json()).then(j => {
-    const a = j.aggregate;
-    document.getElementById("agg").innerHTML = [
-      ["可达位姿", `${a.poses_reachable}/${a.poses_total}`],
-      ["最差杆长误差", num(a.worst_rod_err_mm,1)+" mm"],
-      ["最差闭环平移残差", num(a.worst_closure_dt_mm,1)+" mm"],
-      ["home 固件差·主腿", num(a.fw_gap_home_main_mm,1)+" mm"],
-      ["最差固件差·主腿", a.fw_gap_worst_main_mm.toFixed(3)+" mm"],
-      ["最差固件差·俯仰", a.fw_gap_worst_pitch_mm.toFixed(3)+" mm"],
-    ].map(([k,v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
-    document.getElementById("interp").textContent = a.interpretation;
-    const tb = document.querySelector("#posetable tbody");
-    tb.innerHTML = j.poses.map(p => {
-      const ps = p.pose.slice(0,5).map(x=>x.toFixed(x%1?3:0)).join(", ");
-      return `<tr><td>${ps}</td><td>${p.reachable?"✓":"✗"}</td>
-        <td>${num(p.max_rod_err_mm,1)}</td><td>${num(p.closure_dt_mm,1)}</td>
-        <td>${p.fw_gap_main_mm.toFixed(3)}</td><td>${p.fw_gap_pitch_mm.toFixed(3)}</td>
-        <td>${p.oop_main_mm.toFixed(1)} / ${p.oop_pitch_mm.toFixed(1)}</td></tr>`;
-    }).join("");
-  });
-  fetch("assets/ground_truth.json").then(r => r.text()).then(t => {
-    document.getElementById("gt").textContent = t;
-  });
+<script>
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); document.getElementById(b.dataset.tab).classList.add('active');
+  window.dispatchEvent(new Event('resize'));
+});
 </script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>
