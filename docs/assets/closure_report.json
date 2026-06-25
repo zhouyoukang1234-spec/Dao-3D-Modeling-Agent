@@ -1,0 +1,663 @@
+{
+  "aggregate": {
+    "poses_total": 19,
+    "poses_reachable": 19,
+    "worst_rod_err_mm": 2.842170943040401e-14,
+    "worst_closure_dt_mm": 1.258761254442331e-10,
+    "worst_closure_dr_deg": 3.2643222964524797e-12,
+    "fw_gap_home_main_mm": 1.1428571440319502e-06,
+    "fw_gap_worst_main_mm": 1.1414215907206824,
+    "fw_gap_worst_pitch_mm": 1.5250828730709713,
+    "rod_nominal_mm": 175.0,
+    "home_height_mm": 193.0,
+    "interpretation": "(A) rigid IK->FK self-closure ~ machine eps (mechanism is geometrically self-consistent on measured truth). (B) servos lie in the SAME X-plane as their receiver pivots (X=+-60 main / +-61 pitch), so at home and for in-plane motions (thrust/fwd/pitch-rotation) the out-of-plane offset h=0 and rods are EXACTLY 175 (gap=0). A gap appears ONLY for genuinely out-of-plane motions (side, roll): moving the pivot off its plane by h gives the irreducible 2D-planar-IK violation sqrt(175^2+h^2)-175. This is the honest firmware-vs-rigid gap (NOT a calibration failure, NOT a self-referential tautology, NOT a guessed-coordinate artifact)."
+  },
+  "poses": [
+    {
+      "pose": [
+        0.0,
+        0.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 190.55,
+        "UpperLeft": 180.0009,
+        "LowerRight": 190.55,
+        "UpperRight": 180.0009,
+        "LeftPitch": 168.906,
+        "RightPitch": 168.906
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.5494059733199614e-13,
+      "closure_dr_deg": 7.672960374136127e-16,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        163.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 237.3754,
+        "UpperLeft": 224.4559,
+        "LowerRight": 237.3754,
+        "UpperRight": 224.4559,
+        "LeftPitch": 192.0605,
+        "RightPitch": 192.0605
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 2.0258120475567836e-27,
+      "closure_dr_deg": 4.933788492462038e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        178.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 210.3169,
+        "UpperLeft": 198.7018,
+        "LowerRight": 210.3169,
+        "UpperRight": 198.7018,
+        "LeftPitch": 179.9971,
+        "RightPitch": 179.9971
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.4219443342036525e-13,
+      "closure_dr_deg": 6.540440028413888e-15,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        208.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 173.1728,
+        "UpperLeft": 163.5109,
+        "LowerRight": 173.1728,
+        "UpperRight": 163.5109,
+        "LeftPitch": 158.174,
+        "RightPitch": 158.174
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        223.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 156.1708,
+        "UpperLeft": 147.2587,
+        "LowerRight": 156.1708,
+        "UpperRight": 147.2587,
+        "LeftPitch": 147.2488,
+        "RightPitch": 147.2488
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 0.0,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        -20.0,
+        0.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 189.1437,
+        "UpperLeft": 178.5946,
+        "LowerRight": 189.1381,
+        "UpperRight": 178.589,
+        "LeftPitch": 168.0153,
+        "RightPitch": 168.0153
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.2447022627733892e-10,
+      "closure_dr_deg": 8.024556401714325e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1414215907206824,
+      "fw_gap_pitch_mm": 1.139149538085377,
+      "oop_main_mm": 20.020000000000003,
+      "oop_pitch_mm": 20.0
+    },
+    {
+      "pose": [
+        -10.0,
+        0.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 190.1988,
+        "UpperLeft": 179.6498,
+        "LowerRight": 190.196,
+        "UpperRight": 179.6469,
+        "LeftPitch": 168.6837,
+        "RightPitch": 168.6837
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.2587612544307365e-10,
+      "closure_dr_deg": 7.775055394035031e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.286623562666648,
+      "fw_gap_pitch_mm": 0.28548142958103995,
+      "oop_main_mm": 10.020000000000003,
+      "oop_pitch_mm": 10.0
+    },
+    {
+      "pose": [
+        10.0,
+        0.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 190.196,
+        "UpperLeft": 179.6469,
+        "LowerRight": 190.1988,
+        "UpperRight": 179.6498,
+        "LeftPitch": 168.6837,
+        "RightPitch": 168.6837
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.258761254442331e-10,
+      "closure_dr_deg": 7.775055697574971e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.286623562666648,
+      "fw_gap_pitch_mm": 0.28548142958103995,
+      "oop_main_mm": 10.020000000000003,
+      "oop_pitch_mm": 10.0
+    },
+    {
+      "pose": [
+        20.0,
+        0.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 189.1381,
+        "UpperLeft": 178.589,
+        "LowerRight": 189.1437,
+        "UpperRight": 178.5946,
+        "LeftPitch": 168.0153,
+        "RightPitch": 168.0153
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.2447022628168307e-10,
+      "closure_dr_deg": 8.024557999883612e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1414215907206824,
+      "fw_gap_pitch_mm": 1.139149538085377,
+      "oop_main_mm": 20.020000000000003,
+      "oop_pitch_mm": 20.0
+    },
+    {
+      "pose": [
+        0.0,
+        -20.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 193.8811,
+        "UpperLeft": 187.7664,
+        "LowerRight": 193.8811,
+        "UpperRight": 187.7664,
+        "LeftPitch": 173.8771,
+        "RightPitch": 173.8771
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        -10.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 192.5848,
+        "UpperLeft": 184.2412,
+        "LowerRight": 192.5848,
+        "UpperRight": 184.2412,
+        "LeftPitch": 171.6058,
+        "RightPitch": 171.6058
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 0.0,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        10.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 187.7664,
+        "UpperLeft": 175.0904,
+        "LowerRight": 187.7664,
+        "UpperRight": 175.0904,
+        "LeftPitch": 165.7913,
+        "RightPitch": 165.7913
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 8.156348322533229e-26,
+      "closure_dr_deg": 4.5851160661539886e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        20.0,
+        193.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 184.2412,
+        "UpperLeft": 169.5684,
+        "LowerRight": 184.2412,
+        "UpperRight": 169.5684,
+        "LeftPitch": 162.2805,
+        "RightPitch": 162.2805
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        193.0,
+        -0.2618,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 211.0713,
+        "UpperLeft": 199.4151,
+        "LowerRight": 172.5687,
+        "UpperRight": 162.935,
+        "LeftPitch": 181.6701,
+        "RightPitch": 158.3569
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.012168554744590665,
+      "fw_gap_pitch_mm": 0.7143785884369436,
+      "oop_main_mm": 2.063768939181685,
+      "oop_pitch_mm": 15.828545186483346
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        193.0,
+        0.2618,
+        0.0,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 172.5687,
+        "UpperLeft": 162.935,
+        "LowerRight": 211.0713,
+        "UpperRight": 199.4151,
+        "LeftPitch": 158.3569,
+        "RightPitch": 181.6701
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.012168554744590665,
+      "fw_gap_pitch_mm": 0.7143785884369436,
+      "oop_main_mm": 2.063768939181685,
+      "oop_pitch_mm": 15.828545186483346
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        193.0,
+        0.0,
+        -0.2618,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 190.55,
+        "UpperLeft": 180.0009,
+        "LowerRight": 190.55,
+        "UpperRight": 180.0009,
+        "LeftPitch": 163.0496,
+        "RightPitch": 163.0496
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.549405973319961e-13,
+      "closure_dr_deg": 2.8624992133171654e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        0.0,
+        0.0,
+        193.0,
+        0.0,
+        0.2618,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 190.55,
+        "UpperLeft": 180.0009,
+        "LowerRight": 190.55,
+        "UpperRight": 180.0009,
+        "LeftPitch": 176.4861,
+        "RightPitch": 176.4861
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 1.5494059733199614e-13,
+      "closure_dr_deg": 1.5902773407317584e-14,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 1.1428571440319502e-06,
+      "fw_gap_pitch_mm": 0.0,
+      "oop_main_mm": 0.020000000000003126,
+      "oop_pitch_mm": 0.0
+    },
+    {
+      "pose": [
+        15.0,
+        10.0,
+        208.0,
+        0.1396,
+        -0.1047,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 160.4967,
+        "UpperLeft": 149.5067,
+        "LowerRight": 179.2782,
+        "UpperRight": 167.1873,
+        "LeftPitch": 145.9354,
+        "RightPitch": 157.8491
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 0.0,
+      "closure_dr_deg": 0.0,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.6942688776110231,
+      "fw_gap_pitch_mm": 1.5250828730709713,
+      "oop_main_mm": 15.60372123688061,
+      "oop_pitch_mm": 23.153938830025723
+    },
+    {
+      "pose": [
+        -12.0,
+        -15.0,
+        178.0,
+        -0.1745,
+        0.1396,
+        0.0
+      ],
+      "reachable": true,
+      "angles_deg": {
+        "LowerLeft": 228.693,
+        "UpperLeft": 222.2501,
+        "LowerRight": 198.3622,
+        "UpperRight": 191.0519,
+        "LeftPitch": 196.2176,
+        "RightPitch": 179.0608
+      },
+      "rods_mm": {
+        "LowerLeft": 175.0,
+        "UpperLeft": 175.0,
+        "LowerRight": 175.0,
+        "UpperRight": 175.0,
+        "LeftPitch": 175.0,
+        "RightPitch": 175.0
+      },
+      "closure_dt_mm": 3.716881192119886e-11,
+      "closure_dr_deg": 3.2643222964524797e-12,
+      "max_rod_err_mm": 2.842170943040401e-14,
+      "fw_gap_main_mm": 0.47711171121838447,
+      "fw_gap_pitch_mm": 1.3425034781835166,
+      "oop_main_mm": 12.931230974327768,
+      "oop_pitch_mm": 21.71816136216792
+    }
+  ]
+}

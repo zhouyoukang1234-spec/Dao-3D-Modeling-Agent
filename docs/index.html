@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ORS6 / SR6 — 闭环可视化</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#c9d1d9; --mut:#8b949e;
+          --acc:#4ea1ff; --ok:#2ea043; --warn:#ffb000; --bad:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.5 -apple-system,Segoe UI,Roboto,"Microsoft YaHei",sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex;
+           align-items:baseline; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:var(--mut); font-size:13px; }
+  header a { color:var(--acc); text-decoration:none; }
+  nav { display:flex; gap:4px; padding:0 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  nav button { background:none; border:none; color:var(--mut); padding:10px 14px;
+               cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
+  nav button.active { color:var(--txt); border-bottom-color:var(--acc); }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  /* live */
+  #live { display:grid; grid-template-columns:1fr 340px; height:calc(100vh - 110px); }
+  #viewport { position:relative; min-height:300px; }
+  #viewport canvas { display:block; width:100%; height:100%; }
+  #reach { position:absolute; top:12px; left:12px; }
+  .badge { padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge.ok { background:rgba(46,160,67,.18); color:var(--ok); }
+  .badge.bad { background:rgba(248,81,73,.18); color:var(--bad); }
+  aside { border-left:1px solid var(--line); padding:16px; overflow:auto; }
+  .ctl { margin-bottom:12px; }
+  .ctl label { display:flex; justify-content:space-between; font-size:13px; color:var(--mut); margin-bottom:4px; }
+  .ctl label span { color:var(--txt); font-variant-numeric:tabular-nums; }
+  .ctl input[type=range] { width:100%; accent-color:var(--acc); }
+  .btnrow { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px; }
+  .btnrow button { flex:1; min-width:60px; background:var(--panel); color:var(--txt);
+                   border:1px solid var(--line); border-radius:6px; padding:7px; cursor:pointer; }
+  .btnrow button:hover { border-color:var(--acc); }
+  .metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+  .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .metric .k { color:var(--mut); font-size:11px; }
+  .metric .v { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+  table { width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:4px 6px; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--mut); font-weight:600; }
+  /* content tabs */
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 20px 60px; }
+  .wrap h2 { font-size:16px; border-left:3px solid var(--acc); padding-left:10px; }
+  .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .gallery figure { margin:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .gallery img { width:100%; display:block; }
+  .gallery figcaption { padding:8px 10px; color:var(--mut); font-size:12px; }
+  model-viewer { width:100%; height:calc(100vh - 160px); background:#0d1117; border:1px solid var(--line); border-radius:8px; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; overflow:auto; font-size:12px; }
+  .note { color:var(--mut); }
+  .big { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:16px 0; }
+  .big .metric .v { font-size:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ORS6 / SR6 · 闭环可视化</h1>
+  <span class="sub">实测真值锚定的 6-RUS 并联机构 · 舵机与球铰同面 (X=±60/±61) · 6 杆恒 175.000mm</span>
+  <span class="sub">· <a href="https://github.com/zhouyoukang1234-spec/Dao-3D-Modeling-Agent/pull/1" target="_blank">PR #1</a></span>
+</header>
+<nav>
+  <button data-tab="live" class="active">交互机构 (Live)</button>
+  <button data-tab="glb">真实装配 (3D)</button>
+  <button data-tab="data">闭环数据</button>
+  <button data-tab="gallery">渲染画廊</button>
+  <button data-tab="prov">真值溯源</button>
+</nav>
+
+<section id="tab-live" class="tab active">
+  <div id="live">
+    <div id="viewport"><div id="reach" class="badge ok">可达 · 刚体闭环</div></div>
+    <aside>
+      <div id="sliders"></div>
+      <div class="btnrow">
+        <button id="p_home">Home</button>
+        <button id="p_side">Side</button>
+        <button id="p_pitch">Pitch</button>
+        <button id="p_combo">Combo</button>
+      </div>
+      <div class="btnrow">
+        <button id="reset">重置</button>
+        <button id="demo">自动演示</button>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="k">最大杆长误差 (刚体)</div><div class="v" id="m_rod">—</div></div>
+        <div class="metric"><div class="k">最大离面偏移 h</div><div class="v" id="m_oop">—</div></div>
+        <div class="metric"><div class="k">固件差 · 主腿</div><div class="v" id="m_gapm">—</div></div>
+        <div class="metric"><div class="k">固件差 · 俯仰</div><div class="v" id="m_gapp">—</div></div>
+      </div>
+      <table>
+        <thead><tr><th>腿</th><th>杆长 mm</th><th>固件差 mm</th><th>h mm</th></tr></thead>
+        <tbody id="legtable"></tbody>
+      </table>
+      <p class="note" style="margin-top:12px">蓝=主连杆 · 橙=俯仰连杆 · 红=球铰 · 绿=接收平台。
+      拖动滑杆移动平台：刚体杆长恒为 175.000（机器精度），固件 2D 差仅随离面运动 h 增长，
+      严格落在 √(175²+h²)−175。</p>
+    </aside>
+  </div>
+</section>
+
+<section id="tab-glb" class="tab">
+  <div class="wrap">
+    <h2>真实零件装配 (33 STL → GLB)</h2>
+    <p class="note">由实测 STL 装配生成的 home 位姿模型，可旋转/缩放查看。6 连杆 = 175/186mm 精确，无干涉。</p>
+    <model-viewer src="assets/sr6_assembly.glb" camera-controls auto-rotate
+      shadow-intensity="1" exposure="1.1" environment-image="neutral"></model-viewer>
+  </div>
+</section>
+
+<section id="tab-data" class="tab">
+  <div class="wrap">
+    <h2>闭环验证数据</h2>
+    <div class="big" id="agg"></div>
+    <p class="note" id="interp"></p>
+    <h2 style="margin-top:28px">闭环图</h2>
+    <img src="assets/closure_figure.png" style="width:100%;border:1px solid var(--line);border-radius:8px" alt="closure figure" />
+    <h2 style="margin-top:28px">采样位姿 (19)</h2>
+    <table id="posetable"><thead><tr>
+      <th>pose (tx,ty,tz,roll,pitch)</th><th>可达</th><th>杆误差 mm</th>
+      <th>闭环 dt mm</th><th>固件差·主 mm</th><th>固件差·俯仰 mm</th><th>h·主/俯仰 mm</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<section id="tab-gallery" class="tab">
+  <div class="wrap">
+    <h2>渲染画廊</h2>
+    <div class="gallery">
+      <figure><img src="assets/sr6v2_hero.png"><figcaption>Hero</figcaption></figure>
+      <figure><img src="assets/sr6v2_iso.png"><figcaption>等轴测</figcaption></figure>
+      <figure><img src="assets/sr6v2_front.png"><figcaption>正视</figcaption></figure>
+      <figure><img src="assets/sr6v2_side.png"><figcaption>侧视</figcaption></figure>
+      <figure><img src="assets/sr6v2_top.png"><figcaption>俯视</figcaption></figure>
+      <figure><img src="assets/compare_pdf_vs_model.png"><figcaption>模型 vs PDF 对比</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="tab-prov" class="tab">
+  <div class="wrap">
+    <h2>真值溯源 (ground_truth.json)</h2>
+    <p class="note">全部锚定 30 个官方 STL + SR6-Alpha4 固件，无猜测坐标。详见
+      <a href="https://github.com/zhouyoukang1234-spec/Dao-3D-Modeling-Agent/blob/devin/1782357705-sr6-closure-phase1/60-%E5%AE%9E%E6%88%98_Projects/ORS6_Stewart/HALLUCINATION_MAP.md" target="_blank">HALLUCINATION_MAP.md §7</a>。</p>
+    <pre id="gt">加载中…</pre>
+  </div>
+</section>
+
+<script type="module" src="./app.js"></script>
+<script type="module">
+  // tab switching
+  const tabs = document.querySelectorAll("nav button");
+  tabs.forEach(b => b.onclick = () => {
+    tabs.forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("tab-" + b.dataset.tab).classList.add("active");
+    if (b.dataset.tab === "live" && window.__sr6_resize) setTimeout(window.__sr6_resize, 0);
+  });
+
+  // closure data
+  const num = (x, d=3) => (Math.abs(x) < 1e-3 && x !== 0) ? x.toExponential(1) : x.toFixed(d);
+  fetch("assets/closure_report.json").then(r => r.json()).then(j => {
+    const a = j.aggregate;
+    document.getElementById("agg").innerHTML = [
+      ["可达位姿", `${a.poses_reachable}/${a.poses_total}`],
+      ["最差杆长误差", num(a.worst_rod_err_mm,1)+" mm"],
+      ["最差闭环平移残差", num(a.worst_closure_dt_mm,1)+" mm"],
+      ["home 固件差·主腿", num(a.fw_gap_home_main_mm,1)+" mm"],
+      ["最差固件差·主腿", a.fw_gap_worst_main_mm.toFixed(3)+" mm"],
+      ["最差固件差·俯仰", a.fw_gap_worst_pitch_mm.toFixed(3)+" mm"],
+    ].map(([k,v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+    document.getElementById("interp").textContent = a.interpretation;
+    const tb = document.querySelector("#posetable tbody");
+    tb.innerHTML = j.poses.map(p => {
+      const ps = p.pose.slice(0,5).map(x=>x.toFixed(x%1?3:0)).join(", ");
+      return `<tr><td>${ps}</td><td>${p.reachable?"✓":"✗"}</td>
+        <td>${num(p.max_rod_err_mm,1)}</td><td>${num(p.closure_dt_mm,1)}</td>
+        <td>${p.fw_gap_main_mm.toFixed(3)}</td><td>${p.fw_gap_pitch_mm.toFixed(3)}</td>
+        <td>${p.oop_main_mm.toFixed(1)} / ${p.oop_pitch_mm.toFixed(1)}</td></tr>`;
+    }).join("");
+  });
+  fetch("assets/ground_truth.json").then(r => r.text()).then(t => {
+    document.getElementById("gt").textContent = t;
+  });
+</script>
+</body>
+</html>

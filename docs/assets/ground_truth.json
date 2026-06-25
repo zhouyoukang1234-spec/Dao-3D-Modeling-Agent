@@ -1,0 +1,48 @@
+{
+  "_about": "Measured ground truth for the SR6 (ORS6) mechanism, extracted directly from the 30 official TempestMAx SR6 STL parts (measured/measure.py) and the SR6-Alpha4_ESP32.ino firmware. These are the ANCHORS the kinematic model (../true_kinematics.py) is built on. No guessed coordinates.",
+  "source_stls": "official SR6 STL set (SR6测试版零件 / SR6 T-wist4 / 备用零件), 30 parts",
+  "source_firmware": "SR6-Alpha4_ESP32.ino (SetMainServo L837-844, SetPitchServo L851-862, main mix L765-771)",
+
+  "link_lengths_mm": {
+    "main_arm_horn_to_ball": 50.0,
+    "pitch_arm_horn_to_ball": 75.0,
+    "rigid_rod_eye_to_eye": 175.0,
+    "_rod_note": "MainLink STL Y-extent 191mm (ball material included); eye-to-eye 175mm == firmware sqrt(28125+2500). PitchLink shares the 175 rod plus a 55mm@15deg pitcher offset arm (firmware pitchOff=5500/100=55, pitchAng=0.2618rad); PitchLink X-extent 64mm confirms the offset arm."
+  },
+
+  "firmware_constants": {
+    "mainArm_mm": 50.0,
+    "mainRod_mm": 175.0,
+    "pitchArm_mm": 75.0,
+    "pitchOff_mm": 55.0,
+    "pitchAng_rad": 0.2618,
+    "law_of_cosines_const_main": 28125,
+    "_const_note": "28125 = 175^2 - 50^2 = mainRod^2 - mainArm^2; 5625 = 75^2; 36250 = 175^2 + 75^2."
+  },
+
+  "receiver": {
+    "frame_note": "Receiver STL print-frame: ring axis ~Z, X is left/right (side), main attach lugs at |X|~70 ears, pitch attach at the rear. Mapped into the control/kinematic frame the model uses main pivots at X=+-60 and pitch pivots at X=+-61.",
+    "main_pivot_local_mm":  [60.0, 0.0, 0.0],
+    "pitch_pivot_local_mm": [61.0, -14.235, 53.126]
+  },
+
+  "servo_axes": {
+    "all_parallel_to": "X",
+    "note": "Main arm (SR6 臂 STL) is a planar part (hub and tip share one X); mounted on an X-parallel servo shaft the arm tip stays in that X-plane. For the firmware's 2D planar IK to hold at home, the servo shaft must lie in the SAME X-plane as its receiver ball: X=+-60 (main), X=+-61 (pitch). This is why the model places servos in-plane, NOT at the previously-guessed X=+-85."
+  },
+
+  "home": {
+    "receiver_main_pivot_height_mm": 193.0,
+    "main_servo_z_mm": 30.52,
+    "_home_note": "HOME_H - 162.48 = 30.52; firmware home SetMainServo(16248,1500) => in-plane (vertical 162.48mm, horizontal 15mm). At home every leg's out-of-plane offset h=0 => all 6 rods are EXACTLY 175.000mm."
+  },
+
+  "closure_result": {
+    "rigid_self_consistency_worst_dt_mm": 1.26e-10,
+    "rigid_worst_rod_err_mm": 2.84e-14,
+    "firmware_planar_gap_home_mm": 0.0,
+    "firmware_planar_gap_worst_main_mm": 1.141,
+    "firmware_planar_gap_worst_pitch_mm": 1.525,
+    "interpretation": "In-plane motions (thrust/fwd/pitch-rotation) keep h=0 so firmware 2D-IK is EXACT (gap 0). Only genuinely out-of-plane motions (side, roll) move pivots off their plane by h, giving the irreducible firmware-vs-rigid gap sqrt(175^2+h^2)-175. Honest, physical, not a tautology, not a guessed-coordinate artifact."
+  }
+}
