@@ -58,6 +58,10 @@ from .analysis import (
     workspace_analysis, clearance_analysis, assembly_stats, collision_check,
 )
 from .poses import MOTION_POSES, pose_by_name
+from .colored import (
+    build_colored, render_views, export_glb, PALETTE, VIEWS,
+)
+from .render import Part, render, hex_rgb
 
 __version__ = "2.0.0"
 __all__ = [
@@ -81,6 +85,9 @@ __all__ = [
     "assembly_stats", "collision_check",
     # poses
     "MOTION_POSES", "pose_by_name",
+    # colored render
+    "build_colored", "render_views", "export_glb", "PALETTE", "VIEWS",
+    "Part", "render", "hex_rgb",
 ]
 
 

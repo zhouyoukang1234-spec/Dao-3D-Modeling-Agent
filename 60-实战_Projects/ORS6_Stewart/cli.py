@@ -24,6 +24,8 @@ Commands:
     ik-forward L0 L1 L2 R0 R1 R2  — 正运动学 (0-1 归一化)
     collision P1 P2               — 两零件碰撞
     rods [L0 L1 L2 R0 R1 R2]      — 杆几何 (默认 home)
+    render [L0...R2] [label] [dir]— 逐件着色软件渲染 (多视角PNG, 无外部引擎)
+    glb [L0...R2] [path]          — 导出逐件着色 GLB (可旋转查看)
     build [L0...R2] [label]       — CadQuery 构建一姿态
     build-fc [L0...R2] [label]    — FreeCAD 构建 (需 FreeCAD 环境)
     motion [cadquery|freecad]     — 15 姿态动画序列
@@ -219,6 +221,21 @@ def main():
         print(json.dumps(S.collision_check(p1, p2), indent=2, ensure_ascii=False, default=str))
     elif cmd == "rods":
         cmd_rods(args[1:7])
+    elif cmd == "render":
+        pose_args = args[1:7]
+        pose = tuple(int(a) for a in pose_args) if len(pose_args) == 6 else S.TCODE_HOME
+        label = args[7] if len(args) > 7 else "home"
+        out_dir = args[8] if len(args) > 8 else "output/renders"
+        paths = S.render_views(pose=pose, out_dir=out_dir, label=label)
+        for p in paths:
+            print(f"  {p}")
+        print(f"\n{len(paths)} views rendered → {out_dir}")
+    elif cmd == "glb":
+        pose_args = args[1:7]
+        pose = tuple(int(a) for a in pose_args) if len(pose_args) == 6 else S.TCODE_HOME
+        out_path = args[7] if len(args) > 7 else "output/ORS6_home_colored.glb"
+        p = S.export_glb(pose=pose, out_path=out_path)
+        print(f"GLB exported: {p} ({os.path.getsize(p)//1024}KB)")
     elif cmd == "build":
         pose_args = args[1:7]
         pose = tuple(int(a) for a in pose_args) if len(pose_args) == 6 else S.TCODE_HOME
