@@ -46,6 +46,7 @@ __all__ = ["FreeCADKernel", "register_freecad_tools", "find_freecadcmd"]
 
 _RESP = "__FCR__ "
 _KERNEL_SRC = Path(__file__).resolve().parent / "freecad_kernel.py"
+_OPS_SRC = Path(__file__).resolve().parent / "freecad_ops.py"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -90,9 +91,11 @@ class FreeCADKernel:
 
     @staticmethod
     def _stage_kernel() -> str:
-        """把内核脚本复制到纯 ASCII 临时路径, 规避中文路径经 argv 传入 freecadcmd 的乱码."""
+        """把内核脚本(连同同源纯几何模块)复制到纯 ASCII 临时路径,
+        规避中文路径经 argv 传入 freecadcmd 的乱码; freecad_ops 须与内核同目录以供 import."""
         dst_dir = Path(tempfile.gettempdir()) / "dao_fc_kernel"
         dst_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_OPS_SRC, dst_dir / "freecad_ops.py")
         dst = dst_dir / "freecad_kernel.py"
         shutil.copyfile(_KERNEL_SRC, dst)
         return str(dst)

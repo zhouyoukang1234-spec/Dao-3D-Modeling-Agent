@@ -40,8 +40,21 @@ def build_freecad_registry(kernel=None):
     return reg
 
 
+def build_freecad_live_registry(bridge=None):
+    """构造装载 FreeCAD *在世* 后端的工具登记处 (就地操作 App.ActiveDocument 活文档).
+
+    须于 FreeCAD 自身 python 内运行 (GUI 或 freecadcmd); 工具命名空间同为 solid.*,
+    与子进程后端同义 —— 故上层会话/感知/MCP 完全复用, 仅 "手" 落在活文档而非子进程.
+    """
+    from .tools import ToolRegistry
+    from .backends.freecad_live import register_freecad_live_tools
+    reg = ToolRegistry()
+    register_freecad_live_tools(reg, bridge=bridge)
+    return reg
+
+
 def new_session(name: str = "session", engine: str = "mesh"):
-    """便捷工厂: 建一个智体会话. engine ∈ {"mesh", "freecad"}.
+    """便捷工厂: 建一个智体会话. engine ∈ {"mesh", "freecad", "freecad-live"}.
 
     无论何种引擎, 返回的 AgentSession 操作面 (perceive/act/verify/undo/run) 一字不变 ——
     此即 "万法归一": 同一套 看→动→验 闭环, 仅 "手" (后端引擎) 可换.
@@ -49,9 +62,12 @@ def new_session(name: str = "session", engine: str = "mesh"):
     from .session import AgentSession
     if engine == "freecad":
         return AgentSession(name=name, registry=build_freecad_registry())
+    elif engine == "freecad-live":
+        return AgentSession(name=name, registry=build_freecad_live_registry())
     elif engine == "mesh":
         return AgentSession(name=name, registry=build_default_registry())
-    raise ValueError("engine 须为 'mesh' 或 'freecad', 实得: %r" % engine)
+    raise ValueError("engine 须为 'mesh' / 'freecad' / 'freecad-live', 实得: %r" % engine)
 
 
-__all__ = ["__version__", "build_default_registry", "build_freecad_registry", "new_session"]
+__all__ = ["__version__", "build_default_registry", "build_freecad_registry",
+           "build_freecad_live_registry", "new_session"]
