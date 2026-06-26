@@ -1,0 +1,32 @@
+{
+  "photo": "real hardware photo",
+  "tripo": {
+    "iou": 0.685,
+    "cam": [
+      355,
+      28,
+      1,
+      210
+    ]
+  },
+  "built": {
+    "iou": 0.669,
+    "cam": [
+      315,
+      16,
+      0,
+      45
+    ],
+    "rods_mm": {
+      "LowerLeft": 175.0,
+      "UpperLeft": 175.0,
+      "UpperRight": 175.0,
+      "LowerRight": 175.0,
+      "LeftPitch": 175.0,
+      "RightPitch": 175.0
+    },
+    "rod_max_err_mm": 0.0,
+    "unreachable": [],
+    "recv_z": 221.0
+  }
+}

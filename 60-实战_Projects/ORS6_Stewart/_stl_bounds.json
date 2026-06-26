@@ -1,0 +1,440 @@
+{
+  "Base": {
+    "center": [
+      0.0,
+      0.5087203979492188,
+      38.25
+    ],
+    "size": [
+      116.5999984741211,
+      137.01744079589844,
+      71.5
+    ],
+    "min": [
+      -58.29999923706055,
+      -68.0,
+      2.5
+    ],
+    "max": [
+      58.29999923706055,
+      69.01744079589844,
+      74.0
+    ],
+    "vertices": 2574,
+    "faces": 5252,
+    "watertight": true,
+    "volume_cm3": 175.62
+  },
+  "L_Frame": {
+    "center": [
+      -78.6500015258789,
+      0.0,
+      38.90000057220459
+    ],
+    "size": [
+      62.5,
+      111.96644592285156,
+      54.00000190734863
+    ],
+    "min": [
+      -109.9000015258789,
+      -55.98322296142578,
+      11.899999618530273
+    ],
+    "max": [
+      -47.400001525878906,
+      55.98322296142578,
+      65.9000015258789
+    ],
+    "vertices": 2833,
+    "faces": 5754,
+    "watertight": true,
+    "volume_cm3": 54.05
+  },
+  "R_Frame": {
+    "center": [
+      78.6500015258789,
+      0.0,
+      38.90000057220459
+    ],
+    "size": [
+      62.5,
+      111.96644592285156,
+      54.00000190734863
+    ],
+    "min": [
+      47.400001525878906,
+      -55.98322296142578,
+      11.899999618530273
+    ],
+    "max": [
+      109.9000015258789,
+      55.98322296142578,
+      65.9000015258789
+    ],
+    "vertices": 2996,
+    "faces": 6080,
+    "watertight": true,
+    "volume_cm3": 54.71
+  },
+  "L_Pitcher": {
+    "center": [
+      -16.615088939666748,
+      56.85362243652344,
+      51.75
+    ],
+    "size": [
+      60.229668617248535,
+      95.70724487304688,
+      13.5
+    ],
+    "min": [
+      -46.729923248291016,
+      9.0,
+      45.0
+    ],
+    "max": [
+      13.49974536895752,
+      104.70724487304688,
+      58.5
+    ],
+    "vertices": 1011,
+    "faces": 2030,
+    "watertight": true,
+    "volume_cm3": 20.72
+  },
+  "R_Pitcher": {
+    "center": [
+      16.615088939666748,
+      56.85362243652344,
+      51.75
+    ],
+    "size": [
+      60.229668617248535,
+      95.70724487304688,
+      13.5
+    ],
+    "min": [
+      -13.49974536895752,
+      9.0,
+      45.0
+    ],
+    "max": [
+      46.729923248291016,
+      104.70724487304688,
+      58.5
+    ],
+    "vertices": 1011,
+    "faces": 2030,
+    "watertight": true,
+    "volume_cm3": 20.72
+  },
+  "Arm": {
+    "center": [
+      67.50000190734863,
+      21.5109920501709,
+      51.5
+    ],
+    "size": [
+      27.95827865600586,
+      70.9780158996582,
+      11.0
+    ],
+    "min": [
+      53.5208625793457,
+      -13.978015899658203,
+      46.0
+    ],
+    "max": [
+      81.47914123535156,
+      57.0,
+      57.0
+    ],
+    "vertices": 716,
+    "faces": 1440,
+    "watertight": true,
+    "volume_cm3": 11.6
+  },
+  "Receiver": {
+    "center": [
+      0.0,
+      0.0,
+      16.062545776367188
+    ],
+    "size": [
+      140.0,
+      110.0,
+      88.12509155273438
+    ],
+    "min": [
+      -70.0,
+      -55.0,
+      -28.0
+    ],
+    "max": [
+      70.0,
+      55.0,
+      60.125091552734375
+    ],
+    "vertices": 4053,
+    "faces": 8122,
+    "watertight": true,
+    "volume_cm3": 95.58
+  },
+  "Lid": {
+    "center": [
+      0.0,
+      0.5087203979492188,
+      101.04009246826172
+    ],
+    "size": [
+      116.0,
+      137.01744079589844,
+      41.08018493652344
+    ],
+    "min": [
+      -58.0,
+      -68.0,
+      80.5
+    ],
+    "max": [
+      58.0,
+      69.01744079589844,
+      121.58018493652344
+    ],
+    "vertices": 2261,
+    "faces": 4538,
+    "watertight": true,
+    "volume_cm3": 38.76
+  },
+  "WindowLid": {
+    "center": [
+      0.0,
+      9.491279602050781,
+      101.04009246826172
+    ],
+    "size": [
+      116.0,
+      137.01744079589844,
+      41.08018493652344
+    ],
+    "min": [
+      -58.0,
+      -59.01744079589844,
+      80.5
+    ],
+    "max": [
+      58.0,
+      78.0,
+      121.58018493652344
+    ],
+    "vertices": 2803,
+    "faces": 5642,
+    "watertight": true,
+    "volume_cm3": 37.1
+  },
+  "PowerBus": {
+    "center": [
+      0.0,
+      -0.9000000953674316,
+      13.15999984741211
+    ],
+    "size": [
+      29.5,
+      8.800000190734863,
+      22.31999969482422
+    ],
+    "min": [
+      -14.75,
+      -5.300000190734863,
+      2.0
+    ],
+    "max": [
+      14.75,
+      3.5,
+      24.31999969482422
+    ],
+    "vertices": 234,
+    "faces": 472,
+    "watertight": true,
+    "volume_cm3": 1.29
+  },
+  "Spacer": {
+    "center": [
+      0.007205009460449219,
+      0.0,
+      0.0
+    ],
+    "size": [
+      7.985589981079102,
+      7.992791652679443,
+      3.0
+    ],
+    "min": [
+      -3.9855899810791016,
+      -3.9963958263397217,
+      -1.5
+    ],
+    "max": [
+      4.0,
+      3.9963958263397217,
+      1.5
+    ],
+    "vertices": 196,
+    "faces": 392,
+    "watertight": true,
+    "volume_cm3": 0.09
+  },
+  "BearingMain": {
+    "center": [
+      -0.3846397399902344,
+      3.8947181701660156,
+      0.0
+    ],
+    "size": [
+      141.76927947998047,
+      23.78943634033203,
+      7.0
+    ],
+    "min": [
+      -71.26927947998047,
+      -8.0,
+      -3.5
+    ],
+    "max": [
+      70.5,
+      15.789436340332031,
+      3.5
+    ],
+    "vertices": 990,
+    "faces": 1996,
+    "watertight": true,
+    "volume_cm3": 13.97
+  },
+  "BearingPitch": {
+    "center": [
+      0.0,
+      0.0,
+      30.0
+    ],
+    "size": [
+      141.0,
+      16.0,
+      68.0
+    ],
+    "min": [
+      -70.5,
+      -8.0,
+      -4.0
+    ],
+    "max": [
+      70.5,
+      8.0,
+      64.0
+    ],
+    "vertices": 1184,
+    "faces": 2404,
+    "watertight": true,
+    "volume_cm3": 14.1
+  },
+  "MainLink": {
+    "center": [
+      2.0,
+      -87.5,
+      0.0
+    ],
+    "size": [
+      4.0,
+      190.95526123046875,
+      16.0
+    ],
+    "min": [
+      0.0,
+      -182.97763061523438,
+      -8.0
+    ],
+    "max": [
+      4.0,
+      7.977630615234375,
+      8.0
+    ],
+    "vertices": 424,
+    "faces": 852,
+    "watertight": true,
+    "volume_cm3": 11.27
+  },
+  "PitcherLink": {
+    "center": [
+      32.0,
+      -87.5,
+      0.0
+    ],
+    "size": [
+      64.0,
+      191.0,
+      16.0
+    ],
+    "min": [
+      0.0,
+      -183.0,
+      -8.0
+    ],
+    "max": [
+      64.0,
+      8.0,
+      8.0
+    ],
+    "vertices": 508,
+    "faces": 1020,
+    "watertight": true,
+    "volume_cm3": 12.12
+  },
+  "Shield": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版防护罩\\SR6 Shield 40mm Fan.stl`"
+  },
+  "Shield_OLED": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版防护罩\\SR6 Shield 40mm Fan + OLED Display.stl`"
+  },
+  "Shield_Alt": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版防护罩\\SR6 Shield 40mm Fan + OLED Display(alternate dimensions).stl`"
+  },
+  "Tray": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版托盘\\SR6 Tray Standard Beta1.stl`"
+  },
+  "Tray_ScrewJack": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版托盘\\SR6 Tray Screw Jack Beta1.stl`"
+  },
+  "Tray_XT60": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6测试版托盘\\SR6 Tray XT60E1-M Beta1.stl`"
+  },
+  "Twist_Base": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist4 SR6 Base Beta1.stl`"
+  },
+  "Twist_Body": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist4 SR6 Body Beta1.stl`"
+  },
+  "Twist_Lid": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist4 Lid Beta1.stl`"
+  },
+  "RingGear": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist Clip Ring Gear Beta4.stl`"
+  },
+  "ExchangeGear": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist Exchange Gear Beta1.stl`"
+  },
+  "DriveGear": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\T-wist4 Drive Beta1.stl`"
+  },
+  "GrommetLink": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\SR6 Grommet Pitcher Link Beta1.stl`"
+  },
+  "L_AngleLink": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\SR6 L-Pitcher Angle Link Beta1.stl`"
+  },
+  "R_AngleLink": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\Dao-3D-Modeling-Agent\\60-实战_Projects\\ORS6_Stewart\\STLs\\SR6 T-wist4\\SR6 R-Pitcher Angle Link Beta1.stl`"
+  },
+  "ESP32_Mount": {
+    "error": "string is not a file: `C:\\Users\\Administrator\\ORS6-VAM饮料摇匀器\\custom_parts\\ESP32_Mount.stl`"
+  }
+}
