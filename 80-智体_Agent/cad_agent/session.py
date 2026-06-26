@@ -103,7 +103,9 @@ class VerifyReport:
 # ═══════════════════════════════════════════════════════════════════════════
 class AgentSession:
     def __init__(self, name: str = "session", registry: Optional[ToolRegistry] = None,
-                 workspace: Optional[Workspace] = None, max_undo: int = 64) -> None:
+                 workspace: Optional[Workspace] = None, max_undo: int = 64,
+                 measure_tool: Optional[str] = None,
+                 perceive_tool: Optional[str] = None) -> None:
         self.name = name
         self.registry = registry or ToolRegistry()
         self.workspace = workspace or Workspace(name=name + "_ws")
@@ -111,6 +113,17 @@ class AgentSession:
         self._undo: List[Dict[str, Any]] = []
         self._max_undo = max_undo
         self._t0 = time.time()
+        # 引擎无关: 验证/感知所用的工具名按 registry 自动择取 (solid.* 优先于 mesh.*),
+        # 也可显式指定. 这样同一会话逻辑既能驱动 mesh 后端, 也能驱动 FreeCAD 后端.
+        self._measure_tool = measure_tool or self._pick("measure")
+        self._perceive_tool = perceive_tool or self._pick("perceive")
+
+    def _pick(self, verb: str) -> str:
+        for ns in ("solid", "mesh"):
+            name = f"{ns}.{verb}"
+            if self.registry.has(name):
+                return name
+        return f"mesh.{verb}"  # 缺省回退
 
     # —— 能力发现 ——
     def tools(self) -> List[Dict[str, Any]]:
@@ -140,7 +153,7 @@ class AgentSession:
 
     # —— perceive: 看懂一个对象 ——
     def perceive(self, name: str, **kw: Any) -> ToolResult:
-        return self.act("mesh.perceive", {"name": name, **kw}, record=False)
+        return self.act(self._perceive_tool, {"name": name, **kw}, record=False)
 
     # —— undo ——
     def undo(self) -> bool:
@@ -168,7 +181,7 @@ class AgentSession:
                     mark = PASS if n == c.value else FAIL
                     detail = f"实得 {n}"
                 elif c.kind in ("watertight", "volume", "extent"):
-                    m = self.act("mesh.measure", {"name": c.obj}, record=False)
+                    m = self.act(self._measure_tool, {"name": c.obj}, record=False)
                     if not m.ok:
                         detail = m.error or "measure 失败"
                     elif c.kind == "watertight":
@@ -185,7 +198,7 @@ class AgentSession:
                         mark = PASS if _in(e, c.lo, c.hi) else FAIL
                         detail = f"尺寸 {e}"
                 elif c.kind == "min_distance":
-                    m = self.act("mesh.measure", {"name": c.obj, "to": c.other}, record=False)
+                    m = self.act(self._measure_tool, {"name": c.obj, "to": c.other}, record=False)
                     d = m.data.get("min_distance_to", {}).get("distance") if m.ok else None
                     if d is None:
                         detail = "无法求间距"

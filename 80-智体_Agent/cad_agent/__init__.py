@@ -27,10 +27,31 @@ def build_default_registry():
     return reg
 
 
-def new_session(name: str = "session"):
-    """便捷工厂: 建一个装载默认工具集的智体会话."""
+def build_freecad_registry(kernel=None):
+    """构造装载 FreeCAD 后端的工具登记处 (真实 BREP 实体, 经 freecadcmd 子进程内核).
+
+    需系统已安装 FreeCAD (freecadcmd 可见, 或设环境变量 FREECADCMD).
+    工具命名空间为 solid.*; 与 mesh 后端同义, 故上层会话/感知/MCP 完全复用.
+    """
+    from .tools import ToolRegistry
+    from .backends.freecad_backend import register_freecad_tools
+    reg = ToolRegistry()
+    register_freecad_tools(reg, kernel=kernel)
+    return reg
+
+
+def new_session(name: str = "session", engine: str = "mesh"):
+    """便捷工厂: 建一个智体会话. engine ∈ {"mesh", "freecad"}.
+
+    无论何种引擎, 返回的 AgentSession 操作面 (perceive/act/verify/undo/run) 一字不变 ——
+    此即 "万法归一": 同一套 看→动→验 闭环, 仅 "手" (后端引擎) 可换.
+    """
     from .session import AgentSession
-    return AgentSession(name=name, registry=build_default_registry())
+    if engine == "freecad":
+        return AgentSession(name=name, registry=build_freecad_registry())
+    elif engine == "mesh":
+        return AgentSession(name=name, registry=build_default_registry())
+    raise ValueError("engine 须为 'mesh' 或 'freecad', 实得: %r" % engine)
 
 
-__all__ = ["__version__", "build_default_registry", "new_session"]
+__all__ = ["__version__", "build_default_registry", "build_freecad_registry", "new_session"]
