@@ -120,6 +120,46 @@ def build(op, a, shapes=None):
             s.translate(vec(a["center"]))
         return s
 
+    if op == "extrude":
+        # 任意 2D 闭合多边形轮廓 (XY 平面, 点列 [[x,y],...]) 沿 +Z 拉伸 height 成棱柱.
+        # center 给定时按"棱柱包围盒中心居于 center"平移 (与 box 同义).
+        pts = a["points"]
+        if len(pts) < 3:
+            raise ValueError("extrude 轮廓至少 3 点")
+        h = float(a["height"])
+        vs = [vec([float(p[0]), float(p[1]), 0.0]) for p in pts]
+        vs.append(vs[0])  # 闭合
+        face = Part.Face(Part.makePolygon(vs))
+        s = solidify(face.extrude(App.Vector(0, 0, h)))
+        if a.get("center"):
+            c = a["center"]
+            bb = s.BoundBox
+            s = s.copy()
+            s.translate(vec([c[0] - (bb.XMin + bb.XMax) / 2.0,
+                             c[1] - (bb.YMin + bb.YMax) / 2.0,
+                             c[2] - (bb.ZMin + bb.ZMax) / 2.0]))
+        return s
+
+    if op == "revolve":
+        # 2D 轮廓 (XZ 平面, 点列 [[x,z],...]; x=半径方向) 绕 axis (默认 Z) 旋转 angle° 成回转体.
+        pts = a["points"]
+        if len(pts) < 3:
+            raise ValueError("revolve 轮廓至少 3 点")
+        ang = float(a.get("angle", 360.0))
+        vs = [vec([float(p[0]), 0.0, float(p[1])]) for p in pts]
+        vs.append(vs[0])
+        face = Part.Face(Part.makePolygon(vs))
+        s = solidify(face.revolve(vec(a.get("base", [0, 0, 0])),
+                                  vec(a.get("axis", [0, 0, 1])), ang))
+        if a.get("center"):
+            c = a["center"]
+            bb = s.BoundBox
+            s = s.copy()
+            s.translate(vec([c[0] - (bb.XMin + bb.XMax) / 2.0,
+                             c[1] - (bb.YMin + bb.YMax) / 2.0,
+                             c[2] - (bb.ZMin + bb.ZMax) / 2.0]))
+        return s
+
     if op == "boolean":
         A = shapes["a"]
         B = shapes["b"]

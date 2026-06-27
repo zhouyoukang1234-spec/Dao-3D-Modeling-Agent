@@ -204,6 +204,16 @@ def _make_handlers(K: FreeCADKernel):
             return _summary(ws, name)
         return h
 
+    def _profile(op, prefix):
+        def h(ws: Workspace, a: Dict[str, Any]) -> Dict[str, Any]:
+            args = {k: v for k, v in a.items() if k != "name"}
+            args["deflection"] = a.get("deflection", 0.4)
+            res = K.call(op, args)
+            name = a.get("name") or ws.fresh_name(prefix)
+            _store(ws, name, res, {"profile": op})
+            return _summary(ws, name)
+        return h
+
     def h_scene_list(ws, a):
         return {"count": len(ws), "objects": [_summary(ws, n) for n in ws.names()]}
 
@@ -349,6 +359,27 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
     reg.add("solid.torus", "创建圆环实体 (radius1 主半径/ radius2 管半径).",
             H["_prim"]("torus", "tor"), [
                 P("radius1", "number", "主半径"), P("radius2", "number", "管半径"),
+                P("center", "array", "中心 [x,y,z]", False, None),
+                P("name", "string", "对象名", False, None),
+            ], category="primitive", mutates=True)
+
+    reg.add("solid.extrude",
+            "任意 2D 闭合多边形轮廓 (XY 平面, points=[[x,y],...]) 沿 +Z 拉伸 height 成棱柱; "
+            "可造任意截面 (六角/异形). center 给定时棱柱包围盒中心居于 center.",
+            H["_profile"]("extrude", "ext"), [
+                P("points", "array", "轮廓点列 [[x,y],...] (≥3, 自动闭合)"),
+                P("height", "number", "拉伸高 (沿 Z)"),
+                P("center", "array", "中心 [x,y,z]", False, None),
+                P("name", "string", "对象名", False, None),
+            ], category="primitive", mutates=True)
+
+    reg.add("solid.revolve",
+            "2D 轮廓 (XZ 平面, points=[[x,z],...], x=半径方向) 绕 axis (默认 Z) 旋转 angle° 成回转体.",
+            H["_profile"]("revolve", "rev"), [
+                P("points", "array", "轮廓点列 [[x,z],...] (≥3, 自动闭合)"),
+                P("angle", "number", "旋转角 (度, 默认 360)", False, 360),
+                P("axis", "array", "回转轴 [x,y,z]", False, [0, 0, 1]),
+                P("base", "array", "轴上一点", False, [0, 0, 0]),
                 P("center", "array", "中心 [x,y,z]", False, None),
                 P("name", "string", "对象名", False, None),
             ], category="primitive", mutates=True)
