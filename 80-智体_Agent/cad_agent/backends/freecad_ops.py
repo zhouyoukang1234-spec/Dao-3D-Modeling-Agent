@@ -299,6 +299,20 @@ def build(op, a, shapes=None):
             raise RuntimeError("sweep 结果非封闭实体 (路径过弯/截面过大致自交?)")
         return r2
 
+    if op == "helix":
+        # 螺旋扫掠成线圈/弹簧/螺纹体: 沿螺旋线 (pitch 节距, height 总高, radius 螺旋半径)
+        # 扫圆截面 (wire_radius 丝径). left_handed 左旋. 压缩弹簧/拉簧本体即此.
+        helix = Part.makeHelix(float(a["pitch"]), float(a["height"]), float(a["radius"]),
+                               0.0, bool(a.get("left_handed", False)))
+        e0 = helix.Edges[0]
+        p0 = e0.valueAt(e0.FirstParameter)
+        t0 = e0.tangentAt(e0.FirstParameter)
+        circ = Part.Wire(Part.makeCircle(float(a["wire_radius"]), p0, t0))
+        coil = solidify(helix.makePipeShell([circ], True, True))
+        if not coil.isClosed() or len(coil.Solids) < 1:
+            raise RuntimeError("helix 扫掠结果非封闭实体 (wire_radius 过大/节距过小致相邻圈自交?)")
+        return coil
+
     if op == "boolean":
         A = shapes["a"]
         B = shapes["b"]

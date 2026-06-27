@@ -444,6 +444,18 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
                 P("name", "string", "对象名", False, None),
             ], category="primitive", mutates=True)
 
+    reg.add("solid.helix",
+            "螺旋扫掠成线圈/弹簧/螺纹体: pitch=节距, height=总高, radius=螺旋半径, "
+            "wire_radius=丝径(圆截面半径), left_handed=左旋(默认右旋). 压缩弹簧本体即此.",
+            H["_profile"]("helix", "coil"), [
+                P("pitch", "number", "节距 (每圈升程)"),
+                P("height", "number", "总高"),
+                P("radius", "number", "螺旋半径 (中心线)"),
+                P("wire_radius", "number", "丝径 (圆截面半径)"),
+                P("left_handed", "boolean", "左旋 (默认右旋)", False, False),
+                P("name", "string", "对象名", False, None),
+            ], category="primitive", mutates=True)
+
     reg.add("solid.boolean",
             "BREP 布尔: op∈{union,difference,intersection}; a-b 两对象; "
             "可选 result 命名、consume 是否消耗输入. 结果自动 removeSplitter 清理.",
