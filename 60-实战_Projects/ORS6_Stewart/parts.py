@@ -51,10 +51,17 @@ def _locate_stl_root() -> str:
     if local.is_dir():
         return str(local)
 
-    raise RuntimeError(
-        "ORS6 STL root not found. Set ORS6_STL_ROOT env var or place STLs "
-        f"under {ors6_default} or {local}."
+    # 道法自然: 未挂载 STL 时不在 import 期硬崩 — 退回默认路径并告警，
+    # 让"不读 STL"的离线流程(如 native_assembly 物理体检 / CI)仍可 import。
+    # 真正去 load_stl 的调用会自然抛 FileNotFoundError, 信息同样清晰。
+    import warnings
+    warnings.warn(
+        "ORS6 STL root not found; using placeholder. Set ORS6_STL_ROOT to load "
+        f"geometry. (looked under {ors6_default} and {local})",
+        RuntimeWarning,
+        stacklevel=2,
     )
+    return str(ors6_default)
 
 
 STL_ROOT: str = _locate_stl_root()
