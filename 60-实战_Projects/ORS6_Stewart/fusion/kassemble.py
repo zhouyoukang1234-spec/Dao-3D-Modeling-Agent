@@ -49,8 +49,8 @@ def uvsphere(c,r=5.0,n=10):
             F+=[[a,b,a+1],[b,b+1,a+1]]
     return V,np.array(F)
 
-PAL={"body":[.84,.16,.16],"frame":[.84,.16,.16],"recv":[.78,.12,.12],
-     "rod":[.84,.16,.16],"horn":[.94,.92,.86],"ball":[.76,.78,.82]}
+PAL={"body":[.72,.10,.10],"frame":[.82,.18,.18],"recv":[.20,.32,.65],
+     "rod":[.75,.75,.78],"horn":[.95,.93,.88],"ball":[.55,.56,.60]}
 
 def build():
     bf=np.load(os.path.join(WORK,"kfit_body.npz")); bR,bt=bf["R"],bf["t"]
@@ -96,14 +96,20 @@ def build():
             b0=iu*nv+(iv+1)%nv; b1=((iu+1)%nu)*nv+(iv+1)%nv
             Fr+=[[a0,a1,b1],[a0,b1,b0]]
     parts.append((np.array(Vr),np.array(Fr),PAL["recv"]))
-    # arms: solved angle. tip known -> rotate Arm STL from home tip dir to solved tip dir about pivot.
+    # arms: solved angle. tip known -> rotate Arm STL about Y shaft axis ONLY
+    # (physical constraint: servo horn swings in the XZ plane at fixed Y=sy)
     Va,Fa=L("Arm")
     for i,(s,stype,sx,sy,_) in enumerate(SERVO_SLOTS):
         shaft_cad=np.array([sx,sy,SR6["servoPivotH"]])
         htip=np.array(home["arm_tips"][s])
         stip=(bR.T@(tips[i]-bt))            # solved tip back in CAD
         v_home=htip-shaft_cad; v_sol=stip-shaft_cad
-        Rr=rot_a2b(v_home,v_sol)
+        # project onto XZ plane and compute angle delta about Y axis
+        ah=math.atan2(v_home[2],v_home[0])
+        a_s=math.atan2(v_sol[2],v_sol[0])
+        delta=ah-a_s  # sign: Ry convention subtracts angle
+        cd,sd=math.cos(delta),math.sin(delta)
+        Rr=np.array([[cd,0,sd],[0,1,0],[-sd,0,cd]])  # Ry(delta)
         if stype=="main":
             is_left=sx<0
             V=Va.copy(); F=Fa
@@ -114,7 +120,7 @@ def build():
                 piv=np.array(ARM_PIVOT_STL)
             Vt=(V-piv)@Rr.T+shaft_cad
             parts.append((Tb(Vt),F,PAL["horn"]))
-        else:   # pitch arm: rotate the real pitcher STL about its shaft to IK angle
+        else:   # pitch arm: rotate the real pitcher STL about Y shaft axis
             pn="L_Pitcher" if sx<0 else "R_Pitcher"
             V,F=L(pn)
             if V is None: continue
