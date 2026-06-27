@@ -148,15 +148,29 @@ def _tight_bbox(shape):
         return shape.BoundBox
 
 
+def _center_of_mass(shape, bb=None):
+    """真实质心. 经 BREP 串往返的形状其 py 类型退化为基类 Part.Shape (无 CenterOfMass 属性),
+    须下沉到具体 Solid (typed) 上取; 多实体作体积加权平均; 皆不可得才回退包围盒中心."""
+    sols = shape.Solids
+    if sols:
+        if len(sols) == 1:
+            return sols[0].CenterOfMass
+        tv = sum(s.Volume for s in sols) or 1.0
+        return App.Vector(sum(s.CenterOfMass.x * s.Volume for s in sols) / tv,
+                          sum(s.CenterOfMass.y * s.Volume for s in sols) / tv,
+                          sum(s.CenterOfMass.z * s.Volume for s in sols) / tv)
+    try:
+        return shape.CenterOfMass
+    except Exception:
+        bb = bb or shape.BoundBox
+        return App.Vector((bb.XMin + bb.XMax) / 2.0, (bb.YMin + bb.YMax) / 2.0,
+                          (bb.ZMin + bb.ZMax) / 2.0)
+
+
 def metrics(shape):
     bb = _tight_bbox(shape)
     closed = bool(shape.isClosed())
-    try:
-        com = shape.CenterOfMass
-    except Exception:
-        com = App.Vector((bb.XMin + bb.XMax) / 2.0,
-                         (bb.YMin + bb.YMax) / 2.0,
-                         (bb.ZMin + bb.ZMax) / 2.0)
+    com = _center_of_mass(shape, bb)
     return {
         "volume": round(float(shape.Volume), 6),
         "area": round(float(shape.Area), 6),
@@ -528,6 +542,55 @@ def measure(shape, other=None):
     return out
 
 
+def inspect(shape, density=None):
+    """工程质量特性: 体积/表面积/质心 + (给 density g/cm³ 时) 质量, 及主惯性矩/回转半径/主轴.
+    体积惯性矩 = ∫r²dV (mm⁵); 质量惯性矩 = ρ·∫r²dV, ρ=density/1000 (g/mm³) → g·mm²."""
+    com = _center_of_mass(shape)
+    vol_mm3 = float(shape.Volume)
+    sols = shape.Solids
+    out = {
+        "volume_mm3": round(vol_mm3, 6),
+        "area_mm2": round(float(shape.Area), 6),
+        "center_of_mass": [round(com.x, 6), round(com.y, 6), round(com.z, 6)],
+        "solids": len(sols),
+        "watertight": bool(shape.isClosed()),
+    }
+    try:
+        # PrincipalProperties 须在具体 typed Solid 上取 (基类 Shape/Compound 无此属性);
+        # 多实体的组合主惯性矩非简单可加, 此处仅在单实体时给出, 否则置空并标注.
+        pp = sols[0].PrincipalProperties if len(sols) == 1 else None
+        if pp is None:
+            raise ValueError("multi-solid")
+        vmom = [float(m) for m in pp["Moments"]]
+        out["principal_moments_volume_mm5"] = [round(m, 4) for m in vmom]
+        out["radius_of_gyration_mm"] = [round(float(r), 6) for r in pp["RadiusOfGyration"]]
+        ax = pp["FirstAxisOfInertia"]
+        out["first_axis_of_inertia"] = [round(ax.x, 6), round(ax.y, 6), round(ax.z, 6)]
+    except Exception:
+        vmom = None
+        if len(sols) > 1:
+            out["note"] = "多实体: 主惯性矩从略 (组合非简单可加)"
+    if density is not None:
+        rho = float(density)
+        mass_g = rho * vol_mm3 / 1000.0
+        out["density_g_cm3"] = rho
+        out["mass_g"] = round(mass_g, 6)
+        if vmom is not None:
+            out["principal_moments_mass_g_mm2"] = [round(rho / 1000.0 * m, 4) for m in vmom]
+    return out
+
+
+def interference(a, b):
+    """两体干涉/间隙检测: 求公共体 (相交) 体积; 重叠则报 overlap_volume>0 (干涉),
+    否则报 min_clearance (最近间隙). 装配/运动校核之本源."""
+    common = a.common(b)
+    ov = float(common.Volume) if len(common.Solids) or common.Faces else 0.0
+    out = {"interfering": ov > 1e-6, "overlap_volume_mm3": round(ov, 6)}
+    if ov <= 1e-6:
+        out["min_clearance_mm"] = round(float(a.distToShape(b)[0]), 6)
+    return out
+
+
 def export(shape, path):
     low = path.lower()
     if low.endswith((".step", ".stp")):
@@ -555,6 +618,12 @@ def op(op_name, a):
 
     if op_name == "measure":
         return measure(sh["x"], sh.get("y"))
+
+    if op_name == "inspect":
+        return inspect(sh["x"], a.get("density"))
+
+    if op_name == "interference":
+        return interference(sh["a"], sh["b"])
 
     if op_name == "tessellate":
         return {"mesh": tess(sh["x"], defl), "metrics": metrics(sh["x"])}

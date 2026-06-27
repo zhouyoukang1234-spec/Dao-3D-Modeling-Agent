@@ -331,6 +331,14 @@ def _make_handlers(K: FreeCADKernel):
             out["min_distance_to"] = {"other": a["to"], "distance": res["min_distance"]}
         return out
 
+    def h_inspect(ws, a):
+        res = K.call("inspect", {"shapes": {"x": _brep(ws, a["name"])}, "density": a.get("density")})
+        return {"name": a["name"], **res}
+
+    def h_interference(ws, a):
+        res = K.call("interference", {"shapes": {"a": _brep(ws, a["a"]), "b": _brep(ws, a["b"])}})
+        return {"a": a["a"], "b": a["b"], **res}
+
     def h_export(ws, a):
         p = Path(a["path"])
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -583,6 +591,21 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
             H["h_measure"], [
                 P("name", "string", "对象名"),
                 P("to", "string", "另一对象名 (求最小间距)", False, None),
+            ], category="measure")
+
+    reg.add("solid.inspect",
+            "工程质量特性: 体积/表面积/质心/实体数 + (给 density g/cm³ 时) 质量(g)、"
+            "主惯性矩(体积 mm⁵ 及质量 g·mm²)、回转半径、主惯性轴. 工程评价之本源.",
+            H["h_inspect"], [
+                P("name", "string", "对象名"),
+                P("density", "number", "材料密度 g/cm³ (如铝 2.70/钢 7.85, 不给则仅几何)", False, None),
+            ], category="measure")
+
+    reg.add("solid.interference",
+            "两体干涉/间隙检测: 求公共体体积; 重叠报 interfering=true 及 overlap_volume, "
+            "否则报 min_clearance 最近间隙. 装配/运动校核之本源.",
+            H["h_interference"], [
+                P("a", "string", "对象 A"), P("b", "string", "对象 B"),
             ], category="measure")
 
     reg.add("solid.export", "导出实体为 STEP/IGES/STL/BREP (按扩展名定格式).",
