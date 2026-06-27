@@ -49,29 +49,46 @@ def assign(p):
     return {SLOTS[i]: SLOTS[j] for i, j in zip(ri, cj)}
 
 
-def residuals(p, amap, wreg=0.06):
+def residuals(p, amap, wreg=0.04, wsw=0.9):
     MW = mounts(p)
-    r = [B.solve_arm(s, MW[amap[s]])[2] - B.ROD for s in SLOTS]   # rod must be 175
-    r += list(wreg * np.array(p))                                 # stay near Tripo
+    r = []
+    for s in SLOTS:
+        th, tip, d = B.solve_arm(s, MW[amap[s]])
+        r.append(d - B.ROD)                          # rod must be exactly 175 (no float)
+        r.append(wsw * (th - B.HOME[s]))             # natural arm angle (no contortion)
+    r += list(wreg * np.array(p))                    # stay near the Tripo source pose
     return r
 
 
-def project():
-    amap = assign(np.zeros(6))                       # fix pairing at the Tripo pose
-    sol = least_squares(residuals, np.zeros(6), args=(amap,),
-                        method="lm", max_nfev=4000)
-    p = sol.x
+def evaluate(p, amap):
     MW = mounts(p)
-    res = {}; tot = 0.0
-    print("PHYSICS-PROJECTED pose  (rods forced to 175mm):")
+    res = {}; rod = 0.0; sw = 0.0
     for s in SLOTS:
-        M = MW[amap[s]]
-        th, tip, d = B.solve_arm(s, M)
-        res[s] = (th, tip, M, d); tot += abs(d - B.ROD)
+        th, tip, d = B.solve_arm(s, MW[amap[s]])
+        res[s] = (th, tip, MW[amap[s]], d)
+        rod += abs(d - B.ROD); sw += abs(math.degrees(th - B.HOME[s]))
+    drift = Rot.from_rotvec(p[:3]).magnitude() * 57.3 + np.linalg.norm(p[3:])
+    return res, rod, sw, drift
+
+
+def project():
+    identity = {s: s for s in SLOTS}                 # real fixed wiring: servo->own mount
+    hung = assign(np.zeros(6))                        # reachability pairing (fallback)
+    best = None
+    for tag, amap in (("identity", identity), ("hungarian", hung)):
+        sol = least_squares(residuals, np.zeros(6), args=(amap,),
+                            method="lm", max_nfev=6000)
+        res, rod, sw, drift = evaluate(sol.x, amap)
+        score = rod + 0.04 * sw + 0.3 * drift        # closed + natural + near-Tripo
+        print(f"[{tag:9s}] rod_resid={rod:6.2f}mm  swing_sum={sw:6.0f}deg  "
+              f"drift={drift:5.1f}  score={score:.2f}")
+        if best is None or score < best[0]:
+            best = (score, tag, sol.x, res, amap)
+    score, tag, p, res, amap = best
+    print(f"CHOSEN: {tag}  (physically closed, rods=175, natural arms)")
+    for s in SLOTS:
+        th, tip, M, d = res[s]
         print(f"  {s:11s} -> {amap[s]:11s} angle={math.degrees(th):7.1f}  rod={d:7.2f}")
-    dR = Rot.from_rotvec(p[:3])
-    print(f"rod_resid_sum={tot:.3f}mm   pose drift: rot={dR.magnitude()*57.3:.1f}deg "
-          f"trans={np.linalg.norm(p[3:]):.1f}mm")
     return p, res
 
 
