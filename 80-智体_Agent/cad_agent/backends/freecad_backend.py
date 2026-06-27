@@ -243,12 +243,14 @@ def _make_handlers(K: FreeCADKernel):
 
     def h_fillet(ws, a):
         res = K.call("fillet", {"radius": a["radius"], "deflection": a.get("deflection", 0.4),
+                                "edges": a.get("edges", "auto"),
                                 "shapes": {"x": _brep(ws, a["name"])}})
         _store(ws, a["name"], res, {"fillet": a["radius"]})
         return _summary(ws, a["name"])
 
     def h_chamfer(ws, a):
         res = K.call("chamfer", {"distance": a["distance"], "deflection": a.get("deflection", 0.4),
+                                 "edges": a.get("edges", "auto"),
                                  "shapes": {"x": _brep(ws, a["name"])}})
         _store(ws, a["name"], res, {"chamfer": a["distance"]})
         return _summary(ws, a["name"])
@@ -374,14 +376,20 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
                 P("center", "array", "旋转中心", False, [0, 0, 0]),
             ], category="transform", mutates=True)
 
-    reg.add("solid.fillet", "对实体所有棱边倒圆角 (radius).",
+    reg.add("solid.fillet",
+            "对棱边倒圆角 (radius). edges: auto=仅两侧皆平面的硬棱(默认,跳过孔口圆棱)/"
+            "straight=所有直棱/all=全部; 整批失败自动退化为逐棱贪心.",
             H["h_fillet"], [
                 P("name", "string", "对象名"), P("radius", "number", "圆角半径"),
+                P("edges", "string", "棱选择 auto/straight/all", False, "auto"),
             ], category="feature", mutates=True)
 
-    reg.add("solid.chamfer", "对实体所有棱边倒角 (distance).",
+    reg.add("solid.chamfer",
+            "对棱边倒角 (distance). edges: auto=仅两侧皆平面的硬棱(默认,跳过孔口圆棱)/"
+            "straight=所有直棱/all=全部; 整批失败自动退化为逐棱贪心.",
             H["h_chamfer"], [
                 P("name", "string", "对象名"), P("distance", "number", "倒角距离"),
+                P("edges", "string", "棱选择 auto/straight/all", False, "auto"),
             ], category="feature", mutates=True)
 
     reg.add("solid.duplicate", "复制对象.",

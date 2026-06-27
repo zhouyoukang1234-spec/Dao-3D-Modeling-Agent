@@ -148,16 +148,72 @@ def build(op, a, shapes=None):
         return s
 
     if op == "fillet":
-        s = shapes["x"]
-        r = s.makeFillet(float(a["radius"]), s.Edges)
-        return solidify(r)
+        return _edge_feature(shapes["x"], "fillet", float(a["radius"]),
+                             select=str(a.get("edges", "auto")))
 
     if op == "chamfer":
-        s = shapes["x"]
-        r = s.makeChamfer(float(a["distance"]), s.Edges)
-        return solidify(r)
+        return _edge_feature(shapes["x"], "chamfer", float(a["distance"]),
+                             select=str(a.get("edges", "auto")))
 
     raise ValueError("未知几何动作: " + str(op))
+
+
+# ── 棱边特征 (倒圆/倒角): 健壮化 ──────────────────────────────────────────────
+# 真实零件上对"全部棱边"一次性 makeChamfer/makeFillet 极易触发 OCC StdFail_NotDone
+# (孔的圆柱棱、特征交线尤甚). 故:
+#   ① 默认只取"两侧皆平面"的硬直棱 (工程上正应倒的棱, 跳过孔口圆棱);
+#   ② 整批失败则贪心累加 —— 始终对【原形】施加"已选棱列表", 故棱引用恒定、无需在演化形上
+#      重新匹配 (后者会错配并产出破面/多体); 每加一棱都校验 (闭合 ∧ 单实体 ∧ 体积合理),
+#      不合格即弃该棱. 如此决不因个别坏棱而全盘失败, 亦决不产出破损实体.
+def _edge_feature(shape, kind, val, select="auto"):
+    def _mk(shp, elist):
+        return shp.makeFillet(val, elist) if kind == "fillet" else shp.makeChamfer(val, elist)
+
+    def _valid(shp):
+        r = solidify(shp)
+        if not r.isClosed() or len(r.Solids) != 1:
+            return None
+        # 倒角/倒圆只去料或微增(倒圆凸边), 体积不应突变 (>5% 视为自交破损)
+        if abs(r.Volume - shape.Volume) > 0.05 * shape.Volume:
+            return None
+        return r
+
+    def _planar_adj(e):
+        try:
+            fs = shape.ancestorsOfType(e, Part.Face)
+            return len(fs) >= 2 and all(isinstance(f.Surface, Part.Plane) for f in fs)
+        except Exception:
+            return False
+
+    all_edges = shape.Edges
+    if select == "all":
+        cand = list(all_edges)
+    elif select == "straight":
+        cand = [e for e in all_edges if isinstance(e.Curve, Part.Line)]
+    else:  # auto / planar: 只取两侧皆平面的硬棱
+        cand = [e for e in all_edges if _planar_adj(e)] or list(all_edges)
+
+    # ① 整批快路 (校验通过即用)
+    try:
+        r = _valid(_mk(shape, cand))
+        if r is not None:
+            return r
+    except Exception:
+        pass
+
+    # ② 贪心累加 (恒对原形施加, 棱引用稳定; 每步校验)
+    kept = []
+    for e in cand:
+        trial = kept + [e]
+        try:
+            if _valid(_mk(shape, trial)) is not None:
+                kept = trial
+        except Exception:
+            pass
+    if not kept:
+        raise RuntimeError(
+            "%s 失败: 该形上无可安全处理的棱 (val=%s)" % (kind, val))
+    return _valid(_mk(shape, kept))
 
 
 def measure(shape, other=None):
