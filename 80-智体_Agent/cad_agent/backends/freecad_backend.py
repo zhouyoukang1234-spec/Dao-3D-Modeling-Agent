@@ -466,6 +466,20 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
                 P("name", "string", "对象名", False, None),
             ], category="primitive", mutates=True)
 
+    reg.add("solid.text",
+            "文字成实体 (刻字/铭牌/凸字): text 文本沿字体轮廓造字形面再拉伸 depth (默认 XY 面+Z). "
+            "size=字高, font=.ttf 路径或字体名(默认 arial), center=[x,y,z?] 居中放置. "
+            "刻字 = 再 difference 出本实体; 凸字 = union.",
+            H["_profile"]("text", "txt"), [
+                P("text", "string", "文本内容"),
+                P("size", "number", "字高", False, 10),
+                P("depth", "number", "拉伸厚度 (沿 Z)", False, 2),
+                P("font", "string", ".ttf 路径或字体名 (默认 arial)", False, None),
+                P("center", "array", "居中放置点 [x,y,z?]", False, None),
+                P("tracking", "number", "字距微调", False, 0),
+                P("name", "string", "对象名", False, None),
+            ], category="primitive", mutates=True)
+
     reg.add("solid.boolean",
             "BREP 布尔: op∈{union,difference,intersection}; a-b 两对象; "
             "可选 result 命名、consume 是否消耗输入. 结果自动 removeSplitter 清理.",

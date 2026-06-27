@@ -15,10 +15,33 @@ freecad_ops.py — FreeCAD 纯几何本源 (运行于 FreeCAD 自带 python 内)
     measure / export                              度量 / 落盘
     op(op_name, args)                             内核门面 (BREP 串 ⇄ 形状, 供子进程用)
 """
+import glob
 import math
+import os
 
 import FreeCAD as App  # noqa: E402  (仅 FreeCAD python 内可用)
 import Part  # noqa: E402
+
+
+def _resolve_font(spec):
+    """把字体描述解析为 .ttf 路径: 绝对路径直用; 字体名 (如 arial) 在系统字体目录匹配;
+    皆不中则回退首个可用 TrueType. 供 solid.text 字形造面用."""
+    fdirs = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
+             "/usr/share/fonts", "/Library/Fonts", os.path.expanduser("~/.fonts")]
+    if spec and os.path.isfile(spec):
+        return spec
+    if spec:
+        name = spec if spec.lower().endswith(".ttf") else spec + ".ttf"
+        for d in fdirs:
+            cand = os.path.join(d, name)
+            if os.path.isfile(cand):
+                return cand
+    for d in fdirs:
+        for pat in ("arial.ttf", "Arial.ttf", "DejaVuSans.ttf", "*.ttf"):
+            hits = sorted(glob.glob(os.path.join(d, "**", pat), recursive=True))
+            if hits:
+                return hits[0]
+    raise RuntimeError("text: 找不到任何 TrueType 字体 (.ttf)")
 
 
 # ── BREP 字符串 ⇄ Part.Shape ───────────────────────────────────────────────
@@ -312,6 +335,36 @@ def build(op, a, shapes=None):
         if not coil.isClosed() or len(coil.Solids) < 1:
             raise RuntimeError("helix 扫掠结果非封闭实体 (wire_radius 过大/节距过小致相邻圈自交?)")
         return coil
+
+    if op == "text":
+        # 文字成实体 (刻字/铭牌/凸字): 用字体轮廓造各字形面再拉伸 depth. 默认 XY 平面、+Z 拉伸.
+        # 刻字 = 把本实体 difference 出去; 凸字 = union. font 给 .ttf 路径或字体名 (默认 arial).
+        font = _resolve_font(a.get("font"))
+        size = float(a.get("size", 10.0))
+        depth = float(a.get("depth", 2.0))
+        groups = Part.makeWireString(str(a["text"]), font, size, float(a.get("tracking", 0.0)))
+        faces = []
+        for g in groups:
+            wires = [w for w in g if w.isClosed()]
+            if not wires:
+                continue
+            ranked = sorted(((Part.Face(w).Area, w) for w in wires), key=lambda t: -t[0])
+            faces.append(Part.Face([ranked[0][1]] + [w for _, w in ranked[1:]]))
+        if not faces:
+            raise RuntimeError("text: 无可用闭合字形 (检查文本/字体)")
+        shp = faces[0].extrude(App.Vector(0, 0, depth))
+        for f in faces[1:]:
+            shp = shp.fuse(f.extrude(App.Vector(0, 0, depth)))
+        shp = solidify(shp.removeSplitter())
+        c = a.get("center")
+        if c is not None:
+            bb = shp.BoundBox
+            shp = shp.copy()
+            shp.translate(App.Vector(c[0] - bb.Center.x, c[1] - bb.Center.y,
+                                     (c[2] if len(c) > 2 else 0.0) - bb.ZMin))
+        if not shp.isClosed() or len(shp.Solids) < 1:
+            raise RuntimeError("text 结果非封闭实体")
+        return shp
 
     if op == "boolean":
         A = shapes["a"]
