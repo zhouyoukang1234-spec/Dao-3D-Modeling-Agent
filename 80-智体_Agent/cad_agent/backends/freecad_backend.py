@@ -236,6 +236,27 @@ def _make_handlers(K: FreeCADKernel):
                     ws.delete(k)
         return {"op": a["op"], **_summary(ws, name)}
 
+    def h_pattern_polar(ws, a):
+        res = K.call("pattern_polar", {
+            "count": a["count"], "angle": a.get("angle", 360),
+            "axis": a.get("axis", [0, 0, 1]), "center": a.get("center", [0, 0, 0]),
+            "deflection": a.get("deflection", 0.4), "shapes": {"x": _brep(ws, a["name"])}})
+        name = a.get("result") or ws.fresh_name(a["name"] + "_pat")
+        _store(ws, name, res, {"pattern": "polar", "count": a["count"]})
+        if a.get("consume") and ws.has(a["name"]) and a["name"] != name:
+            ws.delete(a["name"])
+        return _summary(ws, name)
+
+    def h_pattern_linear(ws, a):
+        res = K.call("pattern_linear", {
+            "count": a["count"], "dx": a.get("dx", 0), "dy": a.get("dy", 0), "dz": a.get("dz", 0),
+            "deflection": a.get("deflection", 0.4), "shapes": {"x": _brep(ws, a["name"])}})
+        name = a.get("result") or ws.fresh_name(a["name"] + "_pat")
+        _store(ws, name, res, {"pattern": "linear", "count": a["count"]})
+        if a.get("consume") and ws.has(a["name"]) and a["name"] != name:
+            ws.delete(a["name"])
+        return _summary(ws, name)
+
     def h_translate(ws, a):
         res = K.call("translate", {
             "dx": a["dx"], "dy": a["dy"], "dz": a["dz"],
@@ -254,6 +275,7 @@ def _make_handlers(K: FreeCADKernel):
     def h_fillet(ws, a):
         res = K.call("fillet", {"radius": a["radius"], "deflection": a.get("deflection", 0.4),
                                 "edges": a.get("edges", "auto"),
+                                "near": a.get("near"), "within": a.get("within"),
                                 "shapes": {"x": _brep(ws, a["name"])}})
         _store(ws, a["name"], res, {"fillet": a["radius"]})
         return _summary(ws, a["name"])
@@ -261,6 +283,7 @@ def _make_handlers(K: FreeCADKernel):
     def h_chamfer(ws, a):
         res = K.call("chamfer", {"distance": a["distance"], "deflection": a.get("deflection", 0.4),
                                  "edges": a.get("edges", "auto"),
+                                 "near": a.get("near"), "within": a.get("within"),
                                  "shapes": {"x": _brep(ws, a["name"])}})
         _store(ws, a["name"], res, {"chamfer": a["distance"]})
         return _summary(ws, a["name"])
@@ -298,7 +321,14 @@ def _make_handlers(K: FreeCADKernel):
 
     def h_perceive(ws, a):
         o = ws.get(a["name"])
-        m = perception.Mesh(o["vertices"], o["faces"], a["name"])
+        V, Faces = o["vertices"], o["faces"]
+        # 感知可用更细剖分独立于建模 deflection: 直接对权威 BREP 重新三角化, 渲染更平滑
+        if a.get("deflection"):
+            t = K.call("tessellate", {"deflection": float(a["deflection"]),
+                                      "shapes": {"x": _brep(ws, a["name"])}})["mesh"]
+            V = np.asarray(t["vertices"], float).reshape(-1, 3)
+            Faces = np.asarray(t["faces"], int).reshape(-1, 3)
+        m = perception.Mesh(V, Faces, a["name"])
         r = perception.perceive(m, resolution=int(a.get("resolution", 192)),
                                 out_dir=a.get("out_dir"), save_png=bool(a.get("save_png", False)))
         # 用 BREP 精确度量覆盖网格近似的体积/水密
@@ -394,6 +424,28 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
                 P("consume", "boolean", "完成后删除 A、B", False, False),
             ], category="boolean", mutates=True)
 
+    reg.add("solid.pattern_polar",
+            "环形阵列: 把对象绕 axis(默认Z)、center 阵列 count 份 (full 360 均布); "
+            "融为一体 (不相交则 Compound), 可直接作钻孔刀具或多体特征. result 命名, consume 删源.",
+            H["h_pattern_polar"], [
+                P("name", "string", "源对象"), P("count", "number", "份数"),
+                P("angle", "number", "总角(度,默认360)", False, 360),
+                P("axis", "array", "轴向", False, [0, 0, 1]),
+                P("center", "array", "中心", False, [0, 0, 0]),
+                P("result", "string", "结果名", False, None),
+                P("consume", "boolean", "删源", False, False),
+            ], category="pattern", mutates=True)
+
+    reg.add("solid.pattern_linear",
+            "线性阵列: 把对象沿 (dx,dy,dz) 步距阵列 count 份, 融为一体. result 命名, consume 删源.",
+            H["h_pattern_linear"], [
+                P("name", "string", "源对象"), P("count", "number", "份数"),
+                P("dx", "number", "X 步距", False, 0), P("dy", "number", "Y 步距", False, 0),
+                P("dz", "number", "Z 步距", False, 0),
+                P("result", "string", "结果名", False, None),
+                P("consume", "boolean", "删源", False, False),
+            ], category="pattern", mutates=True)
+
     reg.add("solid.translate", "平移实体.",
             H["h_translate"], [
                 P("name", "string", "对象名"),
@@ -413,6 +465,8 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
             H["h_fillet"], [
                 P("name", "string", "对象名"), P("radius", "number", "圆角半径"),
                 P("edges", "string", "棱选择 auto/straight/all", False, "auto"),
+                P("near", "array", "定向选棱: 取点 [x,y,z] (点取在目标棱上)", False, None),
+                P("within", "number", "定向半径: 棱到点距离 ≤ within 才选", False, None),
             ], category="feature", mutates=True)
 
     reg.add("solid.chamfer",
@@ -421,6 +475,8 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
             H["h_chamfer"], [
                 P("name", "string", "对象名"), P("distance", "number", "倒角距离"),
                 P("edges", "string", "棱选择 auto/straight/all", False, "auto"),
+                P("near", "array", "定向选棱: 取点 [x,y,z] (点取在目标棱上)", False, None),
+                P("within", "number", "定向半径: 棱到点距离 ≤ within 才选", False, None),
             ], category="feature", mutates=True)
 
     reg.add("solid.duplicate", "复制对象.",
@@ -452,6 +508,7 @@ def register_freecad_tools(reg: ToolRegistry, kernel: Optional[FreeCADKernel] = 
             H["h_perceive"], [
                 P("name", "string", "对象名"),
                 P("resolution", "integer", "渲染分辨率", False, 192),
+                P("deflection", "number", "感知专用细剖分 (对权威 BREP 重三角化, 渲染更平滑; 默认沿用建模网格)", False, None),
                 P("out_dir", "string", "PNG 输出目录", False, None),
                 P("save_png", "boolean", "是否落盘 PNG", False, False),
             ], category="perceive")

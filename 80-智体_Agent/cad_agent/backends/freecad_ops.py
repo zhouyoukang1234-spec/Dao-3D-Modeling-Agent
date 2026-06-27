@@ -160,6 +160,38 @@ def build(op, a, shapes=None):
                              c[2] - (bb.ZMin + bb.ZMax) / 2.0]))
         return s
 
+    if op == "pattern_polar":
+        # 把 x 绕 axis 阵列 count 份 (full 360 时均布 step=angle/count, 否则 step=angle/(count-1)),
+        # 融为一体返回 (不相交则为 Compound, 可直接作钻孔刀具或多体特征).
+        src = shapes["x"]
+        n = int(a["count"])
+        if n < 1:
+            raise ValueError("pattern count 须 ≥1")
+        ang = float(a.get("angle", 360.0))
+        full = abs(ang - 360.0) < 1e-9
+        step = ang / n if full else (ang / (n - 1) if n > 1 else 0.0)
+        axis = vec(a.get("axis", [0, 0, 1]))
+        center = vec(a.get("center", [0, 0, 0]))
+        r = None
+        for i in range(n):
+            c = src.copy()
+            c.rotate(center, axis, step * i)
+            r = c if r is None else r.fuse(c)
+        return solidify(r.removeSplitter())
+
+    if op == "pattern_linear":
+        src = shapes["x"]
+        n = int(a["count"])
+        if n < 1:
+            raise ValueError("pattern count 须 ≥1")
+        dx, dy, dz = float(a["dx"]), float(a["dy"]), float(a["dz"])
+        r = None
+        for i in range(n):
+            c = src.copy()
+            c.translate(vec([dx * i, dy * i, dz * i]))
+            r = c if r is None else r.fuse(c)
+        return solidify(r.removeSplitter())
+
     if op == "boolean":
         A = shapes["a"]
         B = shapes["b"]
@@ -189,11 +221,13 @@ def build(op, a, shapes=None):
 
     if op == "fillet":
         return _edge_feature(shapes["x"], "fillet", float(a["radius"]),
-                             select=str(a.get("edges", "auto")))
+                             select=str(a.get("edges", "auto")),
+                             near=a.get("near"), within=a.get("within"))
 
     if op == "chamfer":
         return _edge_feature(shapes["x"], "chamfer", float(a["distance"]),
-                             select=str(a.get("edges", "auto")))
+                             select=str(a.get("edges", "auto")),
+                             near=a.get("near"), within=a.get("within"))
 
     raise ValueError("未知几何动作: " + str(op))
 
@@ -205,7 +239,7 @@ def build(op, a, shapes=None):
 #   ② 整批失败则贪心累加 —— 始终对【原形】施加"已选棱列表", 故棱引用恒定、无需在演化形上
 #      重新匹配 (后者会错配并产出破面/多体); 每加一棱都校验 (闭合 ∧ 单实体 ∧ 体积合理),
 #      不合格即弃该棱. 如此决不因个别坏棱而全盘失败, 亦决不产出破损实体.
-def _edge_feature(shape, kind, val, select="auto"):
+def _edge_feature(shape, kind, val, select="auto", near=None, within=None):
     def _mk(shp, elist):
         return shp.makeFillet(val, elist) if kind == "fillet" else shp.makeChamfer(val, elist)
 
@@ -226,7 +260,12 @@ def _edge_feature(shape, kind, val, select="auto"):
             return False
 
     all_edges = shape.Edges
-    if select == "all":
+    if near is not None and within is not None:
+        # 按"棱到给定点的最近距离 ≤ within"定向选棱 (点取在目标棱上即可精确锁定,
+        # 可区分同心圆等 COM 重合的棱). 此时不再叠加 planar 限制.
+        vtx = Part.Vertex(vec(near))
+        cand = [e for e in all_edges if e.distToShape(vtx)[0] <= float(within)]
+    elif select == "all":
         cand = list(all_edges)
     elif select == "straight":
         cand = [e for e in all_edges if isinstance(e.Curve, Part.Line)]

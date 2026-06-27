@@ -28,6 +28,8 @@ SolidWorks插件/
 
 # Generated outputs (can be regenerated)
 00-本源_Origin/_产物输出/
+# 智体造形产物 (STEP 导出 + 多视角 PNG, 可由 examples/ 重新生成)
+80-智体_Agent/**/*_out/
 
 # OS junk
 Thumbs.db

@@ -170,7 +170,7 @@ def render(V: Array, F: Array, camera: Camera, *,
     else:
         ld = _normalize(np.asarray(light_dir, float))
     lambert = np.clip(np.abs(fn @ ld), 0.0, 1.0)
-    intensity = ambient + (1.0 - ambient) * lambert    # (M,)
+    intensity = ambient + (1.0 - ambient) * lambert    # (M,) 平片着色
 
     p2 = px[F]                            # (M,3,2)
     z3 = zc[F]                            # (M,3)
@@ -184,7 +184,19 @@ def render(V: Array, F: Array, camera: Camera, *,
     maxy = np.ceil(ys.max(axis=1)).astype(int)
     onscreen = front & (maxx >= 0) & (minx < W) & (maxy >= 0) & (miny < H)
 
-    for i in np.nonzero(onscreen)[0]:
+    # 前后排序 + 深度余量: 密网格在布尔接缝处常有近共面/重合三角, 任意序 + 严格 zi<d
+    # 会逐像素抖动 (z-fighting 麻点). 改为【由近及远】绘制, 且仅当显著更近 (zi < d - eps)
+    # 才覆盖 → 最前面者先占像素, 近共面后来者不再翻覆, 麻点消除.
+    idx = np.nonzero(onscreen)[0]
+    if len(idx):
+        zrep = z3[idx].mean(axis=1)
+        idx = idx[np.argsort(zrep)]              # 近(小z)在前
+        zspan = float(zc.max() - zc.min())
+        eps = max(zspan * 1e-4, 1e-7)
+    else:
+        eps = 1e-7
+
+    for i in idx:
         x0, x1 = max(0, minx[i]), min(W - 1, maxx[i])
         y0, y1 = max(0, miny[i]), min(H - 1, maxy[i])
         if x0 > x1 or y0 > y1:
@@ -206,7 +218,7 @@ def render(V: Array, F: Array, camera: Camera, *,
             continue
         zi = w0 * z3[i, 0] + w1 * z3[i, 1] + w2 * z3[i, 2]
         sub_d = depth[y0:y1 + 1, x0:x1 + 1]
-        closer = inside & (zi < sub_d)
+        closer = inside & (zi < sub_d - eps)
         if not closer.any():
             continue
         sub_d[closer] = zi[closer]
@@ -440,19 +452,20 @@ def _maybe_decimate(V: Array, F: Array, max_faces: int) -> Tuple[Array, Array, b
     if _HAS_TRIMESH:
         try:
             tm = trimesh.Trimesh(vertices=V, faces=F, process=False)
-            dec = tm.simplify_quadric_decimation(max_faces)
-            if len(dec.faces) > 0:
+            dec = tm.simplify_quadric_decimation(face_count=max_faces)
+            # 仅当抽稀仍封闭水密时采用 (CAD 抽稀常生破面/尖刺, 宁可不抽)
+            if len(dec.faces) > 0 and bool(dec.is_watertight):
                 return np.asarray(dec.vertices, float), np.asarray(dec.faces, int), True
         except Exception:
             pass
-    # 退化: 随机抽面 (仅用于预览, 会有空洞)
-    idx = np.random.default_rng(0).choice(len(F), max_faces, replace=False)
-    return V, F[idx], True
+    # 抽稀不可用或不可靠: 直接用原网格 (软栅器可胜任数万面, 正确优先于快).
+    # 切忌随机抽面 —— 那会留空洞, 透出内壁背面 → 渲染麻点/尖刺.
+    return V, F, False
 
 
 def perceive(mesh: Union[Mesh, PathLike, Any], *,
              views: Optional[Sequence[Tuple[str, float, float]]] = None,
-             resolution: int = 256, max_faces: int = 8000,
+             resolution: int = 256, max_faces: int = 80000,
              out_dir: Optional[PathLike] = None,
              save_png: bool = False) -> Dict[str, Any]:
     """对一个几何体做完整感知:
