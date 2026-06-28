@@ -167,9 +167,12 @@ def _errs(y_r, z_r, tilt):
     return np.array([v[3] - ROD_LEN for v in legs.values()])
 
 
-def solve_recv(seed=(0.0, 230.0, 0.0)):
-    sol = least_squares(lambda x: _errs(*x), seed, xtol=1e-12, ftol=1e-12, max_nfev=5000)
-    return sol.x, _errs(*sol.x)
+def solve_recv(seed=(0.0, 208.48, 0.0)):
+    """注意: 每条腿的臂角是被独立解到 rod=175 的, 故对**任意** receiver 位姿残差都=0
+    —— receiver 6-DOF 在此不被 rod=175 约束。HOME 由设计定义: 平台水平、居中、
+    标称高度 z≈208.48 (HOME_H); 臂角随之反解。本函数因而直接取该设计 HOME 位姿,
+    不做无意义的"求解"(这正是之前 tilt=165° 假收敛的根因: 残差0 不代表物理对)。"""
+    return np.array(seed, dtype=float), _errs(*seed)
 
 
 @dataclass
@@ -195,7 +198,7 @@ def place_link(mesh, pivots, p_a, p_b):
     return T
 
 
-def build(seed=(0.0, 230.0, 0.0), show_enclosure=True):
+def build(seed=(0.0, 208.48, 0.0), show_enclosure=True):
     x, err = solve_recv(seed)
     y_r, z_r, tilt = x
     Trecv = recv_pose(y_r, z_r, tilt)
