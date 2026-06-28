@@ -554,6 +554,76 @@ def register(state):
             "radius_of_gyration": [_round(x, 4) for x in pr["RadiusOfGyration"]],
         }
 
+    def op_curvature(a):
+        """Differential-geometry surface analysis of a solid — the curvature channel.
+
+        For every face it samples the two principal curvatures k1,k2 (FreeCAD's
+        ``curvatureAt``, units 1/mm) and from them the Gaussian K=k1*k2 and the
+        mean H=(k1+k2)/2. This is the *quantitative* complement to ``recognize``
+        (which only names the surface type): a sphere has K=1/R^2>0 everywhere
+        (elliptic), a cylinder or cone is developable with K=0 (parabolic), a
+        plane has K=H=0, a saddle/throat has K<0 (hyperbolic). Because curvature
+        on a freeform or toroidal face varies, each face is scanned on a
+        ``grid``x``grid`` (default 3) parameter lattice and the local extreme
+        |curvature| is kept. The global minimum radius of curvature
+        ``1/max|k|`` is the tightest feature in the part — it bounds the usable
+        tool radius, the FEM mesh size and the printable detail — so it is
+        reported up front instead of buried per-face.
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Faces:
+            raise ValueError(
+                "solid.curvature needs a shape with faces (got a wire/vertex); "
+                "curvature is undefined without a surface")
+        grid = int(a.get("grid", 3))
+        if grid < 1:
+            raise ValueError("solid.curvature: grid must be >= 1, got %d" % grid)
+        detail = []
+        kmax_abs = 0.0
+        kmax_face = None
+        for idx, f in enumerate(sh.Faces):
+            kind = f.Surface.__class__.__name__
+            u0, u1, v0, v1 = f.ParameterRange
+            k1c, k2c = f.curvatureAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+            loc = max(abs(k1c), abs(k2c))
+            for i in range(grid):
+                for j in range(grid):
+                    u = u0 + (u1 - u0) * (i + 0.5) / grid
+                    v = v0 + (v1 - v0) * (j + 0.5) / grid
+                    s1, s2 = f.curvatureAt(u, v)
+                    loc = max(loc, abs(s1), abs(s2))
+            gauss = k1c * k2c
+            mean = (k1c + k2c) / 2.0
+            if gauss > 1e-9:
+                cls = "elliptic"
+            elif gauss < -1e-9:
+                cls = "hyperbolic"
+            elif loc > 1e-9:
+                cls = "parabolic"
+            else:
+                cls = "planar"
+            rec = {"face": idx, "surface": kind, "area": _round(f.Area),
+                   "principal": [_round(k1c, 6), _round(k2c, 6)],
+                   "gaussian": _round(gauss, 8), "mean": _round(mean, 6),
+                   "class": cls,
+                   "min_radius": _round(1.0 / loc, 4) if loc > 1e-9 else None}
+            su = f.Surface
+            if kind in ("Sphere", "Cylinder"):
+                rec["radius"] = _round(float(su.Radius), 4)
+            elif kind == "Toroid":
+                rec["major_radius"] = _round(float(su.MajorRadius), 4)
+                rec["minor_radius"] = _round(float(su.MinorRadius), 4)
+            detail.append(rec)
+            if loc > kmax_abs:
+                kmax_abs, kmax_face = loc, idx
+        return {
+            "name": a["name"], "faces": len(detail),
+            "max_abs_curvature": _round(kmax_abs, 6),
+            "min_radius_of_curvature": _round(1.0 / kmax_abs, 4) if kmax_abs > 1e-9 else None,
+            "tightest_face": kmax_face,
+            "detail": detail,
+        }
+
     def op_interference(a):
         sa = _get(a["a"]).Shape
         sb = _get(a["b"]).Shape
@@ -1808,7 +1878,7 @@ def register(state):
         "common": lambda a: _boolean("common", a), "fillet": op_fillet, "chamfer": op_chamfer,
         "pattern_linear": op_pattern_linear, "pattern_polar": op_pattern_polar,
         "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
-        "interference": op_interference,
+        "curvature": op_curvature, "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
