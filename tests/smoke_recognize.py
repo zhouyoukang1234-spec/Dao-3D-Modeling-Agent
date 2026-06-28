@@ -63,6 +63,22 @@ def main():
     assert abs(r["params"]["radius"] - 9) < 1e-6, r
     print("sphere recovered R = %.1f" % r["params"]["radius"])
 
+    # ---- tube / bushing: a cylinder with a coaxial through-bore ----------- #
+    s.act("solid.cylinder", {"name": "tout", "radius": 10, "height": 16, "pos": [0, 0, 0]})
+    s.act("solid.cylinder", {"name": "tin", "radius": 6, "height": 16, "pos": [0, 0, 0]})
+    tb = s.act("solid.cut", {"a": "tout", "b": "tin", "out": "tube"})
+    assert tb.ok, tb.error
+    r = s.act("solid.recognize", {"name": "tube"}).data
+    assert r["type"] == "tube" and r["volume_match"], r
+    p = r["params"]
+    assert abs(p["outer_radius"] - 10) < 1e-6 and abs(p["inner_radius"] - 6) < 1e-6 and abs(p["height"] - 16) < 1e-6, p
+    # parametric rebuild from the recovered parameters reproduces the volume
+    s.act("solid.cylinder", {"name": "ro", "radius": p["outer_radius"], "height": p["height"]})
+    s.act("solid.cylinder", {"name": "ri", "radius": p["inner_radius"], "height": p["height"]})
+    s.act("solid.cut", {"a": "ro", "b": "ri", "out": "tube2"})
+    assert abs(_vol(s, "tube2") - _vol(s, "tube")) < 1e-6
+    print("tube recovered Ro/Ri/H = %.1f/%.1f/%.1f, parametric rebuild matches" % (p["outer_radius"], p["inner_radius"], p["height"]))
+
     # ---- negative: a filleted block is NOT a box (no false primitive) ----- #
     s.act("solid.box", {"name": "rb", "length": 20, "width": 20, "height": 20})
     fr = s.act("solid.fillet", {"name": "rb", "radius": 3, "out": "rbf"})

@@ -934,16 +934,34 @@ def register(state):
             res = accept("sphere", {"radius": _round(r)}, 4.0 / 3.0 * math.pi * r ** 3)
             if res["volume_match"]:
                 return res
-        if len(faces) == 3 and kinds.get("Cylinder") == 1 and kinds.get("Plane") == 2:
-            ax = _cyl_axes(sh)[0]["dir"]
-            r = _cyl_axes(sh)[0]["radius"]
+
+        def _cap_height(ax):
             caps = [f for f in faces if f.Surface.__class__.__name__ == "Plane"]
             c0, c1 = caps[0].CenterOfMass, caps[1].CenterOfMass
-            h = abs((c1.x - c0.x) * ax[0] + (c1.y - c0.y) * ax[1] + (c1.z - c0.z) * ax[2])
+            return abs((c1.x - c0.x) * ax[0] + (c1.y - c0.y) * ax[1] + (c1.z - c0.z) * ax[2])
+
+        if len(faces) == 3 and kinds.get("Cylinder") == 1 and kinds.get("Plane") == 2:
+            cyl = _cyl_axes(sh)[0]
+            ax, r = cyl["dir"], cyl["radius"]
+            h = _cap_height(ax)
             res = accept("cylinder", {"radius": _round(r), "height": _round(h),
                                       "axis": [_round(c, 6) for c in ax]}, math.pi * r * r * h)
             if res["volume_match"]:
                 return res
+        # bored cylinder (tube / bushing / rod-eye): two coaxial cylindrical
+        # walls (outer + through-bore) closed by two annular planar caps.
+        if len(faces) == 4 and kinds.get("Cylinder") == 2 and kinds.get("Plane") == 2:
+            walls = _cyl_axes(sh)
+            if len(walls) == 2:
+                ax = walls[0]["dir"]
+                radii = sorted(w["radius"] for w in walls)
+                ri, ro = radii[0], radii[1]
+                h = _cap_height(ax)
+                res = accept("tube", {"outer_radius": _round(ro), "inner_radius": _round(ri),
+                                      "height": _round(h), "axis": [_round(c, 6) for c in ax]},
+                             math.pi * (ro * ro - ri * ri) * h)
+                if res["volume_match"]:
+                    return res
         if len(faces) == 6 and kinds.get("Plane") == 6:
             lx, ly, lz = bb.XLength, bb.YLength, bb.ZLength
             res = accept("box", {"length": _round(lx), "width": _round(ly), "height": _round(lz)},
