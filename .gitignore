@@ -40,3 +40,7 @@ $null
 .idea/
 *.swp
 *.swo
+
+# cad_agent live-kernel regenerable demo outputs
+output/fem_demo/
+tests/_out/
