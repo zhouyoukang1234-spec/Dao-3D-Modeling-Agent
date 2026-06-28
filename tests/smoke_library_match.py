@@ -67,10 +67,39 @@ def main():
     assert any("no such file" in sk["reason"] for sk in r2["skipped"]), r2["skipped"]
     print("robust to junk: best still lib_box.step, skipped=%s" % sorted(reasons))
 
+    # ---- index the library once, then query it without re-parsing ------- #
+    idx_path = os.path.join(lib, "library.index.json")
+    ix = s.act("solid.library_index", {"dir": lib, "out": idx_path}).data
+    assert ix["indexed"] == 4 and ix["files"] == 4, ix
+    assert len(ix["shape_keys"]) == 4, ix  # box/cyl/sphere/cone all distinct
+    assert os.path.isfile(idx_path), ix
+    print("indexed %d solids from dir -> %s (%d distinct shape_keys)"
+          % (ix["indexed"], os.path.basename(idx_path), len(ix["shape_keys"])))
+
+    ri = s.act("solid.library_match", {"name": "q", "index": idx_path}).data
+    assert ri["best"] == "lib_box.step" and ri["ranking"][0]["same_key"] is True, ri
+    # querying the prebuilt index must rank exactly like scanning the files
+    assert abs(ri["best_distance"] - r["best_distance"]) < 1e-9, (ri["best_distance"], r["best_distance"])
+    print("index query agrees with file scan (best=%s dist=%.4f, no re-parse)"
+          % (ri["best"], ri["best_distance"]))
+
+    # ---- 'dir' search works without a prebuilt index too ---------------- #
+    rd = s.act("solid.library_match", {"name": "q", "dir": lib}).data
+    assert rd["best"] == "lib_box.step", rd
+    print("dir-walk match (no index) also retrieves the box")
+
     # ---- loud guards ---------------------------------------------------- #
     bad = s.act("solid.library_match", {"name": "q", "paths": []})
     assert not bad.ok and "paths" in (bad.error or "").lower(), bad.error
     print("empty path list refused: %s" % bad.error)
+
+    nofile = s.act("solid.library_match", {"name": "q", "index": os.path.join(lib, "nope.json")})
+    assert not nofile.ok and "not found" in (nofile.error or "").lower(), nofile.error
+    print("missing index file refused: %s" % nofile.error)
+
+    noidx = s.act("solid.library_index", {"paths": []})
+    assert not noidx.ok and ("paths" in (noidx.error or "").lower() or "dir" in (noidx.error or "").lower())
+    print("library_index with nothing to catalogue refused: %s" % noidx.error)
 
     none_usable = s.act("solid.library_match", {"name": "q", "paths": [empty]})
     assert not none_usable.ok and "no usable solid" in (none_usable.error or "").lower()

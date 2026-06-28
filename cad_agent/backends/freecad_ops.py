@@ -9,6 +9,7 @@ The PartDesign feature-tree (editable, parametric) lives in ``freecad_parametric
 
 import hashlib
 import itertools
+import json
 import math
 import os
 
@@ -1046,27 +1047,21 @@ def register(state):
                 "candidates": len(ranked), "best": ranked[0]["name"],
                 "ranking": ranked}
 
-    def op_library_match(a):
-        """Search a library of model *files* for the part you already need.
+    def _candidate_record(body, path, label):
+        """A JSON-serialisable fingerprint record: enough to rank against a query
+        without re-opening the file, so a library can be indexed once and queried
+        many times."""
+        c = _fingerprint_body(body)
+        return {"path": path, "label": label, "shape_key": c["shape_key"],
+                "iso": c["iso"], "obb_aspect": c["obb_aspect"],
+                "mom_ratio": c["mom_ratio"], "hist": c["hist"],
+                "volume": c["volume"]}
 
-        This is ``match`` pointed at the world instead of the open document:
-        given a query solid and a list of model file ``paths`` (STEP/BREP), it
-        loads each file, fingerprints every solid in it, and ranks them against
-        the query by the same scale-invariant distance. The point of integrating
-        the world's models is exactly this — before modelling a part from zero,
-        ask whether a downloaded library already holds the same shape family (a
-        ``same_key`` hit), and if so how to scale it (``volume_ratio``). Files
-        that fail to load are reported in ``skipped`` rather than aborting the
-        search, so one corrupt download never blinds the whole library.
-        """
-        q = _shape_fingerprint(a["name"])
-        paths = a.get("paths")
-        if not paths:
-            raise ValueError(
-                "solid.library_match needs 'paths': [model files] to search; "
-                "point it at a downloaded model library")
-        ranked = []
-        skipped = []
+    def _load_candidates(paths, skipped):
+        """Fingerprint every solid in every model file in ``paths``. A file that
+        will not load (corrupt download, unknown format, surface-only) is logged
+        in ``skipped`` rather than aborting the whole scan."""
+        recs = []
         for path in paths:
             if not os.path.isfile(path):
                 skipped.append({"path": path, "reason": "no such file"})
@@ -1081,26 +1076,118 @@ def register(state):
             if not sols:
                 skipped.append({"path": path, "reason": "no solid in file"})
                 continue
-            label = os.path.basename(path)
+            base = os.path.basename(path)
             for idx, body in enumerate(sols):
+                label = base if len(sols) == 1 else "%s#%d" % (base, idx)
                 try:
-                    c = _fingerprint_body(body)
+                    recs.append(_candidate_record(body, path, label))
                 except Exception as exc:
                     skipped.append({"path": path, "reason": "fingerprint failed: %s" % exc})
-                    continue
-                ranked.append({
-                    "path": path,
-                    "label": label if len(sols) == 1 else "%s#%d" % (label, idx),
-                    "shape_key": c["shape_key"],
-                    "distance": _round(_fp_distance(q, c), 6),
-                    "same_key": c["shape_key"] == q["shape_key"],
-                    "volume_ratio": _round(c["volume"] / q["volume"], 4) if q["volume"] > 1e-12 else None,
-                })
-        if not ranked:
-            raise ValueError(
-                "solid.library_match found no usable solid in %d path(s); "
-                "skipped=%r" % (len(paths), skipped))
+        return recs
+
+    def _rank_records(q, records):
+        ranked = []
+        for c in records:
+            ranked.append({
+                "path": c.get("path"), "label": c["label"],
+                "shape_key": c["shape_key"],
+                "distance": _round(_fp_distance(q, c), 6),
+                "same_key": c["shape_key"] == q["shape_key"],
+                "volume_ratio": _round(c["volume"] / q["volume"], 4) if q["volume"] > 1e-12 else None,
+            })
         ranked.sort(key=lambda r: r["distance"])
+        return ranked
+
+    def _collect_paths(a, op):
+        """Resolve a model-file list from explicit ``paths`` and/or a ``dir`` to
+        walk (``recursive`` default True, filtered by ``exts``)."""
+        paths = list(a.get("paths") or [])
+        d = a.get("dir")
+        if d:
+            if not os.path.isdir(d):
+                raise ValueError("%s 'dir' is not a directory: %r" % (op, d))
+            exts = tuple(e.lower() for e in a.get(
+                "exts", [".step", ".stp", ".brep", ".brp", ".iges", ".igs"]))
+            if a.get("recursive", True):
+                for root, _dirs, files in os.walk(d):
+                    for fn in files:
+                        if fn.lower().endswith(exts):
+                            paths.append(os.path.join(root, fn))
+            else:
+                for fn in sorted(os.listdir(d)):
+                    fp = os.path.join(d, fn)
+                    if os.path.isfile(fp) and fn.lower().endswith(exts):
+                        paths.append(fp)
+        return paths
+
+    def op_library_index(a):
+        """Fingerprint a whole library of model files once and persist the index.
+
+        整合市面一切 3D 资源 begins with cataloguing it: point this at a list of
+        ``paths`` and/or a ``dir`` to walk, and it loads every model, fingerprints
+        every solid, and (if ``out`` is given) writes a JSON index of scale-/pose-
+        invariant signatures. ``solid.library_match`` can then query that index in
+        memory without re-opening a single file — so a downloaded library is
+        parsed once and reused forever. Junk files land in ``skipped``.
+        """
+        skipped = []
+        paths = _collect_paths(a, "solid.library_index")
+        if not paths:
+            raise ValueError(
+                "solid.library_index needs 'paths': [files] or 'dir': a folder "
+                "of model files (STEP/BREP/IGES) to catalogue")
+        records = _load_candidates(paths, skipped)
+        if not records:
+            raise ValueError(
+                "solid.library_index found no usable solid in %d path(s); "
+                "skipped=%r" % (len(paths), skipped))
+        out = a.get("out")
+        if out:
+            with open(out, "w", encoding="utf-8") as fh:
+                json.dump({"version": 1, "records": records}, fh)
+        return {"indexed": len(records), "files": len(paths), "out": out,
+                "shape_keys": sorted({r["shape_key"] for r in records}),
+                "skipped": skipped}
+
+    def op_library_match(a):
+        """Search a library of model files (or a prebuilt index) for the part you
+        already need.
+
+        This is ``match`` pointed at the world instead of the open document:
+        given a query solid and either a list of model file ``paths`` (STEP/BREP),
+        a ``dir`` to walk, or a prebuilt ``index`` (from ``solid.library_index``),
+        it ranks every catalogued solid against the query by the same scale-
+        invariant distance. The point of integrating the world's models is exactly
+        this — before modelling a part from zero, ask whether a downloaded library
+        already holds the same shape family (a ``same_key`` hit), and if so how to
+        scale it (``volume_ratio``). Files that fail to load are reported in
+        ``skipped`` rather than aborting the search.
+        """
+        q = _shape_fingerprint(a["name"])
+        skipped = []
+        index = a.get("index")
+        if index:
+            if not os.path.isfile(index):
+                raise ValueError(
+                    "solid.library_match 'index' file not found: %r (build it "
+                    "with solid.library_index)" % index)
+            with open(index, encoding="utf-8") as fh:
+                records = (json.load(fh) or {}).get("records") or []
+            if not records:
+                raise ValueError(
+                    "solid.library_match index %r holds no records" % index)
+        else:
+            paths = _collect_paths(a, "solid.library_match")
+            if not paths:
+                raise ValueError(
+                    "solid.library_match needs 'paths': [files], 'dir': a folder, "
+                    "or 'index': a prebuilt library index to search")
+            records = _load_candidates(paths, skipped)
+            if not records:
+                raise ValueError(
+                    "solid.library_match found no usable solid in %d path(s); "
+                    "skipped=%r" % (len(paths), skipped))
+        ranked = _rank_records(q, records)
         return {"name": a["name"], "query_key": q["shape_key"],
                 "matches": len(ranked), "best": ranked[0]["label"],
                 "best_distance": ranked[0]["distance"],
@@ -2475,7 +2562,8 @@ def register(state):
         "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
         "curvature": op_curvature, "obb": op_obb, "symmetry": op_symmetry,
         "fingerprint": op_fingerprint, "match": op_match, "chirality": op_chirality,
-        "library_match": op_library_match, "interference": op_interference,
+        "library_match": op_library_match, "library_index": op_library_index,
+        "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
