@@ -31,7 +31,7 @@ _SOLID_OPS = {
     "chamfer", "pattern_linear", "pattern_polar", "measure", "inspect",
     "inertia", "curvature", "obb", "symmetry", "fingerprint", "match", "chirality", "holes", "fillets",
     "design_intent",
-    "library_match", "library_index", "interference", "draft", "thickness", "undercut", "overhang", "section",
+    "library_match", "library_index", "library_query", "interference", "draft", "thickness", "undercut", "overhang", "section",
     "dfm_report", "compound", "decompose", "joints", "mechanism", "drive",
     "recognize", "reverse", "coaxial", "fourbar", "geartrain", "gearmesh",
     "rackpinion", "cam", "planetary", "geneva", "cam_profile", "spatial_mobility",

@@ -1047,17 +1047,48 @@ def register(state):
                 "candidates": len(ranked), "best": ranked[0]["name"],
                 "ranking": ranked}
 
-    def _candidate_record(body, path, label):
+    def _feature_signature(body):
+        """A compact, JSON-serialisable feature read of one library body: how many
+        holes/bosses, their diameters, the through count, and the edge-break tally
+        -- enough to ask a catalogue "which parts carry a phi3.2 through hole?"
+        without re-opening or re-analysing a file. Computed by temporarily binding
+        the body to a name and reusing the closed-form ``holes`` / ``fillets``
+        operators, so the index agrees with what design_intent would report."""
+        tmp = "__lib_feat_tmp__"
+        _put(tmp, body)
+        try:
+            h = op_holes({"name": tmp})
+            fb = op_fillets({"name": tmp})
+        finally:
+            existing = state.shapes.pop(tmp, None)
+            if existing and doc.getObject(existing):
+                doc.removeObject(existing)
+        holes = [x for x in h["features"] if x["kind"] == "hole"]
+        bosses = [x for x in h["features"] if x["kind"] == "boss"]
+        return {
+            "holes": len(holes), "through_holes": h["through_holes"],
+            "bosses": len(bosses),
+            "hole_diams": sorted(_round(2.0 * x["radius"]) for x in holes),
+            "boss_diams": sorted(_round(2.0 * x["radius"]) for x in bosses),
+            "rounds": fb["round_count"], "fillets": fb["fillet_count"],
+            "blend_radii": fb["radii"],
+        }
+
+    def _candidate_record(body, path, label, features=False):
         """A JSON-serialisable fingerprint record: enough to rank against a query
         without re-opening the file, so a library can be indexed once and queried
-        many times."""
+        many times. With ``features=True`` it also carries a feature signature so
+        the catalogue can be searched by mounting feature, not just shape."""
         c = _fingerprint_body(body)
-        return {"path": path, "label": label, "shape_key": c["shape_key"],
-                "iso": c["iso"], "obb_aspect": c["obb_aspect"],
-                "mom_ratio": c["mom_ratio"], "hist": c["hist"],
-                "volume": c["volume"]}
+        rec = {"path": path, "label": label, "shape_key": c["shape_key"],
+               "iso": c["iso"], "obb_aspect": c["obb_aspect"],
+               "mom_ratio": c["mom_ratio"], "hist": c["hist"],
+               "volume": c["volume"]}
+        if features:
+            rec["features"] = _feature_signature(body)
+        return rec
 
-    def _load_candidates(paths, skipped):
+    def _load_candidates(paths, skipped, features=False):
         """Fingerprint every solid in every model file in ``paths``. A file that
         will not load (corrupt download, unknown format, surface-only) is logged
         in ``skipped`` rather than aborting the whole scan."""
@@ -1080,7 +1111,7 @@ def register(state):
             for idx, body in enumerate(sols):
                 label = base if len(sols) == 1 else "%s#%d" % (base, idx)
                 try:
-                    recs.append(_candidate_record(body, path, label))
+                    recs.append(_candidate_record(body, path, label, features))
                 except Exception as exc:
                     skipped.append({"path": path, "reason": "fingerprint failed: %s" % exc})
         return recs
@@ -1136,7 +1167,8 @@ def register(state):
             raise ValueError(
                 "solid.library_index needs 'paths': [files] or 'dir': a folder "
                 "of model files (STEP/BREP/IGES) to catalogue")
-        records = _load_candidates(paths, skipped)
+        want_features = bool(a.get("features"))
+        records = _load_candidates(paths, skipped, features=want_features)
         if not records:
             raise ValueError(
                 "solid.library_index found no usable solid in %d path(s); "
@@ -1144,8 +1176,10 @@ def register(state):
         out = a.get("out")
         if out:
             with open(out, "w", encoding="utf-8") as fh:
-                json.dump({"version": 1, "records": records}, fh)
+                json.dump({"version": 1, "features": want_features,
+                           "records": records}, fh)
         return {"indexed": len(records), "files": len(paths), "out": out,
+                "features": want_features,
                 "shape_keys": sorted({r["shape_key"] for r in records}),
                 "skipped": skipped}
 
@@ -1192,6 +1226,73 @@ def register(state):
                 "matches": len(ranked), "best": ranked[0]["label"],
                 "best_distance": ranked[0]["distance"],
                 "ranking": ranked, "skipped": skipped}
+
+    def op_library_query(a):
+        """Search a feature-indexed library by *mounting feature*, not by shape.
+
+        ``library_match`` answers "what in the world looks like this part?";
+        this answers the complementary, intent-level question a designer actually
+        asks -- "which catalogued parts carry the feature I need?": every part
+        with a phi3.2 through-hole, with at least two holes, with a boss. It reads
+        an ``index`` built by ``solid.library_index`` with ``features=True`` (or
+        scans ``paths`` / ``dir`` on the fly), then filters the feature signatures
+        by the given spec. Predicates (all optional, AND-combined): ``min_holes``,
+        ``through`` (require >=1 through-hole), ``boss`` (True/False require / for
+        bid a boss), ``hole_diam`` with ``diam_tol`` (a hole of that diameter),
+        ``boss_diam`` with ``diam_tol``. An index with no feature signatures is a
+        loud error -- it must be rebuilt with features=True.
+        """
+        skipped = []
+        index = a.get("index")
+        if index:
+            if not os.path.isfile(index):
+                raise ValueError(
+                    "solid.library_query 'index' file not found: %r (build it "
+                    "with solid.library_index features=True)" % index)
+            with open(index, encoding="utf-8") as fh:
+                records = (json.load(fh) or {}).get("records") or []
+        else:
+            paths = _collect_paths(a, "solid.library_query")
+            if not paths:
+                raise ValueError(
+                    "solid.library_query needs 'index': a feature index, or "
+                    "'paths'/'dir' to scan with feature extraction")
+            records = _load_candidates(paths, skipped, features=True)
+        feat_recs = [r for r in records if r.get("features")]
+        if not feat_recs:
+            raise ValueError(
+                "solid.library_query found no feature signatures in the library; "
+                "rebuild the index with solid.library_index features=True")
+
+        dtol = float(a.get("diam_tol", 0.2))
+        min_holes = a.get("min_holes")
+        need_through = a.get("through")
+        need_boss = a.get("boss")
+        hole_diam = a.get("hole_diam")
+        boss_diam = a.get("boss_diam")
+        hits = []
+        for r in feat_recs:
+            fs = r["features"]
+            if min_holes is not None and fs["holes"] < int(min_holes):
+                continue
+            if need_through and fs["through_holes"] < 1:
+                continue
+            if need_boss is not None and bool(fs["bosses"]) != bool(need_boss):
+                continue
+            if hole_diam is not None and not any(
+                    abs(d - float(hole_diam)) <= dtol for d in fs["hole_diams"]):
+                continue
+            if boss_diam is not None and not any(
+                    abs(d - float(boss_diam)) <= dtol for d in fs["boss_diams"]):
+                continue
+            hits.append({"label": r["label"], "path": r.get("path"),
+                         "features": fs})
+        hits.sort(key=lambda h: h["label"])
+        return {"matched": len(hits), "scanned": len(feat_recs),
+                "spec": {"min_holes": min_holes, "through": need_through,
+                         "boss": need_boss, "hole_diam": hole_diam,
+                         "boss_diam": boss_diam, "diam_tol": dtol},
+                "hits": hits, "skipped": skipped}
 
     def _in_principal_frame(body):
         """Return a copy of ``body`` moved to its centroid and rotated so its
@@ -2933,6 +3034,7 @@ def register(state):
         "fillets": op_fillets,
         "design_intent": op_design_intent,
         "library_match": op_library_match, "library_index": op_library_index,
+        "library_query": op_library_query,
         "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
