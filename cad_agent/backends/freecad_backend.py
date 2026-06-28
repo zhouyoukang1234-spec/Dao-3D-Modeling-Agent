@@ -29,7 +29,7 @@ _SOLID_OPS = {
     "box", "cylinder", "sphere", "cone", "torus", "extrude", "revolve", "loft",
     "shell", "translate", "rotate", "mirror", "union", "cut", "common", "fillet",
     "chamfer", "pattern_linear", "pattern_polar", "measure", "inspect",
-    "interference", "draft", "thickness", "undercut", "overhang", "section",
+    "inertia", "interference", "draft", "thickness", "undercut", "overhang", "section",
     "dfm_report", "compound", "decompose", "joints", "mechanism", "drive",
     "recognize", "reverse", "coaxial", "fourbar", "geartrain", "gearmesh",
     "rackpinion", "cam", "planetary", "geneva", "cam_profile", "spatial_mobility",

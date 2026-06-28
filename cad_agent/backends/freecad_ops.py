@@ -74,6 +74,40 @@ def _center(shape):
         return V(bb.Center.x, bb.Center.y, bb.Center.z)
 
 
+def _inertia_about(shape, density, about):
+    """Mass and inertia tensor of a solid about a chosen reference point.
+
+    FreeCAD's ``Shape.MatrixOfInertia`` is the *geometric* (density = 1, i.e.
+    mass = volume) inertia tensor taken about the **centroid** — it silently
+    ignores both the material density and where you actually want the moments.
+    A real rigid-body calculation needs neither assumption: scale by density and
+    shift the reference with the parallel-axis theorem
+
+        I_P = I_cm + m(|d|^2 E - d (x) d),   d = com - P.
+
+    ``about`` is ``"centroid"`` (default), ``"origin"`` or an explicit
+    ``[x, y, z]`` point. Returns ``(mass, com, tensor3x3, ref_point)``.
+    """
+    m = float(shape.Volume) * density
+    com = _center(shape)
+    mat = shape.MatrixOfInertia
+    tensor = [[mat.A11 * density, mat.A12 * density, mat.A13 * density],
+              [mat.A12 * density, mat.A22 * density, mat.A23 * density],
+              [mat.A13 * density, mat.A23 * density, mat.A33 * density]]
+    if about in (None, "centroid", "center", "com"):
+        ref = com
+    elif about == "origin":
+        ref = V(0, 0, 0)
+    else:
+        ref = _vec(about)
+    d = (com.x - ref.x, com.y - ref.y, com.z - ref.z)
+    d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+    for i in range(3):
+        for j in range(3):
+            tensor[i][j] += m * ((d2 if i == j else 0.0) - d[i] * d[j])
+    return m, com, tensor, ref
+
+
 def _cyl_axes(shape, tol=1e-6):
     """Cylindrical faces of a shape as (center, unit-axis, radius) records.
 
@@ -486,6 +520,39 @@ def register(state):
         except Exception:
             pass
         return m
+
+    def op_inertia(a):
+        """Full rigid-body mass properties of a solid.
+
+        Returns the mass, centre of mass, the 3x3 inertia tensor about a chosen
+        reference (``about`` = centroid / origin / explicit point), and the
+        density-scaled principal moments + principal axes + radii of gyration.
+        Unlike ``inspect`` (geometric diagonal only) this honours material
+        ``density`` and the parallel-axis shift, so it is usable for real
+        dynamics, rotor balancing and FEM mass lumping.
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError(
+                "solid.inertia needs a solid (got a shell/compound with no "
+                "volume); inertia is undefined without an enclosed mass")
+        density = float(a.get("density", 1.0))
+        about = a.get("about", "centroid")
+        m, com, tensor, ref = _inertia_about(sh, density, about)
+        pr = sh.PrincipalProperties  # always centroid-relative
+        moments = [x * density for x in pr["Moments"]]
+        axes = [pr["FirstAxisOfInertia"], pr["SecondAxisOfInertia"],
+                pr["ThirdAxisOfInertia"]]
+        return {
+            "mass": _round(m), "density": density,
+            "center_of_mass": [_round(com.x), _round(com.y), _round(com.z)],
+            "about": [_round(ref.x), _round(ref.y), _round(ref.z)],
+            "tensor": [[_round(v, 3) for v in row] for row in tensor],
+            "principal_moments": [_round(x, 3) for x in moments],
+            "principal_axes": [[_round(c, 6) for c in (ax.x, ax.y, ax.z)]
+                               for ax in axes],
+            "radius_of_gyration": [_round(x, 4) for x in pr["RadiusOfGyration"]],
+        }
 
     def op_interference(a):
         sa = _get(a["a"]).Shape
@@ -1740,7 +1807,8 @@ def register(state):
         "union": lambda a: _boolean("union", a), "cut": lambda a: _boolean("cut", a),
         "common": lambda a: _boolean("common", a), "fillet": op_fillet, "chamfer": op_chamfer,
         "pattern_linear": op_pattern_linear, "pattern_polar": op_pattern_polar,
-        "measure": op_measure, "inspect": op_inspect, "interference": op_interference,
+        "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
+        "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
