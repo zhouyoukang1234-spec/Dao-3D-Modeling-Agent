@@ -65,6 +65,33 @@ def main():
     print("L-bracket: %d mirror plane(s), max rot order %d, centro-symmetric=%s"
           % (rl["mirror_plane_count"], rl["max_rotational_order"], rl["point_symmetric"]))
 
+    # ---- fast 'invariant' method must AGREE with the exact boolean proof -- #
+    # The face-centroid invariant test is what lets the high-face real parts
+    # (a 299-face pulley the boolean proof must refuse) still report symmetry.
+    # Its trustworthiness rests on matching the exact method on shapes we know.
+    for nm in ("blk", "cyl", "lbrk"):
+        ex = s.act("solid.symmetry", {"name": nm}).data
+        iv = s.act("solid.symmetry", {"name": nm, "method": "invariant"}).data
+        assert iv["proven"] is False and iv["method"] == "face-invariant", iv
+        assert iv["mirror_plane_count"] == ex["mirror_plane_count"], (nm, iv, ex)
+        assert iv["max_rotational_order"] == ex["max_rotational_order"], (nm, iv, ex)
+        assert iv["point_symmetric"] == ex["point_symmetric"], (nm, iv, ex)
+        assert iv["max_face_deviation"] < 1e-6, (nm, iv)
+    print("invariant method agrees with exact boolean proof on box/cyl/L-bracket")
+
+    # ---- invariant bypasses the O(faces) boolean budget by design -------- #
+    # exact refuses past the budget; invariant has no booleans, so the same
+    # tiny budget does not stop it -- this is the whole point for real parts.
+    refused = s.act("solid.symmetry", {"name": "blk", "max_faces": 2})
+    assert not refused.ok and "max_faces" in (refused.error or ""), refused
+    okfast = s.act("solid.symmetry", {"name": "blk", "method": "invariant", "max_faces": 2})
+    assert okfast.ok and okfast.data["mirror_plane_count"] == 3, okfast
+    print("invariant path runs under a budget that refuses the exact proof")
+
+    # ---- an unknown method is refused loudly ----------------------------- #
+    badm = s.act("solid.symmetry", {"name": "blk", "method": "guess"})
+    assert not badm.ok and "method must be" in (badm.error or ""), badm
+
     # ---- a missing solid is refused loudly ------------------------------ #
     bad = s.act("solid.symmetry", {"name": "nope"})
     assert not bad.ok and "no such solid" in (bad.error or "").lower()

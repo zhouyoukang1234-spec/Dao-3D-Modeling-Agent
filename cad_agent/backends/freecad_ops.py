@@ -776,7 +776,6 @@ def register(state):
         # result is a single-solid Part.Compound, and Compound has no
         # PrincipalProperties/CenterOfMass.
         body = sols[0]
-        _guard_boolean_budget("solid.symmetry", body, a)
         com = body.CenterOfMass
         pr = body.PrincipalProperties
         a1 = _unit_v(pr["FirstAxisOfInertia"])
@@ -786,11 +785,95 @@ def register(state):
         frame = [a1, a2, a3]
         vol = body.Volume
 
-        def _symdiff(other):
-            return max(body.cut(other).Volume, other.cut(body).Volume) / vol
-
         def _ax(v):
             return [_round(v.x, 6), _round(v.y, 6), _round(v.z, 6)]
+
+        method = a.get("method", "exact")
+        if method not in ("exact", "invariant"):
+            raise ValueError(
+                "solid.symmetry method must be 'exact' (BREP boolean proof, "
+                "default) or 'invariant' (fast face-centroid test, works at any "
+                "face count but proven=False); got %r" % method)
+
+        if method == "invariant":
+            # An isometry that leaves the part invariant must permute its faces:
+            # each face maps to a face of equal area and the same surface type,
+            # with its centroid landing on the matched face's centroid. Checking
+            # that bijection is O(faces^2) and uses no BREP booleans, so it scales
+            # to the high-face real parts that the boolean proof must refuse. It
+            # is a strong *necessary* condition, not a volumetric proof -- hence
+            # ``proven=False``; use the default exact method when you need the
+            # proof and the part is within budget.
+            faces = body.Faces
+            diag = body.BoundBox.DiagonalLength or 1.0
+            dtol = max(tol * diag, 1e-6)
+            entries = [(f.CenterOfMass, f.Area, f.Surface.__class__.__name__)
+                       for f in faces]
+
+            def _invariant_under(pointmap):
+                used = [False] * len(entries)
+                maxdev = 0.0
+                for c, ar, ty in entries:
+                    c2 = pointmap(c)
+                    best, bestd = None, None
+                    for i, (c0, ar0, ty0) in enumerate(entries):
+                        if used[i] or ty0 != ty:
+                            continue
+                        if abs(ar0 - ar) > tol * max(ar, ar0, 1e-9):
+                            continue
+                        d = c2.distanceToPoint(c0)
+                        if bestd is None or d < bestd:
+                            best, bestd = i, d
+                    if best is None or bestd > dtol:
+                        return False, None
+                    used[best] = True
+                    if bestd > maxdev:
+                        maxdev = bestd
+                return True, maxdev
+
+            def _mirror_map(n):
+                return lambda p: p - n * (2.0 * (p - com).dot(n))
+
+            def _rot_map(ax, deg):
+                rot = App.Rotation(ax, deg)
+                return lambda p: com + rot.multVec(p - com)
+
+            mirrors, devs = [], []
+            for ax in frame:
+                ok, dev = _invariant_under(_mirror_map(ax))
+                if ok:
+                    mirrors.append(_ax(ax))
+                    devs.append(dev)
+            top = max(orders)
+            rotational = []
+            for ax in frame:
+                best = 1
+                for n in orders:
+                    ok, dev = _invariant_under(_rot_map(ax, 360.0 / n))
+                    if ok:
+                        best = n
+                        devs.append(dev)
+                if best > 1:
+                    rotational.append({"axis": _ax(ax), "order": best,
+                                       "continuous": best == top})
+            inv_ok, inv_dev = _invariant_under(lambda p: com * 2.0 - p)
+            if inv_ok:
+                devs.append(inv_dev)
+            return {
+                "name": a["name"], "method": "face-invariant", "proven": False,
+                "centroid": [_round(com.x), _round(com.y), _round(com.z)],
+                "mirror_planes": mirrors, "mirror_plane_count": len(mirrors),
+                "rotational_axes": rotational,
+                "max_rotational_order": max((r["order"] for r in rotational), default=1),
+                "point_symmetric": inv_ok,
+                "max_face_deviation": _round(max(devs), 6) if devs else 0.0,
+                "orders_tested": list(orders),
+            }
+
+        _guard_boolean_budget("solid.symmetry", body, a)
+
+        def _symdiff(other):
+            return max(body.cut(other).Volume, other.cut(body).Volume) / vol
 
         mirrors = [_ax(ax) for ax in frame if _symdiff(body.mirror(com, ax)) < tol]
         top = max(orders)
@@ -810,7 +893,7 @@ def register(state):
         inv = body.copy()
         inv.transformShape(mat, True, True)
         return {
-            "name": a["name"],
+            "name": a["name"], "method": "exact-boolean", "proven": True,
             "centroid": [_round(com.x), _round(com.y), _round(com.z)],
             "mirror_planes": mirrors, "mirror_plane_count": len(mirrors),
             "rotational_axes": rotational,
