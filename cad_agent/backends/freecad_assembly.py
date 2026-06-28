@@ -288,12 +288,45 @@ def register(state):
     def op_measure(a):
         if not state.components:
             return {"components": 0}
-        shapes = [_global_shape(n) for n in state.components]
+        names = list(state.components.keys())
+        shapes = {n: _global_shape(n) for n in names}
         import Part
-        comp = shapes[0] if len(shapes) == 1 else Part.makeCompound(shapes)
+        all_shapes = list(shapes.values())
+        comp = all_shapes[0] if len(all_shapes) == 1 else Part.makeCompound(all_shapes)
         bb = comp.BoundBox
-        return {"components": len(shapes), "volume": _round(comp.Volume),
-                "bbox_size": [_round(bb.XLength), _round(bb.YLength), _round(bb.ZLength)]}
+        # volume-weighted centroid (== center of mass for a uniform material).
+        # ``density`` (g/mm^3) gives a single material; ``densities`` maps a
+        # component name OR its source label to a per-part density for a
+        # multi-material mass-weighted center of mass + total mass.
+        dens = a.get("densities") or {}
+        default_rho = a.get("density")
+        tot_v = cx = cy = cz = 0.0
+        tot_m = mx = my = mz = 0.0
+        for n in names:
+            sh = shapes[n]
+            v = sh.Volume
+            com = sh.CenterOfMass
+            tot_v += v
+            cx += v * com.x
+            cy += v * com.y
+            cz += v * com.z
+            rho = dens.get(n)
+            if rho is None:
+                rho = dens.get(doc.getObject(state.components[n]["src"]).Label, default_rho)
+            if rho is not None:
+                m = float(rho) * v
+                tot_m += m
+                mx += m * com.x
+                my += m * com.y
+                mz += m * com.z
+        out = {"components": len(names), "volume": _round(comp.Volume),
+               "bbox_size": [_round(bb.XLength), _round(bb.YLength), _round(bb.ZLength)]}
+        if tot_v > 0:
+            out["centroid"] = [_round(cx / tot_v), _round(cy / tot_v), _round(cz / tot_v)]
+        if tot_m > 0:
+            out["mass"] = _round(tot_m)
+            out["center_of_mass"] = [_round(mx / tot_m), _round(my / tot_m), _round(mz / tot_m)]
+        return out
 
     def op_tree(a):
         comps = []
