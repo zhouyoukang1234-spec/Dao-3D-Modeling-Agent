@@ -46,6 +46,26 @@ def main():
     if com is not None:
         assert abs(com[0]) < 1e-6 and abs(com[1]) < 1e-6, com
 
+    # --- partial arc: 4 cubes over a 90 deg arc, copies inclusive of both ends - #
+    s.act("solid.box", {"name": "q", "length": SZ, "width": SZ, "height": SZ,
+                        "pos": [30, -SZ / 2, -SZ / 2]})
+    ra = s.act("solid.pattern_polar", {"name": "q", "count": 4, "angle": 90,
+                                       "center": [0, 0, 0], "axis": [0, 0, 1], "out": "arc"})
+    assert ra.ok, ra.error
+    assert abs(ra.data["volume"] - 4 * SZ ** 3) < 1e-6, ra.data["volume"]
+
+    # --- degenerate count=1 on a partial arc must NOT divide by count-1 -------- #
+    # (a count=1 polar array is just the original part; it used to crash with a
+    #  ZeroDivisionError on total/(count-1)).
+    s.act("solid.box", {"name": "one", "length": SZ, "width": SZ, "height": SZ,
+                        "pos": [30, -SZ / 2, -SZ / 2]})
+    r1 = s.act("solid.pattern_polar", {"name": "one", "count": 1, "angle": 90,
+                                       "center": [0, 0, 0], "axis": [0, 0, 1], "out": "single"})
+    assert r1.ok, r1.error
+    assert abs(r1.data["volume"] - SZ ** 3) < 1e-6, r1.data["volume"]
+    print("polar : arc(4@90) vol=%.1f, count=1 degenerate vol=%.1f (no crash)"
+          % (ra.data["volume"], r1.data["volume"]))
+
     print("PATTERN SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

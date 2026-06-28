@@ -295,16 +295,20 @@ def register(state):
         total = float(a.get("angle", 360))
         center = _vec(a.get("center"))
         axis = _vec(a.get("axis", (0, 0, 1)))
-        full = abs(total - 360) < 1e-6
-        n = count if full else count
-        ang_step = total / count if full else total / (count - 1)
         comp = obj.Shape
         acc = comp
-        for i in range(1, n):
-            c = comp.copy()
-            c.rotate(center, axis, ang_step * i)
-            acc = acc.fuse(c)
-        acc = acc.removeSplitter()
+        # count <= 1 is the degenerate array (just the original): no copies, and
+        # never divide by count-1 (a partial arc with count=1 used to crash).
+        if count > 1:
+            full = abs(total - 360) < 1e-6
+            # full turn -> count copies evenly over 360 (no duplicate at 0/360);
+            # partial arc -> count copies spanning the arc inclusive of both ends.
+            ang_step = total / count if full else total / (count - 1)
+            for i in range(1, count):
+                c = comp.copy()
+                c.rotate(center, axis, ang_step * i)
+                acc = acc.fuse(c)
+            acc = acc.removeSplitter()
         _put(a.get("out", a["name"]), acc)
         return _metrics(acc)
 
