@@ -7,6 +7,8 @@ and the workhorse for boolean modelling, measurement and interference checks.
 The PartDesign feature-tree (editable, parametric) lives in ``freecad_parametric``.
 """
 
+import math
+
 import FreeCAD as App
 import Part
 
@@ -318,6 +320,42 @@ def register(state):
         return {"interfering": vol > 1e-6, "overlap_volume": _round(vol),
                 "min_distance": _round(dist) if dist is not None else None}
 
+    def op_draft(a):
+        """Mould/casting draft analysis against a pull (de-mould) direction.
+
+        For each face the draft angle is the tilt of the face away from the pull
+        axis: beta = asin(|n . pull| / (|n||pull|)). A face perpendicular to the
+        pull (a cap / parting face) has beta ~= 90 deg; a vertical side wall has
+        beta = 0 and cannot release. Faces with beta < ``min_draft`` (deg) are
+        reported as insufficient-draft walls, so a part is ``draftable`` only
+        when every side wall carries at least the minimum draft.
+
+        args: name, pull (default +Z), min_draft (deg, default 1.0)
+        """
+        sh = _get(a["name"]).Shape
+        pull = _vec(a.get("pull", (0, 0, 1)))
+        plen = pull.Length or 1.0
+        com = sh.CenterOfMass
+        min_draft = float(a.get("min_draft", 1.0))
+        sin_min = math.sin(math.radians(min_draft))
+        walls, toward, away = [], 0, 0
+        for i, f in enumerate(sh.Faces):
+            u0, u1, v0, v1 = f.ParameterRange
+            n = f.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+            nlen = n.Length or 1.0
+            cos_a = n.dot(pull) / (nlen * plen)          # normal vs pull
+            beta = math.degrees(math.asin(min(1.0, abs(cos_a))))
+            if abs(cos_a) < sin_min:
+                walls.append({"face": "Face%d" % (i + 1), "draft_deg": _round(beta, 3)})
+            elif f.CenterOfMass.sub(com).dot(pull) > 0:  # which mould half it parts to
+                toward += 1
+            else:
+                away += 1
+        return {"pull": [_round(pull.x), _round(pull.y), _round(pull.z)],
+                "min_draft_deg": min_draft, "faces": len(sh.Faces),
+                "draftable": len(walls) == 0, "insufficient_draft": len(walls),
+                "walls": walls, "toward_pull": toward, "away_pull": away}
+
     # ---- document management --------------------------------------------- #
     def op_list(a):
         return {"solids": list(state.shapes.keys())}
@@ -382,5 +420,6 @@ def register(state):
         "common": lambda a: _boolean("common", a), "fillet": op_fillet, "chamfer": op_chamfer,
         "pattern_linear": op_pattern_linear, "pattern_polar": op_pattern_polar,
         "measure": op_measure, "inspect": op_inspect, "interference": op_interference,
+        "draft": op_draft,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
