@@ -514,39 +514,64 @@ def register(state):
         45) needs support material. The part is ``printable`` (support-free) only
         when no such face exists.
 
+        Each face is sampled on a grid (``samples`` per parameter, default 5),
+        not just at its centre: a single curved face — a sphere, a large fillet,
+        a revolved blend — spans both safe and unsupported inclinations, so a
+        lone centre normal would miss the overhanging strip. The reported angle
+        for a flagged face is the *worst* (smallest) inclination found on it.
         Face normals follow the same ``normalAt`` convention the draft/undercut
-        analyses use. args: name, build (default +Z), max_overhang (45).
+        analyses use. args: name, build (default +Z), max_overhang (45), samples.
         """
         sh = _get(a["name"]).Shape
         up = _vec(a.get("build", (0, 0, 1)))
         ul = up.Length or 1.0
         up = _vec((up.x / ul, up.y / ul, up.z / ul))
         limit = float(a.get("max_overhang", 45.0))
+        ns = max(2, int(a.get("samples", 5)))
         bb = sh.BoundBox
         plate = bb.XMin * up.x + bb.YMin * up.y + bb.ZMin * up.z
-        diag = bb.DiagonalLength
-        tol = max(1e-4, diag * 1e-5)
+        tol = max(1e-4, bb.DiagonalLength * 1e-5)
         sin_v = math.sin(math.radians(0.5))    # treat near-vertical as safe walls
         overhangs, walls, plate_faces = [], 0, 0
+
+        def _grid(lo, hi):
+            if hi - lo < 1e-9:
+                return [(lo + hi) / 2.0]
+            return [lo + (hi - lo) * (k + 0.5) / ns for k in range(ns)]
+
         for i, f in enumerate(sh.Faces):
             u0, u1, v0, v1 = f.ParameterRange
-            n = f.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
-            nl = n.Length or 1.0
-            n = _vec((n.x / nl, n.y / nl, n.z / nl))
-            cos = n.dot(up)
-            if abs(cos) < sin_v:               # vertical wall -> self-supporting
+            worst = None                       # smallest down-facing beta over plate
+            any_down, only_vertical, only_plate = False, True, True
+            for u in _grid(u0, u1):
+                for v in _grid(v0, v1):
+                    try:
+                        p = f.valueAt(u, v)
+                        n = f.normalAt(u, v)
+                    except Exception:
+                        continue
+                    nl = n.Length or 1.0
+                    cos = (n.x * up.x + n.y * up.y + n.z * up.z) / nl
+                    if abs(cos) < sin_v:       # vertical -> self-supporting
+                        continue
+                    only_vertical = False
+                    if cos > 0:                # up-facing -> supported from below
+                        only_plate = False
+                        continue
+                    any_down = True
+                    proj = p.x * up.x + p.y * up.y + p.z * up.z
+                    if proj <= plate + tol:    # this point rests on the plate
+                        continue
+                    only_plate = False
+                    beta = math.degrees(math.acos(min(1.0, abs(cos))))
+                    if worst is None or beta < worst:
+                        worst = beta
+            if worst is not None and worst < limit:
+                overhangs.append({"face": "Face%d" % (i + 1), "angle_deg": _round(worst, 3)})
+            elif only_vertical:
                 walls += 1
-                continue
-            if cos > 0:                        # up-facing -> supported from below
-                continue
-            top = max(vx.Point.x * up.x + vx.Point.y * up.y + vx.Point.z * up.z
-                      for vx in f.Vertexes)
-            if top <= plate + tol:             # lies on the build plate
+            elif any_down and only_plate:
                 plate_faces += 1
-                continue
-            beta = math.degrees(math.acos(min(1.0, abs(cos))))
-            if beta < limit:
-                overhangs.append({"face": "Face%d" % (i + 1), "angle_deg": _round(beta, 3)})
         return {"build": [_round(up.x), _round(up.y), _round(up.z)],
                 "max_overhang_deg": limit, "faces": len(sh.Faces),
                 "printable": len(overhangs) == 0, "overhangs": len(overhangs),

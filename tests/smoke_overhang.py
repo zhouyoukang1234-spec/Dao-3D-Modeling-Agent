@@ -13,8 +13,10 @@ that need support. Validated against closed-form geometry:
     < 45 -> 1 overhang face, not printable (turning the part over or adding a
     chamfer is the fix);
   * a stepped bracket (boolean union -> a compound) with a flat down-facing ledge
-    above the plate -> beta = 0 -> an overhang, exercising the orientation-
-    corrected outward normal on a compound.
+    above the plate -> beta = 0 -> an overhang, exercising a compound;
+  * a sphere -> its whole lower hemisphere overhangs; this is the case a single
+    centre-normal sample misses (the sphere is one face), so it pins the
+    per-face grid sampling that makes curved overhangs detectable.
 """
 import math
 import os
@@ -61,6 +63,17 @@ def main():
           % (g["overhangs"], g["printable"], [o["angle_deg"] for o in g["overhang_faces"]]))
     assert g["overhangs"] >= 1 and not g["printable"], g
     assert any(o["angle_deg"] < 1.0 for o in g["overhang_faces"]), g
+
+    # sphere: the entire lower hemisphere overhangs -> the one spherical face must
+    # be flagged. A single centre normal would miss it; the grid sampling catches
+    # the shallow strip near the bottom (worst beta -> 0).
+    s.act("solid.sphere", {"name": "ball", "radius": 15})
+    sp = s.act("solid.overhang", {"name": "ball", "build": [0, 0, 1], "samples": 7}).data
+    print("ball -> overhangs=%d printable=%s worst=%s"
+          % (sp["overhangs"], sp["printable"],
+             [o["angle_deg"] for o in sp["overhang_faces"]]))
+    assert sp["overhangs"] >= 1 and not sp["printable"], sp
+    assert all(o["angle_deg"] < 45.0 for o in sp["overhang_faces"]), sp
 
     print("OVERHANG SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
