@@ -2064,11 +2064,12 @@ def register(state):
                     break
             if tgt is None:
                 tgt = {"kind": rg["kind"], "axis": rg["axis"], "pt": rg["pt"],
-                       "radii": [], "faces": [], "vmin": rg["vmin"],
+                       "radii": [], "faces": [], "rings": [], "vmin": rg["vmin"],
                        "vmax": rg["vmax"], "span": 0.0}
                 feats.append(tgt)
             tgt["radii"].append(rg["radius"])
             tgt["faces"].extend(rg["faces"])
+            tgt["rings"].append({"radius": rg["radius"], "faces": list(rg["faces"])})
             tgt["vmin"] = min(tgt["vmin"], rg["vmin"])
             tgt["vmax"] = max(tgt["vmax"], rg["vmax"])
             tgt["span"] = max(tgt["span"], rg["span"])
@@ -2098,6 +2099,30 @@ def register(state):
             tmin, tmax = (min(ts), max(ts)) if ts else (0.0, 0.0)
             p0 = ft["pt"] + ax * tmin
             p1 = ft["pt"] + ax * tmax
+            # a counterbore is several coaxial steps of different radius; record
+            # each step's own radius and axial endpoints so a reconstruction can
+            # cut the recess and the bore separately rather than guessing.
+            steps = None
+            if len(set(radii)) > 1:
+                byr = {}
+                for rg in ft["rings"]:
+                    ets = [(body.Faces[fi].Vertexes[k].Point - ft["pt"]).dot(ax)
+                           for fi in rg["faces"]
+                           for k in range(len(body.Faces[fi].Vertexes))]
+                    if not ets:
+                        continue
+                    key = round(rg["radius"], 4)
+                    cur = byr.setdefault(key, [min(ets), max(ets)])
+                    cur[0] = min(cur[0], min(ets))
+                    cur[1] = max(cur[1], max(ets))
+                steps = []
+                for rr in sorted(byr):
+                    smn, smx = byr[rr]
+                    sp0 = ft["pt"] + ax * smn
+                    sp1 = ft["pt"] + ax * smx
+                    steps.append({"radius": rr,
+                                  "ends": [[_round(sp0.x), _round(sp0.y), _round(sp0.z)],
+                                           [_round(sp1.x), _round(sp1.y), _round(sp1.z)]]})
             rec = {
                 "kind": ft["kind"],
                 "axis": [_round(ax.x, 6), _round(ax.y, 6), _round(ax.z, 6)],
@@ -2106,6 +2131,7 @@ def register(state):
                          [_round(p1.x), _round(p1.y), _round(p1.z)]],
                 "radius": radii[0], "radii": radii,
                 "counterbored": len(set(radii)) > 1,
+                "steps": steps,
                 "depth": _round(depth),
                 "through": through,
                 "full_round": full_round,
@@ -2407,17 +2433,22 @@ def register(state):
             cen = bb.Center
             dims = [("x", bb.XLength), ("y", bb.YLength), ("z", bb.ZLength)]
             _AX = {"x": V(1, 0, 0), "y": V(0, 1, 0), "z": V(0, 0, 1)}
-            # a body of revolution has two equal transverse extents; the odd one
-            # out is the turning axis.
+            # a body of revolution has two equal transverse extents AND fits
+            # inside the resulting cylinder. The volume guard rejects a square
+            # prism (equal footprint, but its corners stick out past any inscribed
+            # cylinder, so part volume exceeds the cylinder's) -- only a genuinely
+            # round part has part_volume <= cylinder_volume.
             billet_axis = None
             billet_r = None
             for i in range(3):
                 a0, a1, a2 = dims[i], dims[(i + 1) % 3], dims[(i + 2) % 3]
                 if abs(a1[1] - a2[1]) <= 0.02 * max(a1[1], a2[1], 1e-9):
-                    billet_axis = a0[0]
-                    billet_r = 0.5 * (a1[1] + a2[1]) / 2.0
-                    billet_h = a0[1]
-                    break
+                    r = 0.5 * (a1[1] + a2[1]) / 2.0
+                    if body0.Volume <= math.pi * r * r * a0[1] * (1.0 + 1e-3):
+                        billet_axis = a0[0]
+                        billet_r = r
+                        billet_h = a0[1]
+                        break
             if billet_axis is not None:
                 ax = _AX[billet_axis]
                 lo = getattr(bb, billet_axis.upper() + "Min")
@@ -2429,12 +2460,28 @@ def register(state):
                                      V(bb.XMin, bb.YMin, bb.ZMin))
                 ax = None
                 kind = "billet:box-minus-holes"
+            mtol = 1e-3 * diag
+
+            def _cut_cyl(shp, r, p0, p1, ext0, ext1):
+                # ext0/ext1 push the cut a touch past an *open* end so the cut
+                # face is not coplanar with the part face (a robust boolean);
+                # an interior step boundary is cut exactly so abutting steps meet.
+                seg = p1 - p0
+                length = seg.Length
+                if length <= 1e-9:
+                    return shp
+                dirv = _unit_v(seg)
+                m0 = 0.05 * diag if ext0 else 0.0
+                m1 = 0.05 * diag if ext1 else 0.0
+                cyl = Part.makeCylinder(r, length + m0 + m1, p0 - dirv * m0, dirv)
+                return shp.cut(cyl)
+
             for f in feats["features"]:
-                if f["counterbored"]:
-                    skipped.append({"feature": f["kind"], "radii": f["radii"],
-                                    "reason": "stepped feature not reconstructed exactly"})
-                    continue
                 if f["kind"] == "boss":
+                    if f["counterbored"]:
+                        skipped.append({"feature": "boss", "radii": f["radii"],
+                                        "reason": "stepped boss not reconstructed"})
+                        continue
                     fax = V(*f["axis"])
                     # the cylindrical billet's own outer wall reads as a boss --
                     # but it is the stock, not an added feature, so skip it (same
@@ -2447,17 +2494,21 @@ def register(state):
                     skipped.append({"feature": "boss", "radius": f["radius"],
                                     "reason": "protruding boss not recoverable from a convex billet"})
                     continue
-                p0 = V(*f["ends"][0])
-                p1 = V(*f["ends"][1])
-                seg = p1 - p0
-                length = seg.Length
-                if length <= 1e-9:
-                    continue
-                dirv = _unit_v(seg)
-                r = f["radius"]
-                m = 0.05 * diag if f["through"] else 0.0
-                cyl = Part.makeCylinder(r, length + 2 * m, p0 - dirv * m, dirv)
-                shape = shape.cut(cyl)
+                # a hole, possibly counterbored: cut each step (recess + bore)
+                # over its own axial extent; a plain hole is one step. A step end
+                # that lands on the feature's open mouth/exit gets the overshoot.
+                gp0 = V(*f["ends"][0])
+                gp1 = V(*f["ends"][1])
+                if f["counterbored"] and f["steps"]:
+                    for st in f["steps"]:
+                        sp0 = V(*st["ends"][0])
+                        sp1 = V(*st["ends"][1])
+                        e0 = f["through"] and (sp0 - gp0).Length <= mtol
+                        e1 = f["through"] and (sp1 - gp1).Length <= mtol
+                        shape = _cut_cyl(shape, st["radius"], sp0, sp1, e0, e1)
+                else:
+                    shape = _cut_cyl(shape, f["radius"], gp0, gp1,
+                                     f["through"], f["through"])
 
         rebuilt = shape.Solids[0] if shape.Solids else shape
         vol_err = abs(rebuilt.Volume - body0.Volume) / max(body0.Volume, 1e-9)

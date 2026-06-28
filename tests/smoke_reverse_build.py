@@ -74,6 +74,23 @@ def main():
     print("bushing rebuilt: %s err=%g key_match=%s skipped=%d"
           % (rt["recipe_kind"], rt["volume_error"], rt["same_shape_key"], len(rt["skipped"])))
 
+    # ---- a counterbored plate rebuilds step-by-step ----------------------- #
+    # 50x40x16 block (asymmetric footprint -> clean principal axes) with a single
+    # counterbored hole: a wide recess r6 down 6mm from the top, then a narrow
+    # through-bore r3 the rest of the way. The stepped feature is reconstructed
+    # as recess + bore, not skipped.
+    s.act("solid.box", {"name": "cb", "length": 50, "width": 40, "height": 16})
+    s.act("solid.cylinder", {"name": "cb_bore", "radius": 3, "height": 40, "pos": [25, 20, -5]})
+    s.act("solid.cut", {"a": "cb", "b": "cb_bore", "out": "cb"})
+    s.act("solid.cylinder", {"name": "cb_rec", "radius": 6, "height": 6, "pos": [25, 20, 10]})
+    s.act("solid.cut", {"a": "cb", "b": "cb_rec", "out": "cb"})
+    rcb = s.act("solid.reverse_build", {"name": "cb", "out": "cb2"}).data
+    assert rcb["volume_match"], rcb
+    assert not rcb["skipped"], rcb                         # the step is rebuilt, not skipped
+    assert rcb["volume_error"] < 1e-3, rcb
+    print("counterbore rebuilt: %s err=%g skipped=%d"
+          % (rcb["recipe_kind"], rcb["volume_error"], len(rcb["skipped"])))
+
     # ---- the loop is pose-blind: rebuild a rotated copy -------------------- #
     _bracket(s, "brr")
     s.act("solid.rotate", {"name": "brr", "axis": [1, 1, 0], "angle": 37, "out": "brr"})
