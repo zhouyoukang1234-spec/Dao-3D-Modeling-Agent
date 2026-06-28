@@ -1199,6 +1199,45 @@ def register(state):
                 "mobility_spatial": mobility_spatial,
                 "graph": {k: sorted(v) for k, v in graph.items()}}
 
+    def op_spatial_mobility(a):
+        """General spatial Kutzbach-Grubler mobility for an arbitrary joint set.
+
+        Where ``mechanism`` derives mobility from geometry-recovered revolute/
+        prismatic joints, this evaluates the closed-form criterion for any list
+        of named joint types in 3-D:
+
+            M = 6 (n - 1) - sum_over_joints (6 - f_i)
+
+        with the standard lower/higher-pair freedoms f: revolute/prismatic/
+        helical = 1, cylindrical/universal/gear = 2, spherical/planar = 3. ``n``
+        counts all links including ground. Optional ``idle_dof`` (e.g. the free
+        spin of a binary S-S coupler) is subtracted to give the *effective*
+        mobility. A non-positive gross M with a known-mobile mechanism is the
+        classic Kutzbach *paradox* (special geometry beats the generic count) --
+        we flag it rather than hide it.
+        """
+        fmap = {"revolute": 1, "prismatic": 1, "helical": 1, "screw": 1,
+                "cylindrical": 2, "universal": 2, "gear": 2, "cam": 2,
+                "spherical": 3, "planar": 3}
+        n = int(a["links"])
+        if n < 1:
+            raise ValueError("need at least one link (ground)")
+        joints = a["joints"]
+        terms, total_f, j = [], 0, 0
+        for spec in joints:
+            t = spec["type"] if isinstance(spec, dict) else spec
+            cnt = int(spec.get("count", 1)) if isinstance(spec, dict) else 1
+            if t not in fmap:
+                raise ValueError("unknown joint type %r" % t)
+            total_f += fmap[t] * cnt
+            j += cnt
+            terms.append({"type": t, "count": cnt, "f": fmap[t]})
+        gross = 6 * (n - 1) - sum((6 - fmap[x["type"]]) * x["count"] for x in terms)
+        idle = int(a.get("idle_dof", 0))
+        return {"links": n, "joints": j, "sum_freedoms": total_f,
+                "mobility": gross, "idle_dof": idle, "effective_mobility": gross - idle,
+                "overconstrained": gross <= 0, "joint_table": terms}
+
     def op_drive(a):
         """Drive a recovered planar slider-crank through a crank angle.
 
@@ -1698,5 +1737,6 @@ def register(state):
         "geartrain": op_geartrain, "gearmesh": op_gearmesh,
         "rackpinion": op_rackpinion, "cam": op_cam, "planetary": op_planetary,
         "geneva": op_geneva, "cam_profile": op_cam_profile,
+        "spatial_mobility": op_spatial_mobility,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
