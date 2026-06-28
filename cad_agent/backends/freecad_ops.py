@@ -1488,6 +1488,39 @@ def register(state):
                 "acceleration": _round(acc, 6),
                 "cam_radius": _round(base + lift, 6), "rise": _round(S)}
 
+    def op_cam_profile(a):
+        """Build the real cam-disc solid from the displacement law (parametric).
+
+        Turns ``cam``'s analytic lift into actual CAD geometry: it samples the
+        radial profile r(theta) = base_radius + lift(theta) every ``step``
+        degrees, sweeps a closed polar polygon, faces it and extrudes by
+        ``thickness`` to a solid stored under ``name``. This is the parametric
+        design output -- regenerate any cam by changing rise/angles/law. The
+        returned bounds let callers confirm the kernel-built profile matches the
+        law (max radius = base + rise, min radius = base).
+        """
+        S = float(a["rise"])
+        base = float(a.get("base_radius", 0.0))
+        thick = float(a.get("thickness", 5.0))
+        step = float(a.get("step", 2.0))
+        if base <= 0 or thick <= 0 or step <= 0:
+            raise ValueError("base_radius, thickness and step must be positive")
+        camargs = {k: a[k] for k in ("law", "rise_angle", "dwell_angle", "fall_angle")
+                   if k in a}
+        pts, th = [], 0.0
+        while th < 360.0 - 1e-9:
+            cr = op_cam(dict(camargs, rise=S, base_radius=base, angle=th))["cam_radius"]
+            pts.append(V(cr * math.cos(math.radians(th)), cr * math.sin(math.radians(th)), 0.0))
+            th += step
+        pts.append(pts[0])
+        sol = Part.Face(Part.makePolygon(pts)).extrude(V(0, 0, thick))
+        _put(a["name"], sol)
+        radii = [math.hypot(p.x, p.y) for p in pts[:-1]]
+        return {"name": a["name"], "samples": len(pts) - 1,
+                "min_radius": _round(min(radii), 6), "max_radius": _round(max(radii), 6),
+                "base_radius": _round(base), "rise": _round(S),
+                "thickness": _round(thick), "volume": _round(sol.Volume)}
+
     def op_rackpinion(a):
         """Rack-and-pinion: convert pinion rotation to/from rack travel.
 
@@ -1664,6 +1697,6 @@ def register(state):
         "reverse": op_reverse, "coaxial": op_coaxial, "fourbar": op_fourbar,
         "geartrain": op_geartrain, "gearmesh": op_gearmesh,
         "rackpinion": op_rackpinion, "cam": op_cam, "planetary": op_planetary,
-        "geneva": op_geneva,
+        "geneva": op_geneva, "cam_profile": op_cam_profile,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
