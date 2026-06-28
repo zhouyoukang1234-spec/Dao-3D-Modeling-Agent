@@ -1340,6 +1340,48 @@ def register(state):
                                "ratio": _round(ri["radius"] / rj["radius"], 6)})
         return {"parts": names, "meshes": len(meshes), "mesh_list": meshes}
 
+    def op_planetary(a):
+        """Solve a sun-planet-ring epicyclic set via the Willis equation.
+
+        An epicyclic (planetary) train has a moving carrier, so the ordinary
+        train value is taken *relative to the carrier*:
+
+            (w_sun - w_carrier) / (w_ring - w_carrier) = - N_ring / N_sun
+
+        Three members (sun, ring, carrier) and one constraint -> 2 DOF: give any
+        two of the three speeds and the third is solved exactly. Tooth counts
+        obey N_ring = N_sun + 2 N_planet; if ``teeth_planet`` is given it is
+        checked. Classic operating modes fall straight out: ring fixed gives the
+        reduction w_sun/w_carrier = 1 + N_ring/N_sun; carrier fixed degenerates
+        to the ordinary train value -N_sun/N_ring (sun -> ring).
+        """
+        ns = float(a["teeth_sun"])
+        nr = float(a["teeth_ring"])
+        if ns <= 0 or nr <= 0:
+            raise ValueError("sun/ring teeth must be positive")
+        if nr <= ns:
+            raise ValueError("ring must have more teeth than sun (N_ring > N_sun)")
+        np_ = a.get("teeth_planet")
+        if np_ is not None and abs(float(np_) - (nr - ns) / 2.0) > 1e-9:
+            raise ValueError("tooth constraint violated: N_ring != N_sun + 2*N_planet")
+        ws, wr, wc = a.get("sun_rpm"), a.get("ring_rpm"), a.get("carrier_rpm")
+        known = [x is not None for x in (ws, wr, wc)]
+        if sum(known) != 2:
+            raise ValueError("give exactly two of sun_rpm/ring_rpm/carrier_rpm")
+        if wc is None:                       # carrier from sun & ring
+            wc = (ns * float(ws) + nr * float(wr)) / (ns + nr)
+        elif ws is None:                     # sun from carrier & ring
+            wc = float(wc)
+            ws = wc - (nr / ns) * (float(wr) - wc)
+        else:                                # ring from carrier & sun
+            wc = float(wc)
+            wr = wc - (ns / nr) * (float(ws) - wc)
+        ws, wr, wc = float(ws), float(wr), float(wc)
+        return {"teeth_sun": _round(ns), "teeth_ring": _round(nr),
+                "teeth_planet": _round((nr - ns) / 2.0),
+                "sun_rpm": _round(ws), "ring_rpm": _round(wr),
+                "carrier_rpm": _round(wc)}
+
     def op_cam(a):
         """Disc-cam follower lift for a rise-dwell-fall-dwell (RDFD) profile.
 
@@ -1573,6 +1615,6 @@ def register(state):
         "mechanism": op_mechanism, "drive": op_drive, "recognize": op_recognize,
         "reverse": op_reverse, "coaxial": op_coaxial, "fourbar": op_fourbar,
         "geartrain": op_geartrain, "gearmesh": op_gearmesh,
-        "rackpinion": op_rackpinion, "cam": op_cam,
+        "rackpinion": op_rackpinion, "cam": op_cam, "planetary": op_planetary,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }

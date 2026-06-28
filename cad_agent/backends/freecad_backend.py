@@ -32,7 +32,7 @@ _SOLID_OPS = {
     "interference", "draft", "thickness", "undercut", "overhang", "section",
     "dfm_report", "compound", "decompose", "joints", "mechanism", "drive",
     "recognize", "reverse", "coaxial", "fourbar", "geartrain", "gearmesh",
-    "rackpinion", "cam", "list", "delete", "export", "import_step",
+    "rackpinion", "cam", "planetary", "list", "delete", "export", "import_step",
 }
 
 
