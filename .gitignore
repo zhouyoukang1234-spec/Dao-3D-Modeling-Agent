@@ -44,6 +44,9 @@ $null
 *.swp
 *.swo
 
+# ORS6 bulky outputs
+60-实战_Projects/ORS6_Stewart/output/
+60-实战_Projects/ORS6_Stewart/STLs/
 # cad_agent live-kernel regenerable demo outputs
 output/fem_demo/
 tests/_out/

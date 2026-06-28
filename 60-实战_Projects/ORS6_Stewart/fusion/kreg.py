@@ -74,7 +74,7 @@ def main():
     tree = cKDTree(Vt)
 
     # body shell surface sample
-    shell = load_concat(["Base","L_Frame","R_Frame","Lid","PowerBus"])
+    shell = load_concat(["Base","L_Frame","R_Frame","Lid"])
     src = shell.sample(9000)
     src = np.asarray(src, float)
     csrc = src.mean(0)
