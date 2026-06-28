@@ -2591,6 +2591,103 @@ def register(state):
             "program": program,
         }
 
+    def op_reuse(a):
+        """先检索复用、再从零建模 -- end to end. Given a target (a loaded solid to
+        match by *shape*, or a set of *feature* predicates) and a library (an
+        ``index``/``dir``/``paths``), find the closest catalogued parts and hand
+        each back as an *editable replay program* recovered by ``reverse_build``.
+        A new requirement thus starts from an existing design to adapt (change a
+        diameter, a stock size, then ``solid.replay``) instead of a blank sheet.
+
+        Shape mode (``name`` given, no feature predicate) ranks by the scale-
+        invariant fingerprint distance; feature mode (``min_holes``/``through``/
+        ``boss``/``hole_diam``/``boss_diam``) filters by mounting feature. Parts
+        that cannot be reverse-built exactly are still returned, flagged with a
+        note rather than dropped silently. args: name|<feature preds>,
+        index|dir|paths, top (default 3), diam_tol.
+        """
+        top = int(a.get("top", 3))
+        skipped = []
+        feat_keys = ("min_holes", "through", "boss", "hole_diam", "boss_diam")
+        by_feature = any(a.get(k) is not None for k in feat_keys)
+        lib = {k: a[k] for k in ("index", "dir", "paths", "exts", "recursive")
+               if a.get(k) is not None}
+
+        if a.get("name") and not by_feature:
+            ranked = op_library_match(dict(lib, name=a["name"]))
+            cands = [{"label": r["label"], "path": r.get("path"),
+                      "distance": r["distance"], "same_key": r["same_key"]}
+                     for r in ranked["ranking"]]
+            skipped += ranked.get("skipped") or []
+            mode = "shape"
+        else:
+            qa = dict(lib)
+            for k in feat_keys + ("diam_tol",):
+                if a.get(k) is not None:
+                    qa[k] = a[k]
+            q = op_library_query(qa)
+            cands = [{"label": h["label"], "path": h.get("path"),
+                      "features": h.get("features")} for h in q["hits"]]
+            skipped += q.get("skipped") or []
+            mode = "feature"
+
+        def _drop(n):
+            ex = state.shapes.pop(n, None)
+            if ex and doc.getObject(ex):
+                doc.removeObject(ex)
+
+        reusable = []
+        seen = set()
+        for c in cands:
+            if len(reusable) >= top:
+                break
+            path = c.get("path")
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            try:
+                imp = op_import_step({"path": path})
+            except Exception as exc:
+                skipped.append({"path": path, "reason": "import failed: %s" % exc})
+                continue
+            names = imp["imported"]
+            if len(names) != 1:
+                for n in names:
+                    _drop(n)
+                skipped.append({"path": path,
+                                "reason": "%d solids; reuse one part at a time "
+                                          "(decompose first)" % len(names)})
+                continue
+            use = names[0]
+            rbout = use + "__reuse_rb"
+            try:
+                rb = op_reverse_build({"name": use, "out": rbout})
+            except Exception as exc:
+                skipped.append({"path": path,
+                                "reason": "reverse_build failed: %s" % exc})
+                _drop(use)
+                continue
+            entry = {"label": c["label"], "path": path,
+                     "recipe_kind": rb["recipe_kind"],
+                     "volume_match": rb["volume_match"],
+                     "program": rb["program"]}
+            if mode == "shape":
+                entry["distance"] = c["distance"]
+                entry["same_key"] = c["same_key"]
+            else:
+                entry["features"] = c.get("features")
+            if not rb["volume_match"]:
+                entry["note"] = ("reverse_build could not reproduce this part "
+                                 "exactly; the program is an approximate stock "
+                                 "recipe (see reverse_build skipped reasons)")
+            reusable.append(entry)
+            _drop(use)
+            _drop(rbout)
+
+        return {"mode": mode, "library_candidates": len(cands),
+                "returned": len(reusable), "reusable": reusable,
+                "skipped": skipped}
+
     def op_joints(a):
         """Infer revolute joints between parts from shared coaxial cylinders.
 
@@ -3303,6 +3400,7 @@ def register(state):
         "fillets": op_fillets,
         "design_intent": op_design_intent,
         "reverse_build": op_reverse_build, "replay": op_replay,
+        "reuse": op_reuse,
         "library_match": op_library_match, "library_index": op_library_index,
         "library_query": op_library_query,
         "interference": op_interference,
