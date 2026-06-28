@@ -1854,6 +1854,164 @@ def register(state):
                     return res
         return dict(base, type="freeform", params=None, volume_match=False)
 
+    def op_holes(a):
+        """Recover cylindrical holes and bosses from a solid — the mounting-feature
+        channel of butchering-the-ox.
+
+        ``recognize`` names a whole simple part; a real bracket is a block *minus
+        holes plus bosses*, and those round features are the design intent you
+        most want back when reverse-engineering. This scans every cylindrical
+        face, decides hole-vs-boss from the true outward normal (a hole's normal
+        points *toward* its axis — the solid is outside the bore; a boss's points
+        away), and merges coaxial faces into one feature (so a counterbore comes
+        back as one feature carrying both radii). For each feature it reports the
+        axis, a point on it, the radius (radii, sorted, when stepped), the axial
+        depth, and whether it runs ``through`` the part (depth ~ the part's extent
+        along that axis). args: name, tol.
+        """
+        sh = _get(a["name"]).Shape
+        sols = sh.Solids
+        if not sols:
+            raise ValueError(
+                "solid.holes needs a solid (got a shell/compound with no "
+                "volume); round features are bored into a body")
+        if len(sols) != 1:
+            raise ValueError(
+                "solid.holes expects a single solid (got %d); run solid.decompose "
+                "and analyse one part at a time" % len(sols))
+        body = sols[0]
+        diag = body.BoundBox.DiagonalLength or 1.0
+        ptol = max(float(a.get("tol", 1e-4)) * diag, 1e-6)
+        eps = max(1e-3, 1e-4 * diag)
+        raw = []
+        for idx, f in enumerate(body.Faces):
+            su = f.Surface
+            if su.__class__.__name__ != "Cylinder":
+                continue
+            ax = _unit_v(su.Axis)
+            ctr = su.Center
+            u0, u1, v0, v1 = f.ParameterRange
+            um, vm = (u0 + u1) / 2.0, (v0 + v1) / 2.0
+            try:
+                n = f.normalAt(um, vm)
+                p = f.valueAt(um, vm)
+            except Exception:
+                continue
+            # Face.normalAt already returns the orientation-aware outward normal
+            # (out of the solid): for a bore it points toward the axis, for a
+            # boss away from it -- that sign alone separates hole from boss.
+            radial = p - ctr
+            radial = radial - ax * radial.dot(ax)
+            rl = radial.Length or 1.0
+            outward = (n.x * radial.x + n.y * radial.y + n.z * radial.z) / rl
+            ts = [(vx.Point - ctr).dot(ax) for vx in f.Vertexes]
+            vmin, vmax = (min(ts), max(ts)) if ts else (0.0, 0.0)
+            raw.append({"face": idx, "axis": ax, "center": ctr,
+                        "radius": float(su.Radius), "vmin": vmin, "vmax": vmax,
+                        "span": abs(u1 - u0),
+                        "kind": "boss" if outward > 0 else "hole"})
+
+        def _coaxial(ax0, p0, ax1, p1):
+            return (abs(abs(ax0.dot(ax1)) - 1.0) <= 1e-6
+                    and (p1 - p0).cross(ax0).Length < ptol)
+
+        # phase 1 — rings: coaxial faces of *equal* radius with overlapping axial
+        # extent are one turned/bored cylindrical surface (a bore split into a
+        # couple of faces, or a whole ring of identical-radius patches). The
+        # summed angular span tells a complete 2*pi cylinder (a real bore/boss)
+        # from a partial patch (an edge fillet, a gear-tooth flank).
+        rings = []
+        for cf in raw:
+            tgt = None
+            for rg in rings:
+                if (rg["kind"] == cf["kind"]
+                        and abs(rg["radius"] - cf["radius"]) <= ptol
+                        and _coaxial(rg["axis"], rg["pt"], cf["axis"], cf["center"])
+                        and min(cf["vmax"], rg["vmax"]) >= max(cf["vmin"], rg["vmin"]) - eps):
+                    tgt = rg
+                    break
+            if tgt is None:
+                tgt = {"kind": cf["kind"], "axis": cf["axis"], "pt": cf["center"],
+                       "radius": cf["radius"], "vmin": cf["vmin"], "vmax": cf["vmax"],
+                       "faces": [], "span": 0.0}
+                rings.append(tgt)
+            tgt["faces"].append(cf["face"])
+            tgt["vmin"] = min(tgt["vmin"], cf["vmin"])
+            tgt["vmax"] = max(tgt["vmax"], cf["vmax"])
+            tgt["span"] += cf["span"]
+
+        # phase 2 — features: telescoping rings of *different* radius on one axis
+        # are a single stepped feature (a counterbore); concentric rings that
+        # share the same axial extent (a gear's tooth lands at r10/r11.2/r12.75)
+        # stay distinct, so a gear is not reported as one 75-radius "counterbore".
+        feats = []
+        for rg in sorted(rings, key=lambda r: r["radius"]):
+            tgt = None
+            for ft in feats:
+                if ft["kind"] != rg["kind"] or not _coaxial(ft["axis"], ft["pt"],
+                                                            rg["axis"], rg["pt"]):
+                    continue
+                # a counterbore's steps abut (the wider recess meets the narrower
+                # bore at one plane), so accept touching as well as overlapping;
+                # only reject concentric rings of identical extent (gear lands)
+                # and rings too far apart to be one feature.
+                overlap = min(rg["vmax"], ft["vmax"]) - max(rg["vmin"], ft["vmin"])
+                concentric = (abs(rg["vmin"] - ft["vmin"]) <= eps
+                              and abs(rg["vmax"] - ft["vmax"]) <= eps)
+                if overlap >= -eps and not concentric:
+                    tgt = ft
+                    break
+            if tgt is None:
+                tgt = {"kind": rg["kind"], "axis": rg["axis"], "pt": rg["pt"],
+                       "radii": [], "faces": [], "vmin": rg["vmin"],
+                       "vmax": rg["vmax"], "span": 0.0}
+                feats.append(tgt)
+            tgt["radii"].append(rg["radius"])
+            tgt["faces"].extend(rg["faces"])
+            tgt["vmin"] = min(tgt["vmin"], rg["vmin"])
+            tgt["vmax"] = max(tgt["vmax"], rg["vmax"])
+            tgt["span"] = max(tgt["span"], rg["span"])
+
+        features, blends = [], []
+        for ft in feats:
+            ax = ft["axis"]
+            depth = ft["vmax"] - ft["vmin"]
+            radii = sorted(round(r, 4) for r in ft["radii"])
+            full_round = ft["span"] >= 2.0 * math.pi - 1e-2
+            through = False
+            if ft["kind"] == "hole" and full_round:
+                # a bore is through iff it opens to the outside at both ends:
+                # a point just past each end, on the axis, lies outside the solid
+                # (a blind hole is capped by material at one end). This is exact
+                # regardless of how the part's thickness varies elsewhere.
+                lo = ft["pt"] + ax * (ft["vmin"] - eps)
+                hi = ft["pt"] + ax * (ft["vmax"] + eps)
+                through = (not body.isInside(lo, eps, True)
+                           and not body.isInside(hi, eps, True))
+            rec = {
+                "kind": ft["kind"],
+                "axis": [_round(ax.x, 6), _round(ax.y, 6), _round(ax.z, 6)],
+                "point": [_round(ft["pt"].x), _round(ft["pt"].y), _round(ft["pt"].z)],
+                "radius": radii[0], "radii": radii,
+                "counterbored": len(set(radii)) > 1,
+                "depth": _round(depth),
+                "through": through,
+                "full_round": full_round,
+                "faces": sorted(ft["faces"]),
+            }
+            # a partial cylinder (sum of spans < 2*pi) is an edge blend, not a
+            # drilled hole or a turned boss -- report it apart so the hole/boss
+            # tally is not swamped by every fillet on the part.
+            (features if full_round else blends).append(rec)
+        features.sort(key=lambda x: (x["kind"], -x["radius"]))
+        blends.sort(key=lambda x: -x["radius"])
+        holes = [f for f in features if f["kind"] == "hole"]
+        bosses = [f for f in features if f["kind"] == "boss"]
+        return {"name": a["name"], "features": features, "blends": blends,
+                "hole_count": len(holes), "boss_count": len(bosses),
+                "blend_count": len(blends),
+                "through_holes": sum(1 for h in holes if h["through"])}
+
     def op_joints(a):
         """Infer revolute joints between parts from shared coaxial cylinders.
 
@@ -2562,6 +2720,7 @@ def register(state):
         "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
         "curvature": op_curvature, "obb": op_obb, "symmetry": op_symmetry,
         "fingerprint": op_fingerprint, "match": op_match, "chirality": op_chirality,
+        "holes": op_holes,
         "library_match": op_library_match, "library_index": op_library_index,
         "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
