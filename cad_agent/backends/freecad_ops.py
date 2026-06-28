@@ -1294,6 +1294,37 @@ def register(state):
                 "grashof": grashof,
                 "grashof_type": ("crank-rocker" if grashof else "double-rocker")}
 
+    def op_geartrain(a):
+        """Compute the train value (speed ratio) of an ordinary gear train.
+
+        A gear train is a sequence of meshes. Each mesh multiplies the train
+        value by (driver_teeth / driven_teeth); an *external* mesh also flips the
+        sign (the gears spin opposite ways), while an *internal*/ring mesh keeps
+        it. Idlers fall out of the magnitude automatically (their teeth appear
+        once as driven and once as driver) but still flip the sign; compound
+        gears (two gears keyed to one shaft) are expressed as consecutive meshes.
+
+        train_value e = ω_out/ω_in = Π (± N_driver / N_driven). Tooth counts may
+        be replaced by pitch radii -- the ratio is identical.
+        """
+        meshes = a["meshes"]
+        if not meshes:
+            raise ValueError("gear train needs at least one mesh")
+        e = 1.0
+        for m in meshes:
+            drv = float(m.get("driver", m.get("driver_radius")))
+            dvn = float(m.get("driven", m.get("driven_radius")))
+            if drv <= 0 or dvn <= 0:
+                raise ValueError("gear teeth/radius must be positive: %r" % (m,))
+            f = drv / dvn
+            e *= f if m.get("internal") else -f
+        inp = float(a.get("input_rpm", 1.0))
+        return {"stages": len(meshes), "train_value": _round(e, 6),
+                "ratio_magnitude": _round(abs(e), 6),
+                "reduction": _round(1.0 / abs(e), 6) if e else None,
+                "reversing": e < 0, "input_rpm": _round(inp),
+                "output_rpm": _round(inp * e)}
+
     def op_reverse(a):
         """One-shot 'butcher the ox': the whole reverse chain in a single call.
 
@@ -1403,5 +1434,6 @@ def register(state):
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
         "mechanism": op_mechanism, "drive": op_drive, "recognize": op_recognize,
         "reverse": op_reverse, "coaxial": op_coaxial, "fourbar": op_fourbar,
+        "geartrain": op_geartrain,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
