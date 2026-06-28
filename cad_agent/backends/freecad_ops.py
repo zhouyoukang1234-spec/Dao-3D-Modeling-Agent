@@ -10,6 +10,7 @@ The PartDesign feature-tree (editable, parametric) lives in ``freecad_parametric
 import hashlib
 import itertools
 import math
+import os
 
 import FreeCAD as App
 import Part
@@ -828,7 +829,12 @@ def register(state):
             raise ValueError(
                 "solid.fingerprint expects a single solid (got %d); fingerprint "
                 "one part at a time" % len(sols))
-        body = sols[0]
+        return _fingerprint_body(sols[0])
+
+    def _fingerprint_body(body):
+        """Fingerprint a raw solid ``Shape`` — the kernel behind ``fingerprint``,
+        ``match`` and the model-library search (which feeds it shapes loaded from
+        STEP files, not session objects)."""
         vol = body.Volume
         area = body.Area
         iso = area ** 3 / (vol * vol) if vol > 1e-12 else None
@@ -936,6 +942,66 @@ def register(state):
         return {"name": a["name"], "query_key": q["shape_key"],
                 "candidates": len(ranked), "best": ranked[0]["name"],
                 "ranking": ranked}
+
+    def op_library_match(a):
+        """Search a library of model *files* for the part you already need.
+
+        This is ``match`` pointed at the world instead of the open document:
+        given a query solid and a list of model file ``paths`` (STEP/BREP), it
+        loads each file, fingerprints every solid in it, and ranks them against
+        the query by the same scale-invariant distance. The point of integrating
+        the world's models is exactly this — before modelling a part from zero,
+        ask whether a downloaded library already holds the same shape family (a
+        ``same_key`` hit), and if so how to scale it (``volume_ratio``). Files
+        that fail to load are reported in ``skipped`` rather than aborting the
+        search, so one corrupt download never blinds the whole library.
+        """
+        q = _shape_fingerprint(a["name"])
+        paths = a.get("paths")
+        if not paths:
+            raise ValueError(
+                "solid.library_match needs 'paths': [model files] to search; "
+                "point it at a downloaded model library")
+        ranked = []
+        skipped = []
+        for path in paths:
+            if not os.path.isfile(path):
+                skipped.append({"path": path, "reason": "no such file"})
+                continue
+            try:
+                shp = Part.Shape()
+                shp.read(path)
+            except Exception as exc:
+                skipped.append({"path": path, "reason": "unreadable: %s" % exc})
+                continue
+            sols = shp.Solids
+            if not sols:
+                skipped.append({"path": path, "reason": "no solid in file"})
+                continue
+            label = os.path.basename(path)
+            for idx, body in enumerate(sols):
+                try:
+                    c = _fingerprint_body(body)
+                except Exception as exc:
+                    skipped.append({"path": path, "reason": "fingerprint failed: %s" % exc})
+                    continue
+                ranked.append({
+                    "path": path,
+                    "label": label if len(sols) == 1 else "%s#%d" % (label, idx),
+                    "shape_key": c["shape_key"],
+                    "distance": _round(_fp_distance(q, c), 6),
+                    "same_key": c["shape_key"] == q["shape_key"],
+                    "volume_ratio": _round(c["volume"] / q["volume"], 4) if q["volume"] > 1e-12 else None,
+                })
+        if not ranked:
+            raise ValueError(
+                "solid.library_match found no usable solid in %d path(s); "
+                "skipped=%r" % (len(paths), skipped))
+        ranked.sort(key=lambda r: r["distance"])
+        return {"name": a["name"], "query_key": q["shape_key"],
+                "matches": len(ranked), "best": ranked[0]["label"],
+                "best_distance": ranked[0]["distance"],
+                "ranking": ranked, "skipped": skipped}
 
     def _in_principal_frame(body):
         """Return a copy of ``body`` moved to its centroid and rotated so its
@@ -2254,7 +2320,7 @@ def register(state):
         "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
         "curvature": op_curvature, "obb": op_obb, "symmetry": op_symmetry,
         "fingerprint": op_fingerprint, "match": op_match, "chirality": op_chirality,
-        "interference": op_interference,
+        "library_match": op_library_match, "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
