@@ -1085,6 +1085,13 @@ def register(state):
         for o in doc.Objects:
             if o.Name in before:
                 continue
+            # A STEP assembly imports as an App::Part container *plus* its leaf
+            # parts; the container carries a compound Shape of all children, so
+            # without this guard it registers as a phantom extra "solid" that
+            # overlaps every real part and invents spurious joints. Skip any
+            # object that groups other objects -- keep only the leaf solids.
+            if getattr(o, "Group", None):
+                continue
             shp = getattr(o, "Shape", None)
             if shp is None or not getattr(shp, "Solids", None):
                 continue
