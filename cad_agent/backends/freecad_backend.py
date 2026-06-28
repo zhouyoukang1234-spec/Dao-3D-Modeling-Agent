@@ -136,6 +136,19 @@ class FreeCADKernel:
             pass
 
 
+# Heavy ops keep the live kernel busy well past the snappy default: TechDraw
+# projection/section rendering, CalculiX FEM solves and CAM path posting can each
+# run for minutes (and stack up when suites share one box). They get a generous
+# budget so a legitimately slow render is not mistaken for a hang, while light
+# BREP ops keep the short default for fast failure detection.
+_HEAVY_PREFIXES = ("draw.", "fem.", "path.", "cam.")
+_HEAVY_TIMEOUT = 300.0
+
+
+def _op_timeout(op: str) -> float:
+    return _HEAVY_TIMEOUT if op.startswith(_HEAVY_PREFIXES) else 60.0
+
+
 def register_kernel_tools(registry: ToolRegistry, kernel: FreeCADKernel) -> None:
     """Register every kernel op as a tool, prefixing bare BREP ops with ``solid.``."""
     for op in kernel.ops:
@@ -143,7 +156,7 @@ def register_kernel_tools(registry: ToolRegistry, kernel: FreeCADKernel) -> None
 
         def make(op_name: str):
             def handler(args: Dict[str, Any]) -> ToolResult:
-                frame = kernel.call(op_name, args)
+                frame = kernel.call(op_name, args, timeout=_op_timeout(op_name))
                 if frame.get("ok"):
                     return ToolResult.success(**frame.get("data", {}))
                 return ToolResult.failure(frame.get("error", "kernel error"),
