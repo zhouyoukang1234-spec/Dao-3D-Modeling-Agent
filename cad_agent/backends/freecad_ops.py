@@ -1240,6 +1240,60 @@ def register(state):
                 "piston": _round(t), "crank_angle": _round(float(a["angle"])),
                 "rod_len": _round(rod), "rod_len_ok": abs(rod - L) < 1e-6}
 
+    def op_fourbar(a):
+        """Drive a planar four-bar linkage through an input-crank angle.
+
+        The four-bar is the workhorse planar linkage: a ground link ``g`` between
+        two fixed pivots O2 and O4, an input crank ``a`` (O2->A), a coupler ``b``
+        (A->B) and an output rocker ``c`` (O4->B). For input angle theta the
+        crank pin is A = O2 + a(cos, sin); the coupler pin B is the intersection
+        of the circle of radius ``b`` about A with the circle of radius ``c``
+        about O4 (the loop-closure constraint). Two assembly modes exist -- the
+        ``open`` and ``crossed`` circuits -- selected by ``branch``.
+
+        Also reports the Grashof classification from the link lengths, which
+        decides whether the input can fully rotate (crank-rocker) or only rock.
+        """
+        o2x, o2y = [float(v) for v in a.get("ground_point", (0.0, 0.0))[:2]]
+        gdx, gdy = [float(v) for v in a.get("ground_dir", (1.0, 0.0))[:2]]
+        gn = math.hypot(gdx, gdy) or 1.0
+        gdx, gdy = gdx / gn, gdy / gn
+        la = float(a["crank"])
+        lb = float(a["coupler"])
+        lc = float(a["rocker"])
+        lg = float(a["ground"])
+        th = math.radians(float(a["angle"]))
+        # crank turns in the linkage plane; +y is the in-plane normal of ground dir
+        nx, ny = -gdy, gdx
+        ax = o2x + la * (math.cos(th) * gdx + math.sin(th) * nx)
+        ay = o2y + la * (math.cos(th) * gdy + math.sin(th) * ny)
+        o4x, o4y = o2x + lg * gdx, o2y + lg * gdy
+        # circle(A, lb) ∩ circle(O4, lc)
+        dx, dy = o4x - ax, o4y - ay
+        d = math.hypot(dx, dy)
+        if d > lb + lc + 1e-9 or d < abs(lb - lc) - 1e-9 or d == 0:
+            raise ValueError(
+                "four-bar cannot assemble at theta=%g deg: coupler %g and rocker "
+                "%g cannot span A->O4 distance %g" % (float(a["angle"]), lb, lc, d))
+        aa = (lb * lb - lc * lc + d * d) / (2 * d)
+        h = math.sqrt(max(lb * lb - aa * aa, 0.0))
+        mx, my = ax + aa * dx / d, ay + aa * dy / d
+        sign = -1.0 if a.get("branch") == "crossed" else 1.0
+        bx = mx + sign * h * (-dy / d)
+        by = my + sign * h * (dx / d)
+        # Grashof: s + l <= p + q  => at least one link fully rotates
+        links = sorted([la, lb, lc, lg])
+        grashof = (links[0] + links[3]) <= (links[1] + links[2]) + 1e-9
+        coupler = math.hypot(bx - ax, by - ay)
+        rocker = math.hypot(bx - o4x, by - o4y)
+        return {"O2": [_round(o2x), _round(o2y)], "O4": [_round(o4x), _round(o4y)],
+                "A": [_round(ax), _round(ay)], "B": [_round(bx), _round(by)],
+                "crank_angle": _round(float(a["angle"])),
+                "coupler_len": _round(coupler), "rocker_len": _round(rocker),
+                "coupler_ok": abs(coupler - lb) < 1e-6, "rocker_ok": abs(rocker - lc) < 1e-6,
+                "grashof": grashof,
+                "grashof_type": ("crank-rocker" if grashof else "double-rocker")}
+
     def op_reverse(a):
         """One-shot 'butcher the ox': the whole reverse chain in a single call.
 
@@ -1348,6 +1402,6 @@ def register(state):
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
         "mechanism": op_mechanism, "drive": op_drive, "recognize": op_recognize,
-        "reverse": op_reverse, "coaxial": op_coaxial,
+        "reverse": op_reverse, "coaxial": op_coaxial, "fourbar": op_fourbar,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
