@@ -53,6 +53,22 @@ def _metrics(shape):
     return data
 
 
+def _center(shape):
+    """Centroid of a shape, tolerant of compounds.
+
+    Boolean ops (``cut``/``union``/``common``) routinely return a
+    ``Part.Compound`` which — unlike a single ``Solid`` — has no
+    ``CenterOfMass``. The mould-half classification only needs a representative
+    interior point, so fall back to the bounding-box centre when the true
+    centroid is unavailable.
+    """
+    try:
+        return shape.CenterOfMass
+    except (AttributeError, RuntimeError):
+        bb = shape.BoundBox
+        return V(bb.Center.x, bb.Center.y, bb.Center.z)
+
+
 def _profile_face(spec):
     """Build a planar face (on XY) from a profile spec dict.
 
@@ -335,7 +351,7 @@ def register(state):
         sh = _get(a["name"]).Shape
         pull = _vec(a.get("pull", (0, 0, 1)))
         plen = pull.Length or 1.0
-        com = sh.CenterOfMass
+        com = _center(sh)
         min_draft = float(a.get("min_draft", 1.0))
         sin_min = math.sin(math.radians(min_draft))
         walls, toward, away = [], 0, 0
