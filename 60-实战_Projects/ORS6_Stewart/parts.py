@@ -30,8 +30,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # STL_ROOT 解析 — 道法自然: 先看环境, 再看近邻, 再看本地
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _locate_stl_root() -> str:
-    """按优先级定位 STL 根目录."""
+def _locate_stl_root(strict: bool = False) -> str:
+    """按优先级定位 STL 根目录.
+
+    反者道之动: STL 是渲染期才需要的资源 (常驻用户电脑, 经 DAO Bridge 拉取).
+    为让 parts.py 的纯常数 (SR6/SERVO_SLOTS/HOME_H) 在无 STL 环境也能 import,
+    找不到时返回 "" 而非 raise; 仅 stl_path() 实际取用时才 strict raise.
+    """
     # 1. 环境变量
     env = os.environ.get("ORS6_STL_ROOT")
     if env and os.path.isdir(env):
@@ -46,18 +51,20 @@ def _locate_stl_root() -> str:
     if ors6_default.is_dir():
         return str(ors6_default)
 
-    # 3. 本地 symlink
+    # 3. 本地 symlink / 目录
     local = Path(SCRIPT_DIR) / "STLs"
     if local.is_dir():
         return str(local)
 
-    raise RuntimeError(
-        "ORS6 STL root not found. Set ORS6_STL_ROOT env var or place STLs "
-        f"under {ors6_default} or {local}."
-    )
+    if strict:
+        raise RuntimeError(
+            "ORS6 STL root not found. Set ORS6_STL_ROOT env var or place STLs "
+            f"under {ors6_default} or {local}."
+        )
+    return ""
 
 
-STL_ROOT: str = _locate_stl_root()
+STL_ROOT: str = _locate_stl_root(strict=False)
 BOUNDS_FILE: str = os.path.join(SCRIPT_DIR, "_stl_bounds.json")
 
 
@@ -179,12 +186,13 @@ def stl_path(name: str) -> str:
     if name not in PARTS:
         raise KeyError(f"Unknown part: {name!r}. Valid: {sorted(PARTS)}")
     sub, fn, _, _ = PARTS[name]
+    root = STL_ROOT or _locate_stl_root(strict=True)
     if sub == "__custom__":
         # ESP32_Mount lives in ORS6-VAM饮料摇匀器/custom_parts (sibling of 3D建模Agent)
         workspace_root = Path(SCRIPT_DIR).parents[2]  # 一生二
         p = workspace_root / "ORS6-VAM饮料摇匀器" / "custom_parts" / fn
         return str(p)
-    return os.path.join(STL_ROOT, sub, fn)
+    return os.path.join(root, sub, fn)
 
 
 def load_stl(name: str):
