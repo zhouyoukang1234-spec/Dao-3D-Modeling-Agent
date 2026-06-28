@@ -2142,6 +2142,85 @@ def register(state):
                 "fillet_count": sum(g["count"] for g in fillets),
                 "radii": sorted({g["radius"] for g in groups})}
 
+    def op_design_intent(a):
+        """Fuse the reverse-engineering reads into one design-intent digest.
+
+        The reverse half walks a real part back to "the first thought": what
+        rough stock, what primitive, which symmetry, which drilled holes and
+        turned bosses, which broken edges. Each sub-read is an existing, closed
+        -form-verified operator (``obb`` for stock+frame, ``recognize`` for a
+        primitive guess, ``symmetry`` for the design's regularity, ``holes`` for
+        mounting features, ``fillets`` for edge breaks); this composes them into
+        one card plus an ordered, human-readable build ``recipe`` -- the forward
+        program a clean CAD model would run to reproduce the part. args: name,
+        tol. Sub-reads that a part defeats (e.g. symmetry on a huge mesh) degrade
+        to null rather than failing the whole digest.
+        """
+        name = a["name"]
+        sols = _get(name).Shape.Solids
+        if not sols:
+            raise ValueError(
+                "solid.design_intent needs a solid (got a shell/compound with "
+                "no volume)")
+        if len(sols) != 1:
+            raise ValueError(
+                "solid.design_intent expects a single solid (got %d); run "
+                "solid.decompose and digest one part at a time" % len(sols))
+        prim = op_recognize({"name": name})
+        box = op_obb({"name": name})
+        try:
+            sym = op_symmetry({"name": name, "method": "invariant"})
+        except Exception:
+            sym = None
+        feats = op_holes({"name": name})
+        bl = op_fillets({"name": name})
+
+        dims = box["sorted_dimensions"]
+        is_prim = (prim.get("type") not in (None, "freeform")
+                   and prim.get("volume_match"))
+        recipe = []
+        # a volume-matched primitive *is* the whole part: its closed-form volume
+        # equals the measured volume, so there are no subtractions (a hole) or
+        # additions (a boss) -- the cylindrical body's own face that ``holes``
+        # honestly reports as a boss is the body, not an added feature.
+        if is_prim:
+            recipe.append("start from a %s %s" % (prim["type"], prim.get("params")))
+            holes, bosses = [], []
+            rounds = fillets = 0
+            radii = []
+        else:
+            recipe.append("start from a %g x %g x %g block (rough stock)"
+                          % (dims[0], dims[1], dims[2]))
+            holes = [f for f in feats["features"] if f["kind"] == "hole"]
+            bosses = [f for f in feats["features"] if f["kind"] == "boss"]
+            rounds, fillets, radii = bl["round_count"], bl["fillet_count"], bl["radii"]
+        for h in holes:
+            recipe.append("drill phi%g %s hole, depth %g"
+                          % (2 * h["radius"], "through" if h["through"] else "blind",
+                             h["depth"]))
+        for b in bosses:
+            recipe.append("add phi%g boss, height %g%s"
+                          % (2 * b["radius"], b["depth"],
+                             " (stepped)" if b["counterbored"] else ""))
+        if rounds or fillets:
+            recipe.append("break edges: %d round(s) + %d fillet(s) at r=%s"
+                          % (rounds, fillets, radii))
+        return {
+            "name": name,
+            "stock": {"size": dims, "fill_ratio": box["fill_ratio"],
+                      "axes": box["axes"]},
+            "primitive": {"type": prim.get("type"), "params": prim.get("params"),
+                          "volume_match": prim.get("volume_match")},
+            "symmetry": None if sym is None else {
+                "mirror_planes": sym.get("mirror_plane_count"),
+                "max_rotation": sym.get("max_rotational_order")},
+            "holes": {"count": len(holes),
+                      "through": sum(1 for h in holes if h["through"]),
+                      "bosses": len(bosses)},
+            "blends": {"rounds": rounds, "fillets": fillets, "radii": radii},
+            "recipe": recipe,
+        }
+
     def op_joints(a):
         """Infer revolute joints between parts from shared coaxial cylinders.
 
@@ -2852,6 +2931,7 @@ def register(state):
         "fingerprint": op_fingerprint, "match": op_match, "chirality": op_chirality,
         "holes": op_holes,
         "fillets": op_fillets,
+        "design_intent": op_design_intent,
         "library_match": op_library_match, "library_index": op_library_index,
         "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
