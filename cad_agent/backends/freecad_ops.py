@@ -22,6 +22,11 @@ def _round(x, n=4):
     return round(float(x), n)
 
 
+def _unit(v):
+    n = math.sqrt(sum(c * c for c in v))
+    return tuple(c / n for c in v) if n else tuple(v)
+
+
 def _vec(seq, default=(0, 0, 0)):
     if seq is None:
         seq = default
@@ -934,6 +939,58 @@ def register(state):
             res = accept("sphere", {"radius": _round(r)}, 4.0 / 3.0 * math.pi * r ** 3)
             if res["volume_match"]:
                 return res
+
+        # torus / O-ring / ring-gasket: a single toroidal face.
+        if len(faces) == 1 and kinds.get("Toroid") == 1:
+            su = faces[0].Surface
+            big, small = float(su.MajorRadius), float(su.MinorRadius)
+            ax = _unit((su.Axis.x, su.Axis.y, su.Axis.z))
+            res = accept("torus", {"major_radius": _round(big), "minor_radius": _round(small),
+                                   "axis": [_round(c, 6) for c in ax]},
+                         2.0 * math.pi ** 2 * big * small * small)
+            if res["volume_match"]:
+                return res
+
+        def _cap_circle(f):
+            for e in f.Edges:
+                cur = e.Curve
+                if cur.__class__.__name__ == "Circle":
+                    c = cur.Center
+                    return float(cur.Radius), (c.x, c.y, c.z)
+            return None
+
+        # full cone (nozzle / point): one conical face closed by one planar base.
+        if len(faces) == 2 and kinds.get("Cone") == 1 and kinds.get("Plane") == 1:
+            cone = next(f.Surface for f in faces if f.Surface.__class__.__name__ == "Cone")
+            plane = next(f for f in faces if f.Surface.__class__.__name__ == "Plane")
+            ax = _unit((cone.Axis.x, cone.Axis.y, cone.Axis.z))
+            cc = _cap_circle(plane)
+            if cc is not None:
+                rad, ctr = cc
+                ap = cone.Apex
+                h = abs((ap.x - ctr[0]) * ax[0] + (ap.y - ctr[1]) * ax[1] + (ap.z - ctr[2]) * ax[2])
+                res = accept("cone", {"radius": _round(rad), "height": _round(h),
+                                      "axis": [_round(c, 6) for c in ax]},
+                             math.pi * rad * rad * h / 3.0)
+                if res["volume_match"]:
+                    return res
+
+        # truncated cone / frustum (tapered boss): one conical wall, two circular
+        # caps of differing radius.
+        if len(faces) == 3 and kinds.get("Cone") == 1 and kinds.get("Plane") == 2:
+            cone = next(f.Surface for f in faces if f.Surface.__class__.__name__ == "Cone")
+            ax = _unit((cone.Axis.x, cone.Axis.y, cone.Axis.z))
+            caps = [c for c in (_cap_circle(f) for f in faces
+                                if f.Surface.__class__.__name__ == "Plane") if c is not None]
+            if len(caps) == 2:
+                (r1, c1), (r2, c2) = caps
+                big, small = max(r1, r2), min(r1, r2)
+                h = abs((c2[0] - c1[0]) * ax[0] + (c2[1] - c1[1]) * ax[1] + (c2[2] - c1[2]) * ax[2])
+                res = accept("frustum", {"base_radius": _round(big), "top_radius": _round(small),
+                                         "height": _round(h), "axis": [_round(c, 6) for c in ax]},
+                             math.pi * h * (big * big + big * small + small * small) / 3.0)
+                if res["volume_match"]:
+                    return res
 
         def _cap_height(ax):
             caps = [f for f in faces if f.Surface.__class__.__name__ == "Plane"]

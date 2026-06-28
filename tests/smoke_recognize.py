@@ -101,6 +101,30 @@ def main():
     assert abs(_vol(s, "lbkt") - 600 * 8) < 1e-6
     print("L-bracket recognized as prism: area %.1f, length %.1f" % (r["params"]["profile_area"], r["params"]["length"]))
 
+    # ---- full cone (nozzle/point): V = pi r^2 h / 3 ----------------------- #
+    s.act("solid.cone", {"name": "cone", "radius1": 8, "radius2": 0, "height": 20})
+    r = s.act("solid.recognize", {"name": "cone"}).data
+    assert r["type"] == "cone" and r["volume_match"], r
+    assert abs(r["params"]["radius"] - 8) < 1e-6 and abs(r["params"]["height"] - 20) < 1e-6, r
+    assert abs(_vol(s, "cone") - math.pi * 64 * 20 / 3) < 1e-3
+    print("cone recovered R/H = %.1f/%.1f" % (r["params"]["radius"], r["params"]["height"]))
+
+    # ---- frustum (tapered boss): V = pi h (R^2+Rr+r^2)/3 ------------------ #
+    s.act("solid.cone", {"name": "frus", "radius1": 8, "radius2": 4, "height": 15})
+    r = s.act("solid.recognize", {"name": "frus"}).data
+    assert r["type"] == "frustum" and r["volume_match"], r
+    assert abs(r["params"]["base_radius"] - 8) < 1e-6 and abs(r["params"]["top_radius"] - 4) < 1e-6, r
+    assert abs(r["params"]["height"] - 15) < 1e-6, r
+    print("frustum recovered R/r/H = %.1f/%.1f/%.1f" % (r["params"]["base_radius"], r["params"]["top_radius"], r["params"]["height"]))
+
+    # ---- torus (O-ring/gasket): V = 2 pi^2 R r^2 -------------------------- #
+    s.act("solid.torus", {"name": "tor", "radius1": 20, "radius2": 5})
+    r = s.act("solid.recognize", {"name": "tor"}).data
+    assert r["type"] == "torus" and r["volume_match"], r
+    assert abs(r["params"]["major_radius"] - 20) < 1e-6 and abs(r["params"]["minor_radius"] - 5) < 1e-6, r
+    assert abs(_vol(s, "tor") - 2 * math.pi ** 2 * 20 * 25) < 1e-2
+    print("torus recovered R/r = %.1f/%.1f" % (r["params"]["major_radius"], r["params"]["minor_radius"]))
+
     # ---- negative: a filleted block is NOT a box (no false primitive) ----- #
     s.act("solid.box", {"name": "rb", "length": 20, "width": 20, "height": 20})
     fr = s.act("solid.fillet", {"name": "rb", "radius": 3, "out": "rbf"})
