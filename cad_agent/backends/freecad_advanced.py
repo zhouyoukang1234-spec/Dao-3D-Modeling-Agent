@@ -137,6 +137,20 @@ def register(state):
                 "bytes": os.path.getsize(a["path"]) if os.path.exists(a["path"]) else 0}
 
     # ---- TechDraw 2D drawing --------------------------------------------- #
+    # standard orthographic / pictorial projection directions (first-angle)
+    _DRAW_DIRS = {
+        "front": (0, -1, 0), "rear": (0, 1, 0), "back": (0, 1, 0),
+        "top": (0, 0, 1), "bottom": (0, 0, -1),
+        "right": (1, 0, 0), "left": (-1, 0, 0),
+        "iso": (1, -1, 1),
+    }
+    # page layout (mm) per view in a standard first-angle arrangement
+    _DRAW_POS = {
+        "front": (110, 150), "top": (110, 230), "right": (210, 150),
+        "left": (10, 150), "rear": (290, 150), "bottom": (110, 70),
+        "iso": (250, 230),
+    }
+
     def op_techdraw(a):
         obj = None
         name = a["name"]
@@ -158,13 +172,43 @@ def register(state):
         if tmpl and os.path.exists(tmpl):
             template.Template = tmpl
         page.Template = template
-        view = doc.addObject("TechDraw::DrawViewPart", "ViewFront")
-        view.Source = [obj]
-        view.Direction = V(0, -1, 0)
-        view.Scale = float(a.get("scale", 1.0))
-        page.addView(view)
+
+        views = a.get("views", ["front"])
+        if isinstance(views, str):
+            views = [views]
+        scale = float(a.get("scale", 1.0))
+        made = []
+        for vname in views:
+            key = vname.lower()
+            if key not in _DRAW_DIRS:
+                raise ValueError("unknown view %r (choose from %s)" % (vname, sorted(_DRAW_DIRS)))
+            v = doc.addObject("TechDraw::DrawViewPart", "View" + key.title())
+            v.Source = [obj]
+            v.Direction = V(*_DRAW_DIRS[key])
+            v.Scale = scale
+            page.addView(v)
+            px, py = _DRAW_POS.get(key, (110, 150))
+            v.X, v.Y = float(px), float(py)
+            made.append(v.Name)
         doc.recompute()
-        out = {"page": page.Name, "views": ["ViewFront"], "template": tmpl}
+
+        out = {"page": page.Name, "views": made, "template": tmpl}
+
+        # overall dimensions block (robust headless: annotate the B-rep extents
+        # + mass instead of fragile projected-vertex dimension references)
+        if a.get("dimensions"):
+            bb = obj.Shape.BoundBox
+            note = doc.addObject("TechDraw::DrawViewAnnotation", "Dims")
+            lines = ["OVERALL  %.1f x %.1f x %.1f mm"
+                     % (bb.XLength, bb.YLength, bb.ZLength),
+                     "VOLUME  %.1f mm^3" % obj.Shape.Volume]
+            note.Text = lines
+            page.addView(note)
+            note.X, note.Y = 250.0, 60.0
+            doc.recompute()
+            out["dimensions"] = {"length": round(bb.XLength, 3), "width": round(bb.YLength, 3),
+                                 "height": round(bb.ZLength, 3), "volume": round(obj.Shape.Volume, 3)}
+
         path = a.get("path")
         if path:
             try:

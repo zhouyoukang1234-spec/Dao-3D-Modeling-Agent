@@ -25,7 +25,7 @@
 ## 入口
 
 ```bash
-# 29/29 live 套件 (真实内核; 含 modal + 高阶建模 + CAM 挖槽刀路)
+# 30/30 live 套件 (真实内核; 含 modal + 高阶建模 + CAM 挖槽 + 多视图工程图)
 python verify_agent.py
 
 # 五物理验道 (闭式解校验)
