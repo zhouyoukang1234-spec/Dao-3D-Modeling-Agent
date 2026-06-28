@@ -1,0 +1,90 @@
+{
+  "glb": "assets/ORS6_assembled.glb",
+  "n_parts": 32,
+  "rods": {
+    "LowerLeft": {
+      "length_mm": 175.0
+    },
+    "UpperLeft": {
+      "length_mm": 175.0
+    },
+    "LeftPitch": {
+      "length_mm": 177.059
+    },
+    "RightPitch": {
+      "length_mm": 172.772
+    },
+    "UpperRight": {
+      "length_mm": 175.0
+    },
+    "LowerRight": {
+      "length_mm": 175.0
+    },
+    "_summary": {
+      "main_lengths": [
+        175.0,
+        175.0,
+        175.0,
+        175.0
+      ],
+      "pitch_lengths": [
+        177.059,
+        172.772
+      ],
+      "main_equal_spread_mm": 0.0,
+      "pitch_equal_spread_mm": 4.287,
+      "main_vs_175_max_err_mm": 0.0,
+      "main_equal_pass": true,
+      "main_175_pass": true,
+      "pitch_equal_pass": false
+    }
+  },
+  "seating": {
+    "LowerLeft": {
+      "arm_ball_to_arm_mm": 36.02,
+      "recv_ball_to_receiver_mm": 56.53,
+      "seated_pass": false
+    },
+    "UpperLeft": {
+      "arm_ball_to_arm_mm": 36.72,
+      "recv_ball_to_receiver_mm": 5.38,
+      "seated_pass": false
+    },
+    "LeftPitch": {
+      "arm_ball_to_arm_mm": 32.84,
+      "recv_ball_to_receiver_mm": 3.22,
+      "seated_pass": false
+    },
+    "RightPitch": {
+      "arm_ball_to_arm_mm": 17.68,
+      "recv_ball_to_receiver_mm": 6.26,
+      "seated_pass": false
+    },
+    "UpperRight": {
+      "arm_ball_to_arm_mm": 35.48,
+      "recv_ball_to_receiver_mm": 12.33,
+      "seated_pass": false
+    },
+    "LowerRight": {
+      "arm_ball_to_arm_mm": 35.48,
+      "recv_ball_to_receiver_mm": 65.55,
+      "seated_pass": false
+    }
+  },
+  "penetration": {
+    "pairs": [
+      {
+        "pair": "Rod_UpperLeft ∩ Receiver",
+        "inside_frac": 0.002,
+        "max_depth_mm": 0.39
+      }
+    ],
+    "pen_tol_mm": 1.5
+  },
+  "pass": {
+    "rods": false,
+    "seating": false,
+    "penetration": true,
+    "all": false
+  }
+}

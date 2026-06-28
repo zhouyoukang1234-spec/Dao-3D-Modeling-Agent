@@ -1,0 +1,175 @@
+{
+  "glb": "ORS6_Stewart/output/native_assembly/ORS6_native_full.glb",
+  "n_parts": 32,
+  "rods": {
+    "LowerLeft": {
+      "length_mm": 165.425
+    },
+    "UpperLeft": {
+      "length_mm": 165.425
+    },
+    "LeftPitch": {
+      "length_mm": 165.425
+    },
+    "RightPitch": {
+      "length_mm": 165.425
+    },
+    "UpperRight": {
+      "length_mm": 165.425
+    },
+    "LowerRight": {
+      "length_mm": 165.425
+    },
+    "_summary": {
+      "main_lengths": [
+        165.425,
+        165.425,
+        165.425,
+        165.425
+      ],
+      "pitch_lengths": [
+        165.425,
+        165.425
+      ],
+      "main_equal_spread_mm": 0.0,
+      "pitch_equal_spread_mm": 0.0,
+      "main_vs_175_max_err_mm": 9.575,
+      "main_equal_pass": true,
+      "main_175_pass": false,
+      "pitch_equal_pass": true
+    }
+  },
+  "seating": {
+    "LowerLeft": {
+      "arm_ball_to_arm_mm": 1.44,
+      "recv_ball_to_receiver_mm": 1.57,
+      "seated_pass": true
+    },
+    "UpperLeft": {
+      "arm_ball_to_arm_mm": 1.12,
+      "recv_ball_to_receiver_mm": 0.52,
+      "seated_pass": true
+    },
+    "LeftPitch": {
+      "arm_ball_to_arm_mm": 0.97,
+      "recv_ball_to_receiver_mm": 0.28,
+      "seated_pass": true
+    },
+    "RightPitch": {
+      "arm_ball_to_arm_mm": 1.27,
+      "recv_ball_to_receiver_mm": 0.26,
+      "seated_pass": true
+    },
+    "UpperRight": {
+      "arm_ball_to_arm_mm": 1.1,
+      "recv_ball_to_receiver_mm": 1.08,
+      "seated_pass": true
+    },
+    "LowerRight": {
+      "arm_ball_to_arm_mm": 1.52,
+      "recv_ball_to_receiver_mm": 0.75,
+      "seated_pass": true
+    }
+  },
+  "penetration": {
+    "pairs": [
+      {
+        "pair": "Arm_LowerLeft ∩ L_Pitcher",
+        "inside_frac": 0.265,
+        "max_depth_mm": 5.24
+      },
+      {
+        "pair": "Arm_UpperRight ∩ R_Pitcher",
+        "inside_frac": 0.349,
+        "max_depth_mm": 5.23
+      },
+      {
+        "pair": "Rod_LeftPitch ∩ Arm_LowerLeft",
+        "inside_frac": 0.033,
+        "max_depth_mm": 4.03
+      },
+      {
+        "pair": "Rod_LeftPitch ∩ L_Pitcher",
+        "inside_frac": 0.044,
+        "max_depth_mm": 3.95
+      },
+      {
+        "pair": "Rod_LowerLeft ∩ Receiver",
+        "inside_frac": 0.04,
+        "max_depth_mm": 3.46
+      },
+      {
+        "pair": "Rod_LeftPitch ∩ Receiver",
+        "inside_frac": 0.035,
+        "max_depth_mm": 3.37
+      },
+      {
+        "pair": "Rod_LowerRight ∩ Receiver",
+        "inside_frac": 0.038,
+        "max_depth_mm": 3.32
+      },
+      {
+        "pair": "Rod_LowerLeft ∩ Arm_LowerLeft",
+        "inside_frac": 0.026,
+        "max_depth_mm": 3.31
+      },
+      {
+        "pair": "Rod_LowerRight ∩ Arm_LowerRight",
+        "inside_frac": 0.022,
+        "max_depth_mm": 3.2
+      },
+      {
+        "pair": "Rod_RightPitch ∩ Receiver",
+        "inside_frac": 0.035,
+        "max_depth_mm": 3.16
+      },
+      {
+        "pair": "Rod_UpperRight ∩ Arm_UpperRight",
+        "inside_frac": 0.029,
+        "max_depth_mm": 2.97
+      },
+      {
+        "pair": "Rod_UpperLeft ∩ Arm_UpperLeft",
+        "inside_frac": 0.023,
+        "max_depth_mm": 2.67
+      },
+      {
+        "pair": "Rod_RightPitch ∩ R_Pitcher",
+        "inside_frac": 0.022,
+        "max_depth_mm": 2.67
+      },
+      {
+        "pair": "Rod_RightPitch ∩ Arm_UpperRight",
+        "inside_frac": 0.012,
+        "max_depth_mm": 2.56
+      },
+      {
+        "pair": "Rod_UpperLeft ∩ Receiver",
+        "inside_frac": 0.023,
+        "max_depth_mm": 2.03
+      },
+      {
+        "pair": "Rod_LowerLeft ∩ Rod_UpperLeft",
+        "inside_frac": 0.006,
+        "max_depth_mm": 1.36
+      },
+      {
+        "pair": "Rod_UpperRight ∩ Receiver",
+        "inside_frac": 0.021,
+        "max_depth_mm": 1.25
+      },
+      {
+        "pair": "Rod_UpperRight ∩ Rod_LowerRight",
+        "inside_frac": 0.007,
+        "max_depth_mm": 0.94
+      }
+    ],
+    "pen_tol_mm": 1.5
+  },
+  "pass": {
+    "rods": false,
+    "seating": true,
+    "penetration": false,
+    "all": false
+  }
+}
