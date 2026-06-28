@@ -636,6 +636,76 @@ def register(state):
             out["Ix"] = out["Iy"] = None
         return out
 
+    def op_dfm_report(a):
+        """Unified manufacturability report: run the DFM checks a chosen process
+        actually cares about and fold them into one verdict.
+
+        This is the orchestration layer over the per-pillar tools — it owns the
+        domain knowledge of *which* checks gate *which* process, so a caller asks
+        one question ("can I injection-mould / 3D-print / cast this?") instead of
+        wiring the trio by hand:
+
+          * ``injection`` — draft + min wall + no undercut (two-plate mould);
+          * ``casting``   — draft + min wall (heavier drafts/walls by default);
+          * ``print``     — overhang (support-free) + min wall (additive).
+
+        ``axis`` is the pull/build direction (default +Z). Per-process defaults
+        can be overridden via ``min_draft`` / ``min_wall`` / ``max_overhang``.
+        Returns each check's verdict, the issues found, and ``manufacturable``
+        (True only when every gating check passes).
+
+        args: name, process (injection|casting|print), axis, thresholds...
+        """
+        proc = str(a.get("process", "injection")).lower()
+        axis = a.get("axis", (0, 0, 1))
+        name = a["name"]
+        defaults = {
+            "injection": {"min_draft": 1.0, "min_wall": 1.0},
+            "casting": {"min_draft": 2.0, "min_wall": 3.0},
+            "print": {"max_overhang": 45.0, "min_wall": 0.8},
+        }
+        if proc not in defaults:
+            raise ValueError("unknown process %r (injection|casting|print)" % proc)
+        cfg = {**defaults[proc], **{k: a[k] for k in
+               ("min_draft", "min_wall", "max_overhang") if k in a}}
+        checks, issues = {}, []
+
+        if proc in ("injection", "casting"):
+            d = op_draft({"name": name, "pull": axis, "min_draft": cfg["min_draft"]})
+            checks["draft"] = {"pass": d["draftable"], "min_draft_deg": cfg["min_draft"],
+                               "insufficient": d["insufficient_draft"], "walls": d["walls"]}
+            if not d["draftable"]:
+                issues.append("%d face(s) below %.1f deg draft" %
+                              (d["insufficient_draft"], cfg["min_draft"]))
+            u = op_undercut({"name": name, "pull": axis})
+            checks["undercut"] = {"pass": u["moldable"], "undercuts": u["undercuts"],
+                                  "faces": u["undercut_faces"]}
+            if not u["moldable"]:
+                issues.append("%d undercut face(s) trap the mould" % u["undercuts"])
+        if proc == "print":
+            o = op_overhang({"name": name, "build": axis,
+                             "max_overhang": cfg["max_overhang"]})
+            checks["overhang"] = {"pass": o["printable"], "overhangs": o["overhangs"],
+                                  "max_overhang_deg": cfg["max_overhang"],
+                                  "faces": o["overhang_faces"]}
+            if not o["printable"]:
+                issues.append("%d face(s) overhang past %.0f deg (need support)" %
+                              (o["overhangs"], cfg["max_overhang"]))
+
+        t = op_thickness({"name": name, "min_wall": cfg["min_wall"]})
+        checks["thickness"] = {"pass": len(t["thin_walls"]) == 0,
+                               "min_wall_mm": cfg["min_wall"],
+                               "min_thickness": t["min_thickness"],
+                               "thin_walls": t["thin_walls"]}
+        if t["thin_walls"]:
+            issues.append("%d region(s) thinner than %.2f mm" %
+                          (len(t["thin_walls"]), cfg["min_wall"]))
+
+        ok = all(c["pass"] for c in checks.values())
+        return {"process": proc,
+                "axis": [_round(axis[0]), _round(axis[1]), _round(axis[2])],
+                "manufacturable": ok, "checks": checks, "issues": issues}
+
     # ---- document management --------------------------------------------- #
     def op_list(a):
         return {"solids": list(state.shapes.keys())}
@@ -701,6 +771,6 @@ def register(state):
         "pattern_linear": op_pattern_linear, "pattern_polar": op_pattern_polar,
         "measure": op_measure, "inspect": op_inspect, "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
-        "overhang": op_overhang, "section": op_section,
+        "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }

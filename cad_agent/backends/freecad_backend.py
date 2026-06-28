@@ -30,7 +30,7 @@ _SOLID_OPS = {
     "shell", "translate", "rotate", "mirror", "union", "cut", "common", "fillet",
     "chamfer", "pattern_linear", "pattern_polar", "measure", "inspect",
     "interference", "draft", "thickness", "undercut", "overhang", "section",
-    "list", "delete", "export", "import_step",
+    "dfm_report", "list", "delete", "export", "import_step",
 }
 
 
