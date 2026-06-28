@@ -1340,6 +1340,38 @@ def register(state):
                                "ratio": _round(ri["radius"] / rj["radius"], 6)})
         return {"parts": names, "meshes": len(meshes), "mesh_list": meshes}
 
+    def op_rackpinion(a):
+        """Rack-and-pinion: convert pinion rotation to/from rack travel.
+
+        The drivetrain's last stage often turns rotation into straight-line
+        motion. A pinion of pitch radius r rolls without slipping on a rack, so
+        the rack advances exactly the pitch-circle arc: x = r * theta (theta in
+        radians), and one full pinion revolution moves the rack one pitch
+        circumference 2*pi*r. The pitch radius may be given directly or as
+        module * teeth / 2. Give ``angle`` (deg) to get rack travel, or
+        ``travel`` to get the pinion angle -- the map is exact and invertible.
+        """
+        if "pitch_radius" in a:
+            r = float(a["pitch_radius"])
+        elif "module" in a and "teeth" in a:
+            r = float(a["module"]) * float(a["teeth"]) / 2.0
+        else:
+            raise ValueError("rackpinion needs pitch_radius or (module, teeth)")
+        if r <= 0:
+            raise ValueError("pitch radius must be positive")
+        out = {"pitch_radius": _round(r), "travel_per_rev": _round(2 * math.pi * r)}
+        if "angle" in a:
+            th = math.radians(float(a["angle"]))
+            out["angle"] = _round(float(a["angle"]))
+            out["travel"] = _round(r * th)
+        elif "travel" in a:
+            x = float(a["travel"])
+            out["travel"] = _round(x)
+            out["angle"] = _round(math.degrees(x / r))
+        else:
+            raise ValueError("rackpinion needs angle (deg) or travel")
+        return out
+
     def op_geartrain(a):
         """Compute the train value (speed ratio) of an ordinary gear train.
 
@@ -1483,5 +1515,6 @@ def register(state):
         "mechanism": op_mechanism, "drive": op_drive, "recognize": op_recognize,
         "reverse": op_reverse, "coaxial": op_coaxial, "fourbar": op_fourbar,
         "geartrain": op_geartrain, "gearmesh": op_gearmesh,
+        "rackpinion": op_rackpinion,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
