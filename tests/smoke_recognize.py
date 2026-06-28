@@ -13,6 +13,7 @@ the recovered parameters, and assert volume + bounding box match to machine
 precision. Then we exercise it through the reverse pipeline: a compound of mixed
 primitives decomposes and every leaf is recognized and reconstructed.
 """
+import math
 import os
 import sys
 
@@ -78,6 +79,27 @@ def main():
     s.act("solid.cut", {"a": "ro", "b": "ri", "out": "tube2"})
     assert abs(_vol(s, "tube2") - _vol(s, "tube")) < 1e-6
     print("tube recovered Ro/Ri/H = %.1f/%.1f/%.1f, parametric rebuild matches" % (p["outer_radius"], p["inner_radius"], p["height"]))
+
+    # ---- general prism: a hex bar (extruded hexagon) ---------------------- #
+    hexpts = [[10 * math.cos(math.radians(60 * k)), 10 * math.sin(math.radians(60 * k))] for k in range(6)]
+    s.act("solid.extrude", {"name": "hexbar", "profile": {"polygon": hexpts}, "height": 30})
+    r = s.act("solid.recognize", {"name": "hexbar"}).data
+    assert r["type"] == "prism" and r["volume_match"], r
+    assert r["params"]["sides"] == 6 and abs(r["params"]["length"] - 30) < 1e-6, r
+    # closed-form hexagon area = 3*sqrt(3)/2 * s^2 with s = circumradius = 10
+    assert abs(r["params"]["profile_area"] - 3 * math.sqrt(3) / 2 * 100) < 1e-3, r
+    print("hex bar recognized as prism: %d sides, area %.2f, length %.1f"
+          % (r["params"]["sides"], r["params"]["profile_area"], r["params"]["length"]))
+
+    # ---- general prism: an L-bracket profile ------------------------------ #
+    lpts = [[0, 0], [40, 0], [40, 10], [10, 10], [10, 30], [0, 30]]
+    s.act("solid.extrude", {"name": "lbkt", "profile": {"polygon": lpts}, "height": 8})
+    r = s.act("solid.recognize", {"name": "lbkt"}).data
+    assert r["type"] == "prism" and r["volume_match"], r
+    # L-area = 40*10 + 10*20 = 600; volume = 600*8
+    assert abs(r["params"]["profile_area"] - 600) < 1e-6 and abs(r["params"]["length"] - 8) < 1e-6, r
+    assert abs(_vol(s, "lbkt") - 600 * 8) < 1e-6
+    print("L-bracket recognized as prism: area %.1f, length %.1f" % (r["params"]["profile_area"], r["params"]["length"]))
 
     # ---- negative: a filleted block is NOT a box (no false primitive) ----- #
     s.act("solid.box", {"name": "rb", "length": 20, "width": 20, "height": 20})

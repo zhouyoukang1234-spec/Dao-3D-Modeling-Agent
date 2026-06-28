@@ -968,6 +968,32 @@ def register(state):
                          lx * ly * lz)
             if res["volume_match"]:
                 return res
+        # general prism: an extrusion of an arbitrary polygonal profile -- two
+        # congruent parallel cap faces (normal = extrusion axis) and side walls
+        # all parallel to that axis. Covers hex bars, L/T/U brackets, etc. The
+        # cap's own face area times the cap separation must equal the volume.
+        if len(faces) >= 5 and kinds.get("Plane") == len(faces):
+            pf = _plane_faces(sh)
+            for cand in pf:
+                ax = cand["n"]
+                caps = [f for f in pf if abs(abs(f["n"][0] * ax[0] + f["n"][1] * ax[1]
+                                                 + f["n"][2] * ax[2]) - 1.0) < 1e-6]
+                sides = [f for f in pf if abs(f["n"][0] * ax[0] + f["n"][1] * ax[1]
+                                              + f["n"][2] * ax[2]) < 1e-6]
+                if len(caps) != 2 or len(caps) + len(sides) != len(pf):
+                    continue
+                fcaps = [f for f in faces if f.Surface.__class__.__name__ == "Plane"
+                         and abs(abs(f.Surface.Axis.normalize().dot(V(*ax))) - 1.0) < 1e-6]
+                if len(fcaps) != 2 or abs(fcaps[0].Area - fcaps[1].Area) > 1e-6 * max(fcaps[0].Area, 1.0):
+                    continue
+                c0, c1 = caps[0]["p"], caps[1]["p"]
+                length = abs(sum((c1[k] - c0[k]) * ax[k] for k in range(3)))
+                area = fcaps[0].Area
+                res = accept("prism", {"profile_area": _round(area), "length": _round(length),
+                                       "axis": [_round(c, 6) for c in ax],
+                                       "sides": len(sides)}, area * length)
+                if res["volume_match"]:
+                    return res
         return dict(base, type="freeform", params=None, volume_match=False)
 
     def op_joints(a):
