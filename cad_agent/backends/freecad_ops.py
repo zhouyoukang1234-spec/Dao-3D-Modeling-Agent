@@ -100,6 +100,8 @@ def _metrics(shape):
         "valid": bool(shape.isValid()),
         "volume": _round(shape.Volume),
         "area": _round(shape.Area),
+        "solids": len(shape.Solids),
+        "shells": len(shape.Shells),
         "faces": len(shape.Faces),
         "edges": len(shape.Edges),
         "vertices": len(shape.Vertexes),
