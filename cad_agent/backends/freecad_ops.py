@@ -677,6 +677,80 @@ def register(state):
             "aabb_size": [_round(ab.XLength), _round(ab.YLength), _round(ab.ZLength)],
         }
 
+    def op_symmetry(a):
+        """Recover a solid's symmetry — mirror planes, rotation axes, inversion.
+
+        Symmetry is design intent made visible: a balanced part betrays how few
+        parameters truly drive it. Working in the natural frame (principal axes
+        of inertia through the mass centroid), this probes each principal plane
+        for mirror symmetry and each principal axis for n-fold rotational
+        symmetry, by reflecting/rotating the real BREP and demanding the
+        symmetric difference vanish (volume of S\\S' and S'\\S both ~0 relative
+        to V) — a geometric proof, not a guess. It also tests central inversion.
+        A box returns 3 mirror planes and 2-fold about each axis; a cylinder
+        adds a continuous (highest-order) axis; an L-bracket keeps a single
+        plane and is not centro-symmetric. ``orders`` (default 2..8) bounds the
+        rotational search; hitting the top order is reported as ``continuous``.
+        """
+        sh = _get(a["name"]).Shape
+        sols = sh.Solids
+        if not sols:
+            raise ValueError(
+                "solid.symmetry needs a solid (got a shell/compound with no "
+                "volume); symmetry is measured against an enclosed mass")
+        tol = float(a.get("tol", 1e-3))
+        orders = a.get("orders", [2, 3, 4, 5, 6, 8])
+        if len(sols) != 1:
+            raise ValueError(
+                "solid.symmetry expects a single solid (got %d); the natural "
+                "frame is one body's principal axes — analyse one part at a "
+                "time" % len(sols))
+        # work on the solid itself, not its enclosing compound: a boolean
+        # result is a single-solid Part.Compound, and Compound has no
+        # PrincipalProperties/CenterOfMass.
+        body = sols[0]
+        com = body.CenterOfMass
+        pr = body.PrincipalProperties
+        a1 = _unit_v(pr["FirstAxisOfInertia"])
+        a2 = pr["SecondAxisOfInertia"]
+        a2 = _unit_v(a2 - a1 * a2.dot(a1))
+        a3 = a1.cross(a2)
+        frame = [a1, a2, a3]
+        vol = body.Volume
+
+        def _symdiff(other):
+            return max(body.cut(other).Volume, other.cut(body).Volume) / vol
+
+        def _ax(v):
+            return [_round(v.x, 6), _round(v.y, 6), _round(v.z, 6)]
+
+        mirrors = [_ax(ax) for ax in frame if _symdiff(body.mirror(com, ax)) < tol]
+        top = max(orders)
+        rotational = []
+        for ax in frame:
+            best = 1
+            for n in orders:
+                r = body.copy()
+                r.rotate(com, ax, 360.0 / n)
+                if _symdiff(r) < tol:
+                    best = n
+            if best > 1:
+                rotational.append({"axis": _ax(ax), "order": best,
+                                   "continuous": best == top})
+        mat = App.Matrix(-1, 0, 0, 2 * com.x, 0, -1, 0, 2 * com.y,
+                         0, 0, -1, 2 * com.z, 0, 0, 0, 1)
+        inv = body.copy()
+        inv.transformShape(mat, True, True)
+        return {
+            "name": a["name"],
+            "centroid": [_round(com.x), _round(com.y), _round(com.z)],
+            "mirror_planes": mirrors, "mirror_plane_count": len(mirrors),
+            "rotational_axes": rotational,
+            "max_rotational_order": max((r["order"] for r in rotational), default=1),
+            "point_symmetric": _symdiff(inv) < tol,
+            "orders_tested": list(orders),
+        }
+
     def op_interference(a):
         sa = _get(a["a"]).Shape
         sb = _get(a["b"]).Shape
@@ -1931,7 +2005,8 @@ def register(state):
         "common": lambda a: _boolean("common", a), "fillet": op_fillet, "chamfer": op_chamfer,
         "pattern_linear": op_pattern_linear, "pattern_polar": op_pattern_polar,
         "measure": op_measure, "inspect": op_inspect, "inertia": op_inertia,
-        "curvature": op_curvature, "obb": op_obb, "interference": op_interference,
+        "curvature": op_curvature, "obb": op_obb, "symmetry": op_symmetry,
+        "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
         "compound": op_compound, "decompose": op_decompose, "joints": op_joints,
