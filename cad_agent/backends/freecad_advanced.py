@@ -194,6 +194,37 @@ def register(state):
 
         out = {"page": page.Name, "views": made, "template": tmpl}
 
+        # cross-section view: cut the part with a plane (default through its
+        # centroid, normal +X) and project the hatched section. Reveals internal
+        # features (bores, pockets) that an outline view hides. Guarded so a
+        # TechDraw-version quirk degrades to a reported error, never a crash.
+        if a.get("section") and made:
+            sp = a["section"] if isinstance(a.get("section"), dict) else {}
+            try:
+                base = doc.getObject(made[0])
+                sec = doc.addObject("TechDraw::DrawViewSection", "Section")
+                page.addView(sec)
+                sec.BaseView = base
+                sec.Source = base.Source
+                sec.SectionNormal = V(*sp.get("normal", (1, 0, 0)))
+                c = obj.Shape.BoundBox.Center  # robust for solids and compounds
+                origin = sp.get("origin", (c.x, c.y, c.z))
+                sec.SectionOrigin = V(*origin)
+                doc.recompute()
+                sec.X, sec.Y = float(sp.get("at", (110, 70))[0]), float(sp.get("at", (110, 70))[1])
+                doc.recompute()
+                # validated cross-section geometry (independent of TechDraw's
+                # headless renderer): slice the real solid with the cut plane.
+                # Internal bores show up as extra closed contours, so a hollow
+                # part yields more wires than its solid outline alone.
+                nrm = V(*sp.get("normal", (1, 0, 0)))
+                nrm = nrm.normalize()
+                wires = obj.Shape.slice(nrm, nrm.dot(V(*origin)))
+                out["section"] = {"view": sec.Name, "normal": list(sp.get("normal", (1, 0, 0))),
+                                  "wires": len(wires)}
+            except Exception as exc:
+                out["section_error"] = str(exc)
+
         # overall dimensions block (robust headless: annotate the B-rep extents
         # + mass instead of fragile projected-vertex dimension references)
         if a.get("dimensions"):
