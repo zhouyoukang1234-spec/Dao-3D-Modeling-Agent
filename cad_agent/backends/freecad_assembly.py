@@ -241,19 +241,33 @@ def register(state):
         return {"component": a["top"], "placement": list(top_link.Placement.Base)}
 
     # ---- analysis -------------------------------------------------------- #
+    def _bb_overlap(ba, bb, tol=1e-6):
+        """Axis-aligned bounding-box overlap test (broad phase)."""
+        return (ba.XMin <= bb.XMax + tol and bb.XMin <= ba.XMax + tol and
+                ba.YMin <= bb.YMax + tol and bb.YMin <= ba.YMax + tol and
+                ba.ZMin <= bb.ZMax + tol and bb.ZMin <= ba.ZMax + tol)
+
     def op_interference(a):
         names = list(state.components.keys())
+        # cache each global shape once (was recomputed per pair) and AABB-cull:
+        # the costly boolean common() only runs for pairs whose bounding boxes
+        # actually overlap -- two parts with disjoint AABBs cannot intersect.
+        shapes = {n: _global_shape(n) for n in names}
+        bbs = {n: shapes[n].BoundBox for n in names}
         clashes = []
+        narrow = 0
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
-                sa = _global_shape(names[i])
-                sb = _global_shape(names[j])
-                common = sa.common(sb)
+                na, nb = names[i], names[j]
+                if not _bb_overlap(bbs[na], bbs[nb]):
+                    continue
+                narrow += 1
+                common = shapes[na].common(shapes[nb])
                 vol = common.Volume if common.Solids else 0.0
                 if vol > 1e-6:
-                    clashes.append({"a": names[i], "b": names[j], "overlap_volume": _round(vol)})
+                    clashes.append({"a": na, "b": nb, "overlap_volume": _round(vol)})
         return {"pairs_checked": len(names) * (len(names) - 1) // 2,
-                "clashes": clashes, "clash_count": len(clashes)}
+                "narrow_phase": narrow, "clashes": clashes, "clash_count": len(clashes)}
 
     def op_bom(a):
         density = float(a.get("density", 1.0))

@@ -39,6 +39,7 @@ python 60-实战_Projects/flanged_coupling.py      # 8 螺栓法兰联轴器 (10
 python 60-实战_Projects/gear_reducer_2stage.py   # 两级齿轮减速箱 (7 零件, 传动比5.0 闭式)
 python 60-实战_Projects/spring_in_housing.py     # 弹簧-缸套子装配 (螺旋扫掠 + 间隙装配)
 python 60-实战_Projects/full_pipeline.py         # 全链路: 设计→STEP/STL/图纸→CAM刀路→FEM→BOM
+python 60-实战_Projects/bolted_flange_stack.py   # 24螺栓法兰接头 (51 零件, 宽相剔除 93%)
 ```
 
 需真实 FreeCAD 1.0 (`FREECADCMD` 指向 `freecadcmd.exe`); CalculiX `ccx` 随 FreeCAD 自带.
