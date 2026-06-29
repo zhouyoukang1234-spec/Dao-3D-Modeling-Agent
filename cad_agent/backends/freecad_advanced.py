@@ -140,9 +140,19 @@ def register(state):
     # ---- analysis -------------------------------------------------------- #
     def op_section(a):
         shape = _shape(a["name"])
-        plane = a.get("plane", "XY").upper()
-        offset = float(a.get("offset", 0))
-        normal = {"XY": V(0, 0, 1), "XZ": V(0, 1, 0), "YZ": V(1, 0, 0)}[plane]
+        plane = a.get("plane", "XY")
+        if not isinstance(plane, str):
+            raise ValueError(
+                "analyze.section 'plane' must be one of 'XY'/'XZ'/'YZ' "
+                "(got %r)" % (plane,))
+        plane = plane.upper()
+        offset = _num(a, "offset", 0, "offset")
+        normals = {"XY": V(0, 0, 1), "XZ": V(0, 1, 0), "YZ": V(1, 0, 0)}
+        if plane not in normals:
+            raise ValueError(
+                "analyze.section 'plane' must be one of 'XY'/'XZ'/'YZ' "
+                "(got %r)" % (plane,))
+        normal = normals[plane]
         wires = shape.slice(normal, offset)
         total_len = sum(w.Length for w in wires)
         # net cross-section area: largest wire is the outer boundary, the rest

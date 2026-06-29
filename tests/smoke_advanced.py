@@ -84,6 +84,14 @@ def main():
     _guided(s.act("mesh.export", {"name": "Brk", "path": os.path.join(OUT, "b.stl"),
                                   "tolerance": "x"}), "must be a number")
     _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
+    # analyze.section coerced offset with a bare float() and indexed an unchecked
+    # plane dict: a non-numeric offset / bad plane must guide, not leak.
+    _guided(s.act("analyze.section", {"name": "Brk", "offset": "x"}),
+            "must be a number")
+    _guided(s.act("analyze.section", {"name": "Brk", "plane": "QQ"}),
+            "'XY'/'XZ'/'YZ'")
+    _guided(s.act("analyze.section", {"name": "Brk", "plane": 123}),
+            "'XY'/'XZ'/'YZ'")
     print("mesh/draw malformed-input guards refused cleanly")
 
     # --- perception renders ---
