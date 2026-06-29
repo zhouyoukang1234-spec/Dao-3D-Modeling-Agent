@@ -12,6 +12,8 @@ import itertools
 import json
 import math
 import os
+import urllib.parse
+import urllib.request
 
 import numpy as np
 
@@ -1316,6 +1318,125 @@ def register(state):
                          "boss": need_boss, "hole_diam": hole_diam,
                          "boss_diam": boss_diam, "diam_tol": dtol},
                 "hits": hits, "skipped": skipped}
+
+    def _fetch_one(src, cache_dir, timeout, max_bytes, skipped):
+        """Download one community/online model into ``cache_dir`` and return its
+        local path (or ``None`` on failure, logged in ``skipped``).
+
+        ``src`` is a URL string or a ``{"url", "label"|"name"}`` dict. ``file://``
+        and bare local paths are accepted too, so an offline mirror behaves like
+        an online one. The body is streamed with a hard ``max_bytes`` ceiling so a
+        runaway download cannot exhaust the box, and the on-disk name is derived
+        from the URL (falling back to a content hash) to keep the cache stable and
+        de-duplicated across repeated fetches.
+        """
+        url = src.get("url") if isinstance(src, dict) else src
+        label = (src.get("label") or src.get("name")) if isinstance(src, dict) else None
+        if not url:
+            skipped.append({"url": src, "reason": "no url"})
+            return None
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme in ("", "file"):                 # local / file:// mirror
+            local = parsed.path if parsed.scheme == "file" else url
+            if not os.path.isfile(local):
+                skipped.append({"url": url, "reason": "no such file"})
+                return None
+            return local
+        name = label or os.path.basename(parsed.path) or hashlib.sha1(
+            url.encode()).hexdigest()
+        if "." not in os.path.basename(name):
+            name += ".step"
+        dest = os.path.join(cache_dir, name)
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            return dest                                   # cached -> never refetch
+        # Honour an explicit no-proxy world (mirrors the DAO Bridge SDK pattern)
+        # so internal/community mirrors resolve directly.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "dao-cad/1.0"})
+            with opener.open(req, timeout=timeout) as resp:
+                buf = bytearray()
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    if len(buf) > max_bytes:
+                        skipped.append({"url": url,
+                                        "reason": "exceeds max_bytes=%d" % max_bytes})
+                        return None
+            with open(dest, "wb") as fh:
+                fh.write(buf)
+            return dest
+        except Exception as exc:
+            skipped.append({"url": url, "reason": "fetch failed: %s" % exc})
+            return None
+
+    def op_library_fetch(a):
+        """Pull 3D models from community/online sources into the local library.
+
+        取之尽锱铢: this is the bridge between the world's model repositories and
+        the in-box matching pipeline. Give it ``urls`` (a list of direct download
+        URLs, or ``{"url", "label"}`` dicts) and it streams each model into a
+        ``cache`` directory (default ``~/.dao_cad/library``), de-duplicating by
+        name and capping every download at ``max_bytes``. The freshly cached files
+        then flow straight into the existing pipeline:
+
+          * always: fingerprint each fetched solid (so the catalogue is usable);
+          * with ``name``: rank the fetched models against that open query solid
+            (same scale-invariant distance as ``library_match``);
+          * with ``out``: persist a JSON ``solid.library_index`` over the cache,
+            optionally with ``features=True`` for ``library_query``.
+
+        Unreachable / oversized / unreadable sources are reported in ``skipped``
+        rather than aborting, so one dead link never sinks the whole harvest.
+
+        args: urls(list), cache/dir(optional), name(optional query solid),
+              out(optional index path), features(bool), timeout(s), max_bytes
+        """
+        urls = a.get("urls") or []
+        if not urls:
+            raise ValueError(
+                "solid.library_fetch needs 'urls': a list of model download URLs "
+                "(or {'url','label'} dicts) to pull into the local library")
+        cache_dir = a.get("cache") or a.get("dir") or os.path.join(
+            os.path.expanduser("~"), ".dao_cad", "library")
+        os.makedirs(cache_dir, exist_ok=True)
+        timeout = float(a.get("timeout", 30))
+        max_bytes = int(a.get("max_bytes", 64 * 1024 * 1024))
+        skipped = []
+        fetched = []
+        for src in urls:
+            local = _fetch_one(src, cache_dir, timeout, max_bytes, skipped)
+            if local:
+                fetched.append(local)
+        if not fetched:
+            raise ValueError(
+                "solid.library_fetch downloaded no usable model from %d source(s);"
+                " skipped=%r" % (len(urls), skipped))
+        want_features = bool(a.get("features"))
+        records = _load_candidates(fetched, skipped, features=want_features)
+        if not records:
+            raise ValueError(
+                "solid.library_fetch fetched %d file(s) but found no solid; "
+                "skipped=%r" % (len(fetched), skipped))
+        out = {"fetched": len(fetched), "cache": cache_dir,
+               "indexed": len(records),
+               "labels": [r["label"] for r in records], "skipped": skipped}
+        index_path = a.get("out")
+        if index_path:
+            with open(index_path, "w", encoding="utf-8") as fh:
+                json.dump({"version": 1, "features": want_features,
+                           "records": records}, fh)
+            out["out"] = index_path
+        if "name" in a:
+            q = _shape_fingerprint(a["name"])
+            ranked = _rank_records(q, records)
+            out["query_key"] = q["shape_key"]
+            out["best"] = ranked[0]["label"]
+            out["best_distance"] = ranked[0]["distance"]
+            out["ranking"] = ranked
+        return out
 
     def _in_principal_frame(body):
         """Return a copy of ``body`` moved to its centroid and rotated so its
@@ -3694,7 +3815,7 @@ def register(state):
         "reverse_build": op_reverse_build, "replay": op_replay,
         "reuse": op_reuse,
         "library_match": op_library_match, "library_index": op_library_index,
-        "library_query": op_library_query,
+        "library_query": op_library_query, "library_fetch": op_library_fetch,
         "interference": op_interference,
         "draft": op_draft, "thickness": op_thickness, "undercut": op_undercut,
         "overhang": op_overhang, "section": op_section, "dfm_report": op_dfm_report,
