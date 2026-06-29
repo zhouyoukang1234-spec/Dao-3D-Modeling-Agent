@@ -41,6 +41,12 @@ def main():
     p2 = os.path.join(d, "two.step")
     assert s.act("solid.export", {"names": ["two"], "path": p2}).ok
 
+    # a non-existent output directory must fail with guidance, not a raw OSError
+    nd = s.act("solid.export", {"name": "one", "path": os.path.join(d, "no_such_dir", "x.step")})
+    assert not nd.ok, nd.data
+    assert "OSError" not in (nd.error or "") and "directory does not exist" in (nd.error or ""), nd.error
+    print("missing output dir refused cleanly: %s" % nd.error)
+
     # empty session refuses loudly rather than writing an empty file
     s2 = new_session("export_empty")
     bad = s2.act("solid.export", {"path": os.path.join(d, "empty.step")})
