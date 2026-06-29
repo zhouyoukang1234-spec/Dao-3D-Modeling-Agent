@@ -35,6 +35,36 @@ def main():
     assert f.data["area"] > 0, f.data
     print("surface.fill non-planar loop -> area %.2f" % f.data["area"])
 
+    # surface.ruled: span two open profiles -> a ruled shell with area.
+    ru = s.act("surface.ruled", {"out": "Web",
+                                 "edge1": [[0, 0, 0], [20, 0, 0], [20, 0, 8]],
+                                 "edge2": [[0, 20, 0], [20, 20, 0], [20, 20, 8]]})
+    assert ru.ok, ru.error
+    assert ru.data["area"] > 0 and ru.data["faces"] >= 1, ru.data
+    print("surface.ruled two profiles -> area %.2f, %d faces"
+          % (ru.data["area"], ru.data["faces"]))
+
+    # surface.interpolate: a smooth BSpline through a rectangular grid.
+    grid = [[[i * 6.0, j * 6.0,
+              2.5 * math.sin(i * 0.9) + 1.5 * math.cos(j * 0.7)]
+             for j in range(5)] for i in range(5)]
+    it = s.act("surface.interpolate", {"out": "Canopy", "grid": grid})
+    assert it.ok, it.error
+    assert it.data["area"] > 0 and it.data["grid"] == [5, 5], it.data
+    print("surface.interpolate 5x5 grid -> area %.1f" % it.data["area"])
+
+    # surface.offset: grow a solid's faces into a parallel shell, then perceive.
+    assert s.act("solid.box", {"name": "Core", "length": 10, "width": 10,
+                               "height": 10}).ok
+    off = s.act("surface.offset", {"source": "Core", "out": "Skin",
+                                   "distance": 2})
+    assert off.ok, off.error
+    # 10mm cube offset out by 2mm -> faces grow well beyond the original 600.
+    assert off.data["area"] > 600 and off.data["faces"] >= 6, off.data
+    sec = s.act("analyze.section", {"name": "Skin", "plane": "XY", "offset": 5})
+    assert sec.ok, sec.error
+    print("surface.offset +2mm -> shell area %.1f (fusable)" % off.data["area"])
+
     # draft.ortho_array of a real solid, then proven fusable (it meshes).
     assert s.act("solid.box", {"name": "Cell", "length": 4, "width": 4,
                                "height": 4}).ok
@@ -74,6 +104,18 @@ def main():
     _guided(s.act("surface.fill", {"points": [[0, 0, 0], [1, 1, 1]]}), "at least 3")
     _guided(s.act("surface.fill", {"points": [[0, 0, 0], [0, 0, 0], [0, 0, 0]]}),
             "coincident")
+    _guided(s.act("surface.ruled", {"edge1": [[0, 0, 0]], "edge2": [[0, 1, 0]]}),
+            "at least 2")
+    _guided(s.act("surface.interpolate", {"grid": "x"}), "grid")
+    _guided(s.act("surface.interpolate", {"grid": [[[0, 0, 0], [1, 0, 0]]]}),
+            "at least 2 rows")
+    _guided(s.act("surface.interpolate",
+                  {"grid": [[[0, 0, 0], [1, 0, 0]], [[0, 1, 0]]]}),
+            "not rectangular")
+    _guided(s.act("surface.offset", {"source": "Nope", "distance": 1}),
+            "no such solid")
+    _guided(s.act("surface.offset", {"source": "Core", "distance": 0}),
+            "non-zero")
     _guided(s.act("draft.ortho_array", {"source": "Cell", "nx": "x"}), "number")
     _guided(s.act("draft.ortho_array", {"source": "Nope"}), "no such solid")
     _guided(s.act("draft.ortho_array", {"source": "Cell", "nx": 0}), ">= 1")

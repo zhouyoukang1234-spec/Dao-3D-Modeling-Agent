@@ -3,8 +3,12 @@
 Wraps three FreeCAD workbenches that the solid/param families never reached,
 so the agent can drive them as first-class, fusable ops:
 
-* ``surface.*`` — fill a (possibly non-planar) boundary loop into a face
-                  (Part ``makeFilledFace``), the Surface-workbench primitive.
+* ``surface.*`` — the Surface workbench: ``fill`` a (possibly non-planar)
+                  boundary loop into a face (``makeFilledFace``), ``ruled`` a
+                  surface between two profiles (``makeRuledSurface``),
+                  ``interpolate`` a BSpline through a grid (exact fit), and
+                  ``offset`` a solid's faces into a parallel shell
+                  (``makeOffsetShape``).
 * ``draft.*``   — real Draft orthogonal / polar arrays of an existing solid,
                   registered back as a shape so booleans/FEM can consume them.
 * ``points.*``  — a point cloud and its reverse-engineered BSpline surface
@@ -59,6 +63,47 @@ def _vec(seq, label):
     except (TypeError, ValueError):
         raise ValueError(
             "%s components must all be numbers (got %r)" % (label, seq))
+
+
+def _grid(a, key, label, min_rows=2, min_cols=2):
+    """Coerce a rectangular grid of [x, y, z] points (rows x cols)."""
+    rows = a.get(key)
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, (list, tuple)):
+        raise ValueError(
+            "%s must be a grid (list of rows of [x, y, z] points), got %r"
+            % (label, rows))
+    if len(rows) < min_rows:
+        raise ValueError(
+            "%s needs at least %d rows (got %d)" % (label, min_rows, len(rows)))
+    width = None
+    out = []
+    for i, row in enumerate(rows):
+        if isinstance(row, (str, bytes)) or not isinstance(row, (list, tuple)):
+            raise ValueError("%s row %d must be a list of points (got %r)"
+                             % (label, i, row))
+        if width is None:
+            width = len(row)
+            if width < min_cols:
+                raise ValueError("%s needs at least %d columns (got %d)"
+                                 % (label, min_cols, width))
+        elif len(row) != width:
+            raise ValueError(
+                "%s is not rectangular: row 0 has %d points but row %d has %d"
+                % (label, width, i, len(row)))
+        orow = []
+        for j, p in enumerate(row):
+            if isinstance(p, (str, bytes)) or not isinstance(p, (list, tuple)) \
+                    or len(p) != 3:
+                raise ValueError("%s point [%d][%d] must be [x, y, z] (got %r)"
+                                 % (label, i, j, p))
+            try:
+                orow.append((float(p[0]), float(p[1]), float(p[2])))
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "%s point [%d][%d] components must be numbers (got %r)"
+                    % (label, i, j, p))
+        out.append(orow)
+    return out
 
 
 def _points(a, key, label, need=3):
@@ -139,6 +184,86 @@ def register(state):
         obj = _register_shape(out, face, "surface.fill")
         return {"surface": out, "object": obj.Name, "area": _round(face.Area),
                 "boundary_points": len(pts)}
+
+    def op_ruled(a):
+        """Ruled surface lofted linearly between two boundary curves.
+
+        Unlike ``surface.fill`` (one closed loop) this spans *two* open
+        profiles, the Surface-workbench "Sections" primitive
+        (``Part.makeRuledSurface``). args: edge1 [[x,y,z]...>=2],
+        edge2 [[x,y,z]...>=2], out (name).
+        """
+        p1 = _points(a, "edge1", "surface.ruled 'edge1'", need=2)
+        p2 = _points(a, "edge2", "surface.ruled 'edge2'", need=2)
+        out = a.get("out", a.get("name", "Ruled"))
+        w1 = Part.makePolygon([V(*p) for p in p1])
+        w2 = Part.makePolygon([V(*p) for p in p2])
+        try:
+            shape = Part.makeRuledSurface(w1, w2)
+        except Exception as exc:
+            raise ValueError(
+                "surface.ruled could not rule between the two profiles (%s); "
+                "they may be degenerate or coincident" % exc)
+        if shape is None or shape.isNull():
+            raise ValueError("surface.ruled produced an empty surface")
+        obj = _register_shape(out, shape, "surface.ruled")
+        return {"surface": out, "object": obj.Name, "area": _round(shape.Area),
+                "faces": len(shape.Faces)}
+
+    def op_interpolate(a):
+        """Interpolate a smooth BSpline surface *through* a rectangular grid.
+
+        Distinct from ``points.reverse`` (which *approximates* a scattered
+        cloud): here every grid node is hit exactly. args: grid
+        [[[x,y,z]...cols]...rows] (>=2x2), out (name).
+        """
+        grid = _grid(a, "grid", "surface.interpolate 'grid'")
+        out = a.get("out", a.get("name", "InterpSurface"))
+        vgrid = [[V(*p) for p in row] for row in grid]
+        bs = Part.BSplineSurface()
+        try:
+            bs.interpolate(vgrid)
+        except Exception as exc:
+            raise ValueError(
+                "surface.interpolate could not fit the grid (%s); rows may be "
+                "collinear/degenerate or contain coincident nodes" % exc)
+        face = bs.toShape()
+        if face is None or face.isNull():
+            raise ValueError("surface.interpolate produced an empty surface")
+        obj = _register_shape(out, face, "surface.interpolate")
+        return {"surface": out, "object": obj.Name, "area": _round(face.Area),
+                "grid": [len(grid), len(grid[0])]}
+
+    def op_offset(a):
+        """Offset every face of an existing solid into a parallel shell.
+
+        The Surface-workbench "Offset" primitive (``makeOffsetShape``): a
+        positive distance grows the surface outward, negative shrinks it.
+        args: source (solid name), distance (!=0), out (name),
+        tol (default 1e-3).
+        """
+        src = _shape(a.get("source", a.get("body", a.get("name"))))
+        out = a.get("out", "Offset")
+        dist = _num(a, "distance", label="surface.offset distance")
+        if abs(dist) < 1e-9:
+            raise ValueError("surface.offset distance must be non-zero")
+        tol = _num(a, "tol", 1e-3, "surface.offset tol")
+        if tol <= 0:
+            raise ValueError("surface.offset tol must be > 0 (got %r)" % tol)
+        base = getattr(src, "Shape", None)
+        if base is None or base.isNull():
+            raise ValueError("surface.offset: source %r has no shape" % src.Name)
+        try:
+            shell = base.makeOffsetShape(dist, tol, fill=False)
+        except Exception as exc:
+            raise ValueError(
+                "surface.offset could not offset by %g (%s); the distance may "
+                "exceed the local radius of curvature" % (dist, exc))
+        if shell is None or shell.isNull():
+            raise ValueError("surface.offset produced an empty shell")
+        obj = _register_shape(out, shell, "surface.offset")
+        return {"surface": out, "object": obj.Name, "area": _round(shell.Area),
+                "distance": _round(dist), "faces": len(shell.Faces)}
 
     # ---- draft.* ---------------------------------------------------------- #
     def op_ortho_array(a):
@@ -272,6 +397,9 @@ def register(state):
 
     return {
         "surface.fill": op_fill,
+        "surface.ruled": op_ruled,
+        "surface.interpolate": op_interpolate,
+        "surface.offset": op_offset,
         "draft.ortho_array": op_ortho_array,
         "draft.polar_array": op_polar_array,
         "points.cloud": op_cloud,
