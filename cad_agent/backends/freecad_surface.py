@@ -1,0 +1,279 @@
+"""Surface / Draft / Points+ReverseEngineering workbench coverage.
+
+Wraps three FreeCAD workbenches that the solid/param families never reached,
+so the agent can drive them as first-class, fusable ops:
+
+* ``surface.*`` — fill a (possibly non-planar) boundary loop into a face
+                  (Part ``makeFilledFace``), the Surface-workbench primitive.
+* ``draft.*``   — real Draft orthogonal / polar arrays of an existing solid,
+                  registered back as a shape so booleans/FEM can consume them.
+* ``points.*``  — a point cloud and its reverse-engineered BSpline surface
+                  (``ReverseEngineering.approxSurface``): scan data -> geometry,
+                  the reverse-modelling core.
+
+Every numeric / vector / list argument is coerced with a guided ValueError
+*before* any kernel object is built, so malformed input never leaks a raw
+TypeError / OCCError nor leaves a half-built feature in the document.
+"""
+import FreeCAD as App
+import Part
+
+V = App.Vector
+_MISSING = object()
+
+
+def _round(x, n=4):
+    return round(float(x), n)
+
+
+def _num(a, key, default=_MISSING, label=None):
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            raise ValueError("missing required numeric argument %r" % name)
+        return float(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+
+
+def _int(a, key, default=_MISSING, label=None):
+    name = label or key
+    f = _num(a, key, default, label)
+    if abs(f - round(f)) > 1e-9:
+        raise ValueError("%s must be a whole number (got %r)" % (name, a.get(key)))
+    return int(round(f))
+
+
+def _vec(seq, label):
+    if isinstance(seq, (str, bytes)) or not isinstance(seq, (list, tuple)) \
+            or len(seq) != 3:
+        raise ValueError(
+            "%s must be a list of 3 numbers [x, y, z] (got %r)" % (label, seq))
+    try:
+        return V(float(seq[0]), float(seq[1]), float(seq[2]))
+    except (TypeError, ValueError):
+        raise ValueError(
+            "%s components must all be numbers (got %r)" % (label, seq))
+
+
+def _points(a, key, label, need=3):
+    pts = a.get(key)
+    if isinstance(pts, (str, bytes)) or not isinstance(pts, (list, tuple)):
+        raise ValueError(
+            "%s must be a list of [x, y, z] points (got %r)" % (label, pts))
+    if len(pts) < need:
+        raise ValueError(
+            "%s needs at least %d points (got %d)" % (label, need, len(pts)))
+    out = []
+    for i, p in enumerate(pts):
+        if isinstance(p, (str, bytes)) or not isinstance(p, (list, tuple)) \
+                or len(p) != 3:
+            raise ValueError(
+                "%s point %d must be [x, y, z] (got %r)" % (label, i, p))
+        try:
+            out.append((float(p[0]), float(p[1]), float(p[2])))
+        except (TypeError, ValueError):
+            raise ValueError(
+                "%s point %d components must be numbers (got %r)" % (label, i, p))
+    return out
+
+
+def register(state):
+    doc = state.doc
+    clouds = {}
+
+    def _shape(name):
+        if name in state.shapes and doc.getObject(state.shapes[name]):
+            return doc.getObject(state.shapes[name])
+        if name in state.bodies and doc.getObject(state.bodies[name]):
+            return doc.getObject(state.bodies[name])
+        raise ValueError(
+            "no such solid %r -- create it first (solid.* / param.*) or import "
+            "it (import_step)" % name)
+
+    def _register_shape(name, shape, kind):
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("%s 'out' name must be a non-empty string" % kind)
+        if shape is None or shape.isNull():
+            raise ValueError("%s produced an empty shape" % kind)
+        existing = state.shapes.get(name)
+        obj = doc.getObject(existing) if existing else None
+        if obj is None:
+            obj = doc.addObject("Part::Feature", name)
+            state.shapes[name] = obj.Name
+        obj.Shape = shape
+        doc.recompute()
+        return obj
+
+    # ---- surface.* -------------------------------------------------------- #
+    def op_fill(a):
+        """Fill a boundary loop of points into a (possibly non-planar) face.
+
+        args: points [[x,y,z]...>=3] (loop, auto-closed), out (name)
+        """
+        pts = _points(a, "points", "surface.fill 'points'", need=3)
+        out = a.get("out", a.get("name", "Surface"))
+        vs = [V(*p) for p in pts]
+        edges = []
+        for i in range(len(vs)):
+            p0, p1 = vs[i], vs[(i + 1) % len(vs)]
+            if (p1 - p0).Length < 1e-9:
+                raise ValueError(
+                    "surface.fill: points %d and %d are coincident; remove "
+                    "duplicate boundary points" % (i, (i + 1) % len(vs)))
+            edges.append(Part.makeLine(p0, p1))
+        try:
+            face = Part.makeFilledFace(edges)
+        except Exception as exc:
+            raise ValueError(
+                "surface.fill could not fill the boundary loop (%s); the points "
+                "may be degenerate/self-intersecting" % exc)
+        if face is None or face.isNull():
+            raise ValueError(
+                "surface.fill produced no face -- the boundary loop is degenerate")
+        obj = _register_shape(out, face, "surface.fill")
+        return {"surface": out, "object": obj.Name, "area": _round(face.Area),
+                "boundary_points": len(pts)}
+
+    # ---- draft.* ---------------------------------------------------------- #
+    def op_ortho_array(a):
+        """Real Draft orthogonal array of an existing solid.
+
+        args: source (solid name), out (name), dx/dy/dz (cell vector spans),
+              nx/ny/nz (counts)
+        """
+        import Draft
+        src = _shape(a.get("source", a.get("body", a.get("name"))))
+        out = a.get("out", "Array")
+        nx = _int(a, "nx", 2, "draft.ortho nx")
+        ny = _int(a, "ny", 1, "draft.ortho ny")
+        nz = _int(a, "nz", 1, "draft.ortho nz")
+        for n, lbl in ((nx, "nx"), (ny, "ny"), (nz, "nz")):
+            if n < 1:
+                raise ValueError("draft.ortho %s must be >= 1 (got %d)" % (lbl, n))
+        iv = V(_num(a, "dx", 10, "draft.ortho dx"), 0, 0)
+        jv = V(0, _num(a, "dy", 10, "draft.ortho dy"), 0)
+        kv = V(0, 0, _num(a, "dz", 10, "draft.ortho dz"))
+        arr = Draft.make_ortho_array(src, iv, jv, kv, nx, ny, nz)
+        doc.recompute()
+        shape = getattr(arr, "Shape", None)
+        if shape is None or shape.isNull():
+            raise ValueError("draft.ortho_array produced no geometry")
+        # re-register the baked compound so booleans/mesh/FEM can consume it
+        obj = _register_shape(out, shape.copy(), "draft.ortho_array")
+        try:
+            doc.removeObject(arr.Name)
+        except Exception:
+            pass
+        return {"array": out, "object": obj.Name, "count": nx * ny * nz,
+                "solids": len(shape.Solids)}
+
+    def op_polar_array(a):
+        """Real Draft polar array of an existing solid about a centre.
+
+        args: source (solid name), out (name), count, angle (deg, default 360),
+              center [x,y,z]
+        """
+        import Draft
+        src = _shape(a.get("source", a.get("body", a.get("name"))))
+        out = a.get("out", "Array")
+        count = _int(a, "count", 6, "draft.polar count")
+        if count < 1:
+            raise ValueError("draft.polar count must be >= 1 (got %d)" % count)
+        angle = _num(a, "angle", 360.0, "draft.polar angle")
+        center = _vec(a["center"], "draft.polar center") if a.get("center") \
+            is not None else V(0, 0, 0)
+        arr = Draft.make_polar_array(src, count, angle, center)
+        doc.recompute()
+        shape = getattr(arr, "Shape", None)
+        if shape is None or shape.isNull():
+            raise ValueError("draft.polar_array produced no geometry")
+        obj = _register_shape(out, shape.copy(), "draft.polar_array")
+        try:
+            doc.removeObject(arr.Name)
+        except Exception:
+            pass
+        return {"array": out, "object": obj.Name, "count": count,
+                "solids": len(shape.Solids)}
+
+    # ---- points.* + reverse engineering ----------------------------------- #
+    def op_cloud(a):
+        """Create a point cloud (scan data) the reverse op can rebuild.
+
+        args: name, points [[x,y,z]...]
+        """
+        import Points
+        name = a.get("name", a.get("out", "Cloud"))
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("points.cloud 'name' must be a non-empty string")
+        pts = _points(a, "points", "points.cloud 'points'", need=1)
+        po = doc.addObject("Points::Feature", name)
+        pk = Points.Points()
+        pk.addPoints([V(*p) for p in pts])
+        po.Points = pk
+        doc.recompute()
+        clouds[name] = [tuple(p) for p in pts]
+        return {"cloud": name, "object": po.Name, "points": len(pts)}
+
+    def op_reverse(a):
+        """Reverse-engineer a BSpline surface from a point cloud / point list.
+
+        args: cloud (name from points.cloud) OR points [[x,y,z]...],
+              out (surface name), u_degree/v_degree (default 3),
+              u_poles/v_poles (control net size, default 6)
+        """
+        import ReverseEngineering as Reen
+        if a.get("cloud") is not None:
+            cname = a["cloud"]
+            if cname not in clouds:
+                raise ValueError(
+                    "points.reverse: no cloud named %r -- create it with "
+                    "points.cloud first" % cname)
+            pts = clouds[cname]
+        else:
+            pts = _points(a, "points", "points.reverse 'points'", need=9)
+        out = a.get("out", a.get("name", "RevSurface"))
+        ud = _int(a, "u_degree", 3, "points.reverse u_degree")
+        vd = _int(a, "v_degree", 3, "points.reverse v_degree")
+        nu = _int(a, "u_poles", 6, "points.reverse u_poles")
+        nv = _int(a, "v_poles", 6, "points.reverse v_poles")
+        for val, lbl, lo in ((ud, "u_degree", 1), (vd, "v_degree", 1),
+                             (nu, "u_poles", 2), (nv, "v_poles", 2)):
+            if val < lo:
+                raise ValueError(
+                    "points.reverse %s must be >= %d (got %d)" % (lbl, lo, val))
+        if nu <= ud or nv <= vd:
+            raise ValueError(
+                "points.reverse: poles must exceed degree (u_poles>%d, "
+                "v_poles>%d); got u_poles=%d v_poles=%d" % (ud, vd, nu, nv))
+        if len(pts) < nu * nv:
+            raise ValueError(
+                "points.reverse: need at least u_poles*v_poles=%d points to fit "
+                "the control net (got %d)" % (nu * nv, len(pts)))
+        try:
+            bs = Reen.approxSurface(Points=[tuple(p) for p in pts],
+                                    UDegree=ud, VDegree=vd,
+                                    NbUPoles=nu, NbVPoles=nv)
+        except Exception as exc:
+            raise ValueError(
+                "points.reverse could not fit a surface (%s); the points may be "
+                "collinear/degenerate or the pole counts too high" % exc)
+        face = bs.toShape()
+        if face is None or face.isNull():
+            raise ValueError("points.reverse produced an empty surface")
+        obj = _register_shape(out, face, "points.reverse")
+        return {"surface": out, "object": obj.Name, "area": _round(face.Area),
+                "fit_points": len(pts), "control_net": [nu, nv]}
+
+    return {
+        "surface.fill": op_fill,
+        "draft.ortho_array": op_ortho_array,
+        "draft.polar_array": op_polar_array,
+        "points.cloud": op_cloud,
+        "points.reverse": op_reverse,
+    }

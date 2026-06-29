@@ -116,6 +116,11 @@ def _build_handlers(state):
         handlers.update(freecad_path.register(state))
     except Exception as exc:  # CAM is optional (needs Path workbench); keep rest working
         sys.stderr.write("path load failed: %r\n" % (exc,))
+    try:
+        import freecad_surface
+        handlers.update(freecad_surface.register(state))
+    except Exception as exc:  # Surface/Draft/Points coverage is optional
+        sys.stderr.write("surface load failed: %r\n" % (exc,))
     return handlers
 
 
