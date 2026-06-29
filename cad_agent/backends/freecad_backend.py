@@ -35,6 +35,7 @@ _SOLID_OPS = {
     "dfm_report", "compound", "decompose", "joints", "mechanism", "drive",
     "recognize", "reverse", "coaxial", "fourbar", "geartrain", "gearmesh",
     "rackpinion", "cam", "planetary", "geneva", "cam_profile", "spatial_mobility",
+    "projected_area", "hydrostatics", "tolerance_stack",
     "list", "delete", "export", "import_step",
 }
 

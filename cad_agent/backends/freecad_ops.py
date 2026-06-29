@@ -3386,6 +3386,184 @@ def register(state):
             _put(out, comp)
         return {"imported": imported, "out": out, "solids": len(imported)}
 
+    # ---- projection / hydrostatics / tolerance (engineering analysis) ----- #
+    def op_projected_area(a):
+        """Silhouette (shadow) area of a solid projected onto the plane
+        perpendicular to ``dir`` — the footprint a part casts for laser/water-jet
+        nesting, 3D-print bed area, casting draw projection and sun/wind load.
+
+        Computed from the surface-divergence identity: for a solid whose outline
+        along ``dir`` is covered front-and-back exactly once (convex parts and
+        the prismatic/blocky parts that dominate mechanical design), the projected
+        area equals ``(1/2) * integral |n . d| dA`` over the closed boundary. We
+        evaluate that surface integral by tessellating every face, so planar caps
+        give the exact closed form and curved walls integrate to their analytic
+        value. ``exact`` is True when every face is planar (result is then
+        closed-form exact); curved parts converge with ``deflection``.
+
+        args: name, dir (projection direction, default +Z),
+              deflection (mesh tolerance for curved faces, default 0.05)
+        """
+        sh = _get(a["name"]).Shape
+        d = _unit_v(_vec(a.get("dir", (0, 0, 1))))
+        defl = float(a.get("deflection", 0.05))
+        acc = 0.0
+        all_planar = True
+        for f in sh.Faces:
+            if f.Surface.__class__.__name__ != "Plane":
+                all_planar = False
+            pts, tris = f.tessellate(defl)
+            for ia, ib, ic in tris:
+                cross = (pts[ib] - pts[ia]).cross(pts[ic] - pts[ia])
+                acc += 0.5 * abs(cross.dot(d))  # |n.d| * triangle_area
+        return {"name": a["name"],
+                "dir": [_round(d.x), _round(d.y), _round(d.z)],
+                "projected_area": _round(acc / 2.0, 3),
+                "method": "surface-integral", "exact": all_planar,
+                "faces": len(sh.Faces)}
+
+    def op_hydrostatics(a):
+        """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
+
+        Given part ``density`` and ``fluid_density`` it solves the still-water
+        plane (perpendicular to ``up``, default +Z) where buoyancy balances
+        weight (Archimedes: rho_part*V_total = rho_fluid*V_submerged), then reads
+        every quantity off the real cut solids: draft, submerged volume, centre
+        of buoyancy B, centre of gravity G, waterplane area A_wp, the transverse
+        metacentric radius BM = I_wp / V_sub and the metacentric height
+        GM = KB + BM - KG (GM > 0 => statically stable). For a box this matches
+        the closed forms exactly (T = (rho_part/rho_fluid)*H, BMt = b^2/(12 T)).
+
+        args: name, density (part, default 1.0), fluid_density (default 1.0),
+              up (default +Z)
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError("hydrostatics needs a solid with volume")
+        up = _unit_v(_vec(a.get("up", (0, 0, 1))))
+        rho = float(a.get("density", 1.0))
+        rho_f = float(a.get("fluid_density", 1.0))
+        vtot = sh.Volume
+        ratio = rho / rho_f
+        if ratio >= 1.0:
+            return {"name": a["name"], "floats": False,
+                    "ratio": _round(ratio, 4),
+                    "note": "part density >= fluid density; it sinks"}
+        target = ratio * vtot
+        bb = sh.BoundBox
+        corners = [V(x, y, z) for x in (bb.XMin, bb.XMax)
+                   for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]
+        s = [c.dot(up) for c in corners]
+        smin, smax = min(s), max(s)
+        c = V(bb.Center.x, bb.Center.y, bb.Center.z)
+        big = bb.DiagonalLength * 4 + 1.0
+        rot = App.Rotation(V(0, 0, 1), up)
+
+        def submerged(w):
+            # half-space below the waterline: a large box whose local +Z is the
+            # ``up`` axis and whose top face sits on the plane p.up == w.
+            box = Part.makeBox(2 * big, 2 * big, big, V(-big, -big, -big))
+            box.Placement = App.Placement(c + up * (w - c.dot(up)), rot)
+            return sh.common(box)
+
+        lo, hi = smin, smax
+        for _ in range(60):
+            mid = 0.5 * (lo + hi)
+            if submerged(mid).Volume < target:
+                lo = mid
+            else:
+                hi = mid
+        w = 0.5 * (lo + hi)
+        sub = submerged(w)
+        # a boolean ``common`` yields a Compound (no direct CenterOfMass), so
+        # take the volume-weighted centroid of its solids.
+        sols = sub.Solids or [sub]
+        tv = sum(x.Volume for x in sols) or 1.0
+        b = V(sum(x.CenterOfMass.x * x.Volume for x in sols) / tv,
+              sum(x.CenterOfMass.y * x.Volume for x in sols) / tv,
+              sum(x.CenterOfMass.z * x.Volume for x in sols) / tv)
+        g = sh.CenterOfMass
+        draft = w - smin
+        # waterplane section at the solved waterline
+        wires = sh.slice(up, w)
+        a_wp = i_t = None
+        if wires:
+            face = Part.Face(wires)
+            a_wp = face.Area
+            m = face.MatrixOfInertia
+            # in-plane second moments are the two tensor-diagonal terms not along up
+            axis = next((k for k in range(3)
+                         if abs((up.x, up.y, up.z)[k]) > 0.999999), None)
+            if axis is not None:
+                diag = [m.A11, m.A22, m.A33]
+                i_t = min(d_ for k, d_ in enumerate(diag) if k != axis)
+        kb = b.dot(up) - smin
+        kg = g.dot(up) - smin
+        out = {"name": a["name"], "floats": True, "ratio": _round(ratio, 4),
+               "draft": _round(draft, 4),
+               "submerged_volume": _round(sub.Volume, 4),
+               "waterline": _round(w, 4),
+               "center_of_buoyancy": [_round(b.x), _round(b.y), _round(b.z)],
+               "center_of_gravity": [_round(g.x), _round(g.y), _round(g.z)],
+               "KB": _round(kb, 4), "KG": _round(kg, 4)}
+        if a_wp is not None:
+            out["waterplane_area"] = _round(a_wp, 3)
+        if i_t is not None and sub.Volume > 1e-9:
+            bm = i_t / sub.Volume
+            out["I_waterplane"] = _round(i_t, 3)
+            out["BM"] = _round(bm, 4)
+            out["GM"] = _round(kb + bm - kg, 4)
+            out["stable"] = bool(kb + bm - kg > 0)
+        return out
+
+    def op_tolerance_stack(a):
+        """1-D dimensional tolerance stack-up for an assembly chain.
+
+        Each ``link`` is ``{nominal, plus, minus | tol, sign(=+1), name}`` where
+        ``plus``/``minus`` are the unsigned upper/lower tolerances (symmetric +/-t
+        may be given as ``tol``) and ``sign`` is +1 if the dimension grows the gap
+        or -1 if it closes it. Reports the gap ``nominal``, the worst-case limits
+        (arithmetic sum of tolerances), the statistical RSS limits (root-sum-square
+        — the realistic spread for independent dimensions) and the dominant
+        contributor. Pure analytic, so exact.
+
+        args: links: [{nominal, plus, minus | tol, sign, name}], sigma(=3)
+        """
+        links = a["links"]
+        if not links:
+            raise ValueError("tolerance_stack needs at least one link")
+        sigma = float(a.get("sigma", 3))
+        nom = wc_plus = wc_minus = var_plus = var_minus = 0.0
+        detail = []
+        for i, lk in enumerate(links):
+            sign = float(lk.get("sign", 1))
+            n = float(lk["nominal"])
+            if "tol" in lk:
+                p = m = abs(float(lk["tol"]))
+            else:
+                p, m = abs(float(lk["plus"])), abs(float(lk["minus"]))
+            nom += sign * n
+            # a -1 link flips which gap extreme each tolerance pushes toward.
+            tp, tm = (p, m) if sign >= 0 else (m, p)
+            wc_plus += tp
+            wc_minus += tm
+            var_plus += tp * tp
+            var_minus += tm * tm
+            detail.append({"name": lk.get("name", "L%d" % (i + 1)),
+                           "sign": sign, "nominal": n, "plus": p, "minus": m})
+        rss_plus, rss_minus = math.sqrt(var_plus), math.sqrt(var_minus)
+        dom = max(detail, key=lambda d: d["plus"] + d["minus"])
+        return {"links": len(links), "nominal": _round(nom, 4),
+                "worst_case": {"max": _round(nom + wc_plus, 4),
+                               "min": _round(nom - wc_minus, 4),
+                               "plus": _round(wc_plus, 4),
+                               "minus": _round(wc_minus, 4)},
+                "rss": {"max": _round(nom + rss_plus, 4),
+                        "min": _round(nom - rss_minus, 4),
+                        "plus": _round(rss_plus, 4),
+                        "minus": _round(rss_minus, 4), "sigma": sigma},
+                "dominant": dom["name"], "detail": detail}
+
     return {
         "box": op_box, "cylinder": op_cylinder, "sphere": op_sphere, "cone": op_cone,
         "torus": op_torus, "extrude": op_extrude, "revolve": op_revolve, "loft": op_loft,
@@ -3413,5 +3591,7 @@ def register(state):
         "rackpinion": op_rackpinion, "cam": op_cam, "planetary": op_planetary,
         "geneva": op_geneva, "cam_profile": op_cam_profile,
         "spatial_mobility": op_spatial_mobility,
+        "projected_area": op_projected_area, "hydrostatics": op_hydrostatics,
+        "tolerance_stack": op_tolerance_stack,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
