@@ -39,6 +39,53 @@ class AgentSession:
             tool=tool, args=args or {}, ok=result.ok, error=result.error, data=result.data))
         return result
 
+    # -- orchestration (意念 -> 选模块 -> 执行) ---------------------------- #
+    def build(self, script: str, planner: Optional[Any] = None) -> ToolResult:
+        """Plan a natural-language script into tool calls and run them on the
+        live kernel — closing the loop the standalone :class:`Planner` only
+        prepared but never executed here.
+
+        ``script`` may hold several intents separated by newlines or ``;``
+        (e.g. ``"box 20x10x5; cylinder r=4 h=20; cut cyl1 from box1; fillet it
+        radius 2"``). A single stateful planner threads object names and the
+        ``it``/``this`` back-reference across lines, so a multi-step *pipeline*
+        executes as one fused build. Steps whose tool the registry lacks are
+        recorded as skipped (planner control markers like ``__reset__`` too),
+        not raised — orchestration degrades gracefully.
+        """
+        if not isinstance(script, str) or not script.strip():
+            return ToolResult.failure("build 'script' must be a non-empty string")
+        if planner is None:
+            from .planner import Planner
+            planner = Planner()
+        known = set(self.registry.names())
+        lines = [ln.strip() for ln in script.replace(";", "\n").splitlines()
+                 if ln.strip()]
+        transcript, executed, failed = [], 0, 0
+        for line in lines:
+            plan = planner.plan(line)
+            entry: Dict[str, Any] = {"line": line, "note": plan.note, "steps": []}
+            if plan.error:
+                entry["error"] = plan.error
+                failed += 1
+                transcript.append(entry)
+                continue
+            for step in plan.steps:
+                tool = step["tool"]
+                if tool.startswith("__") or tool not in known:
+                    entry["steps"].append({"tool": tool, "skipped": True})
+                    continue
+                r = self.act(tool, step.get("args", {}))
+                entry["steps"].append({"tool": tool, "args": step.get("args", {}),
+                                       "ok": r.ok, "error": r.error})
+                if r.ok:
+                    executed += 1
+                else:
+                    failed += 1
+            transcript.append(entry)
+        return ToolResult.success(transcript=transcript, lines=len(lines),
+                                  executed=executed, failed=failed)
+
     # -- perception -------------------------------------------------------- #
     def perceive(self, name: str) -> ToolResult:
         """Inspect a model's current geometric state (metrics)."""
