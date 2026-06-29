@@ -89,7 +89,25 @@ def main():
     _num_guard(s.act("solid.reverse", {"name": 123}), "solid name")
     _num_guard(s.act("solid.reverse_build", {"name": 123}), "solid name")
     _num_guard(s.act("doc.save", {"path": 123}), "path")
-    print("malformed numeric/vector/path inputs across solid.*/view.*/doc.* refused cleanly")
+    # malformed _profile_face specs (extrude/revolve/loft) used to leak a bare
+    # 'not enough values to unpack', 'could not convert' or an OCCError.
+    _num_guard(s.act("solid.extrude", {"name": "E", "profile": {"rect": "x"},
+                                       "length": 5}), "rect")
+    _num_guard(s.act("solid.extrude", {"name": "E", "profile": {"rect": [10]},
+                                       "length": 5}), "rect")
+    _num_guard(s.act("solid.extrude", {"name": "E", "profile": {"circle": "x"},
+                                       "length": 5}), "circle")
+    _num_guard(s.act("solid.extrude", {"name": "E", "profile": {"polygon": "x"},
+                                       "length": 5}), "polygon")
+    _num_guard(s.act("solid.extrude", {"name": "E",
+                                       "profile": {"polygon": [[0, 0]]},
+                                       "length": 5}), "at least 3 points")
+    _num_guard(s.act("solid.extrude", {"name": "E", "profile": {"slot": [10]},
+                                       "length": 5}), "slot")
+    _num_guard(s.act("solid.revolve", {"name": "R", "profile": {"circle": "x"},
+                                       "angle": 90}), "circle")
+    print("malformed numeric/vector/path/profile inputs across "
+          "solid.*/view.*/doc.* refused cleanly")
 
     # a pointed cone (one zero radius) is legitimate and must still build.
     apex = s.act("solid.cone", {"name": "apex", "radius1": 0, "radius2": 10, "height": 30})

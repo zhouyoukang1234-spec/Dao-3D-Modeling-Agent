@@ -59,6 +59,25 @@ def _vec(seq, default=(0, 0, 0), label="vector"):
             "%s components must all be numbers (got %r)" % (label, seq))
 
 
+def _pt2(seq, label):
+    """Coerce a 2-element [x, y] sequence to floats with a guided error -- a
+    bare ``w, h = spec[...]`` leaks 'not enough values to unpack' / 'could not
+    convert' when the value is a string or a wrong-length / non-numeric list."""
+    if isinstance(seq, (str, bytes)) or not isinstance(seq, (list, tuple)):
+        raise ValueError("%s must be an [x, y] pair (got %r)" % (label, seq))
+    if len(seq) < 2:
+        raise ValueError("%s must have 2 components [x, y] (got %r)" % (label, seq))
+    out = []
+    for v in seq[:2]:
+        if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+            raise ValueError("%s must hold numbers (got %r)" % (label, seq))
+        try:
+            out.append(float(v))
+        except (TypeError, ValueError):
+            raise ValueError("%s must hold numbers (got %r)" % (label, seq))
+    return out[0], out[1]
+
+
 _MISSING = object()
 
 
@@ -457,7 +476,7 @@ def _profile_face(spec):
             "profile must be a dict like {'rect':[w,h]} / {'circle':r} / "
             "{'polygon':[[x,y],...]} / {'slot':[l,w]}; got %r" % (spec,))
     if "rect" in spec:
-        w, h = spec["rect"]
+        w, h = _pt2(spec["rect"], "profile rect [w, h]")
         if spec.get("centered", True):
             x0, y0 = -w / 2.0, -h / 2.0
         else:
@@ -465,7 +484,7 @@ def _profile_face(spec):
         pts = [V(x0, y0, 0), V(x0 + w, y0, 0), V(x0 + w, y0 + h, 0), V(x0, y0 + h, 0), V(x0, y0, 0)]
         wire = Part.makePolygon(pts)
     elif "circle" in spec:
-        r = float(spec["circle"])
+        r = _num(spec, "circle", label="profile circle radius")
         # a non-positive circle radius leaks a bare 'OCCError: Radius value is
         # negative'; refuse it with guidance like the other dimension guards.
         if r <= 0:
@@ -473,12 +492,24 @@ def _profile_face(spec):
                 "profile circle radius must be positive (got %g)" % r)
         wire = Part.Wire(Part.Circle(V(0, 0, 0), V(0, 0, 1), r).toShape())
     elif "polygon" in spec:
-        pts = [V(float(p[0]), float(p[1]), 0) for p in spec["polygon"]]
+        poly = spec["polygon"]
+        if isinstance(poly, (str, bytes)) or not isinstance(poly, (list, tuple)):
+            raise ValueError(
+                "profile 'polygon' must be a list of [x, y] points (got %r)"
+                % (poly,))
+        pts = [V(*_pt2(p, "polygon point"), 0) for p in poly]
+        if len(pts) < 3:
+            raise ValueError(
+                "profile 'polygon' needs at least 3 points (got %d)" % len(pts))
         if pts[0] != pts[-1]:
             pts.append(pts[0])
         wire = Part.makePolygon(pts)
     elif "slot" in spec:
-        length, width = spec["slot"]
+        length, width = _pt2(spec["slot"], "profile slot [length, width]")
+        if length <= 0 or width <= 0:
+            raise ValueError(
+                "profile slot needs positive [length, width] (got [%g, %g])"
+                % (length, width))
         r = width / 2.0
         cx = length / 2.0 - r
         e = []
