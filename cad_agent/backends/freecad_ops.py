@@ -840,6 +840,11 @@ def register(state):
         grid = int(a.get("grid", 3))
         if grid < 1:
             raise ValueError("solid.curvature: grid must be >= 1, got %d" % grid)
+        if grid > 512:
+            raise ValueError(
+                "solid.curvature: grid must be <= 512, got %d; each face is "
+                "sampled grid*grid times via curvatureAt, so an unbounded grid "
+                "(e.g. 99999 -> ~1e10 evaluations/face) hangs the kernel" % grid)
         detail = []
         kmax_abs = 0.0
         kmax_face = None

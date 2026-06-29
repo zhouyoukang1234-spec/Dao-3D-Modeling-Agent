@@ -83,6 +83,11 @@ def main():
     assert not badgrid.ok and "grid must be" in (badgrid.error or "").lower()
     print("invalid grid refused: %s" % badgrid.error)
 
+    # ---- an unbounded grid is refused (DoS guard, not a kernel hang) ---- #
+    huge = s.act("solid.curvature", {"name": "blk", "grid": 99999})
+    assert not huge.ok and "<= 512" in (huge.error or ""), huge.error
+    print("oversized grid refused (no kernel hang): %s" % huge.error)
+
     # ---- a missing solid is refused loudly ------------------------------ #
     bad = s.act("solid.curvature", {"name": "nope"})
     assert not bad.ok and "no such solid" in (bad.error or "").lower()
