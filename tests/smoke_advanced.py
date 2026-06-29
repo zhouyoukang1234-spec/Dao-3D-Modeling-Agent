@@ -69,6 +69,23 @@ def main():
     print("mesh:", {k2: r.data[k2] for k2 in ("facets", "watertight", "mesh_volume", "brep_volume")})
     assert r.data["watertight"], r.data
 
+    # --- malformed-input guards (no_raw_leak): non-numeric tolerance/scale and
+    #     a non-string export path used to leak raw 'could not convert string to
+    #     float' / TypeError; they must be guided. -----------------------------
+    def _guided(r, token):
+        err = r.error or ""
+        assert not r.ok, "expected failure, got %r" % (r.data,)
+        for raw in ("TypeError", "could not convert", "AttributeError"):
+            assert raw not in err, "leaked raw %s: %r" % (raw, err)
+        assert token in err, "error %r lacks %r" % (err, token)
+
+    _guided(s.act("mesh.analyze", {"name": "Brk", "tolerance": "x"}), "must be a number")
+    _guided(s.act("mesh.export", {"name": "Brk", "path": 123}), "path")
+    _guided(s.act("mesh.export", {"name": "Brk", "path": os.path.join(OUT, "b.stl"),
+                                  "tolerance": "x"}), "must be a number")
+    _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
+    print("mesh/draw malformed-input guards refused cleanly")
+
     # --- perception renders ---
     r = s.act("view.render", {"names": ["Brk"], "view": "iso",
                              "path": os.path.join(OUT, "brk_iso.png")})

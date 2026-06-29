@@ -24,6 +24,30 @@ def _round(x, n=4):
     return round(float(x), n)
 
 
+_MISSING = object()
+
+
+def _num(a, key, default=_MISSING, label=None):
+    """Coerce ``a[key]`` to float with a guided error.
+
+    A bare ``float(a.get(key, d))`` leaks Python's unactionable ``ValueError:
+    could not convert string to float: 'x'`` / ``TypeError`` on a non-numeric
+    value; name the op-facing argument instead.
+    """
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            raise ValueError("missing required numeric argument %r" % name)
+        return float(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+
+
 def register(state):
     doc = state.doc
 
@@ -148,7 +172,7 @@ def register(state):
     def op_mesh_analyze(a):
         import Mesh
         shape = _shape(a["name"])
-        tol = float(a.get("tolerance", 0.2))
+        tol = _num(a, "tolerance", 0.2, "mesh tolerance")
         mesh = Mesh.Mesh(shape.tessellate(tol))
         return {"points": mesh.CountPoints, "facets": mesh.CountFacets,
                 "solid": bool(mesh.isSolid()), "has_non_manifolds": bool(mesh.hasNonManifolds()),
@@ -159,10 +183,18 @@ def register(state):
     def op_mesh_export(a):
         import Mesh
         shape = _shape(a["name"])
-        mesh = Mesh.Mesh(shape.tessellate(float(a.get("tolerance", 0.1))))
-        mesh.write(a["path"])
-        return {"path": a["path"], "facets": mesh.CountFacets,
-                "bytes": os.path.getsize(a["path"]) if os.path.exists(a["path"]) else 0}
+        path = a.get("path")
+        # Mesh.write's path must be a filesystem string; a non-string leaks a
+        # raw TypeError.
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "mesh.export 'path' must be a non-empty file path string (got %r)"
+                % (path,))
+        tol = _num(a, "tolerance", 0.1, "mesh tolerance")
+        mesh = Mesh.Mesh(shape.tessellate(tol))
+        mesh.write(path)
+        return {"path": path, "facets": mesh.CountFacets,
+                "bytes": os.path.getsize(path) if os.path.exists(path) else 0}
 
     # ---- TechDraw 2D drawing --------------------------------------------- #
     # standard orthographic / pictorial projection directions (first-angle)
@@ -204,7 +236,7 @@ def register(state):
         views = a.get("views", ["front"])
         if isinstance(views, str):
             views = [views]
-        scale = float(a.get("scale", 1.0))
+        scale = _num(a, "scale", 1.0, "draw scale")
         made = []
         for vname in views:
             key = vname.lower()
