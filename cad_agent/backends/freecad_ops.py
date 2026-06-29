@@ -487,12 +487,16 @@ def register(state):
         return _metrics(s)
 
     def op_extrude(a):
+        if "name" not in a or "profile" not in a:
+            raise ValueError("extrude needs 'name' and a 'profile' (sketch/wire)")
         face = _profile_face(a["profile"])
         s = face.extrude(_vec(a.get("dir", (0, 0, a.get("height", 10)))))
         _put(a["name"], s)
         return _metrics(s)
 
     def op_revolve(a):
+        if "name" not in a or "profile" not in a:
+            raise ValueError("revolve needs 'name' and a 'profile' (sketch/wire)")
         face = _profile_face(a["profile"])
         s = face.revolve(_vec(a.get("axis_pos")), _vec(a.get("axis_dir", (0, 1, 0))),
                          a.get("angle", 360))
@@ -500,8 +504,17 @@ def register(state):
         return _metrics(s)
 
     def op_loft(a):
+        if "name" not in a:
+            raise ValueError("loft needs 'name'")
+        sections = a.get("sections")
+        if not sections or len(sections) < 2:
+            raise ValueError(
+                "loft needs 'sections': a list of >=2 cross-sections, each with "
+                "a 'profile'")
         wires = []
-        for sec in a["sections"]:
+        for sec in sections:
+            if "profile" not in sec:
+                raise ValueError("loft: every section needs a 'profile'")
             face = _profile_face(sec["profile"])
             w = face.Wires[0]
             w.translate(_vec((0, 0, sec.get("offset", 0))))
@@ -511,6 +524,8 @@ def register(state):
         return _metrics(s)
 
     def op_shell(a):
+        if "name" not in a or "thickness" not in a:
+            raise ValueError("shell needs 'name' and 'thickness'")
         obj = _get(a["name"])
         thickness = float(a["thickness"])
         nf = len(obj.Shape.Faces)
@@ -538,6 +553,8 @@ def register(state):
 
     # ---- transforms ------------------------------------------------------- #
     def op_translate(a):
+        if "vector" not in a:
+            raise ValueError("translate needs 'vector' ([dx, dy, dz])")
         obj = _get(a["name"])
         s = obj.Shape.copy()
         s.translate(_vec(a["vector"]))
@@ -641,8 +658,13 @@ def register(state):
 
     # ---- patterns --------------------------------------------------------- #
     def op_pattern_linear(a):
+        if "count" not in a or "step" not in a:
+            raise ValueError(
+                "pattern_linear needs 'count' (>=1) and 'step' ([dx, dy, dz])")
         obj = _get(a["name"])
         count = int(a["count"])
+        if count < 1:
+            raise ValueError("pattern_linear count must be >= 1 (got %d)" % count)
         step = _vec(a["step"])
         comp = obj.Shape
         acc = comp
@@ -657,8 +679,12 @@ def register(state):
         return _metrics(acc)
 
     def op_pattern_polar(a):
+        if "count" not in a:
+            raise ValueError("pattern_polar needs 'count' (>=1)")
         obj = _get(a["name"])
         count = int(a["count"])
+        if count < 1:
+            raise ValueError("pattern_polar count must be >= 1 (got %d)" % count)
         total = float(a.get("angle", 360))
         center = _vec(a.get("center"))
         axis = _vec(a.get("axis", (0, 0, 1)))
