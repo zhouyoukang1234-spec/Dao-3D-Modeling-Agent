@@ -63,6 +63,30 @@ def main():
     print("circle: A=%.1f I=%.0f S=%.0f r_gyr=%.2f (== pi r^4/4 etc.)"
           % (rc["area"], Icirc, Scirc, R / 2.0))
 
+    # ---- disconnected section: twin square bars (a compound) ----------- #
+    # The section is two separate 20x20 squares, centres at x=10 and x=70,
+    # so makeFace yields a *compound* of two faces -- the props must aggregate
+    # by the parallel-axis theorem, not crash on the missing global inertia.
+    a_ = 20.0
+    s.act("solid.box", {"name": "t1", "length": a_, "width": a_, "height": 200})
+    s.act("solid.box", {"name": "t2", "length": a_, "width": a_, "height": 200})
+    s.act("solid.translate", {"name": "t2", "vector": [60, 0, 0]})
+    s.act("solid.compound", {"names": ["t1", "t2"], "out": "twin"})
+    tw = s.act("solid.section_modulus", {"name": "twin"})
+    assert tw.ok, tw.error
+    td = tw.data
+    assert _close(td["area"], 2 * a_ * a_), td["area"]
+    assert td["regions"] == 2, td["regions"]
+    assert _close(td["centroid"][0], 40.0) and _close(td["centroid"][1], 10.0), td["centroid"]
+    self_I = a_ * a_ ** 3 / 12.0                       # each square about its own axis
+    I_weak = 2 * self_I                                # bending about the shared (x-spread) axis
+    I_strong = 2 * (self_I + a_ * a_ * 30.0 ** 2)      # parallel axis, d=30 in x
+    tm = sorted(p["second_moment"] for p in td["principal"])
+    assert _close(tm[0], I_weak, rel=1e-3), (tm[0], I_weak)
+    assert _close(tm[1], I_strong, rel=1e-3), (tm[1], I_strong)
+    print("twin bars (compound section): A=%.0f regions=%d I=[%.0f, %.0f] (parallel-axis)"
+          % (td["area"], td["regions"], tm[0], tm[1]))
+
     # ---- a plane that misses the solid is refused --------------------- #
     miss = s.act("solid.section_modulus",
                  {"name": "bar", "normal": [0, 0, 1], "point": [0, 0, 10 * L]})

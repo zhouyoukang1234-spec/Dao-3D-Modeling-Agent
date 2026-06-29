@@ -3579,11 +3579,27 @@ def register(state):
                 % (op, [_round(n.x), _round(n.y), _round(n.z)],
                    [_round(pt.x), _round(pt.y), _round(pt.z)]))
         face = Part.makeFace(wires, "Part::FaceMakerBullseye")
-        c = face.CenterOfMass
-        mat = face.MatrixOfInertia
-        m = np.array([[mat.A11, mat.A12, mat.A13],
-                      [mat.A12, mat.A22, mat.A23],
-                      [mat.A13, mat.A23, mat.A33]])
+        # A section with disjoint regions (twin spars, multi-cell box, a
+        # compound of solids) builds a *compound* of faces with no global
+        # CenterOfMass/MatrixOfInertia; aggregate the area-weighted centroid and
+        # the area-moment tensor over the sub-faces by the parallel-axis theorem
+        # so every section reads the same way whether it is one region or many.
+        subs = face.Faces
+        area = sum(f.Area for f in subs)
+        if area <= 0:
+            raise ValueError("%s: the section has zero area" % op)
+        c = V(sum(f.Area * f.CenterOfMass.x for f in subs) / area,
+              sum(f.Area * f.CenterOfMass.y for f in subs) / area,
+              sum(f.Area * f.CenterOfMass.z for f in subs) / area)
+        m = np.zeros((3, 3))
+        for f in subs:
+            mat = f.MatrixOfInertia                      # about this face's CoM
+            mi = np.array([[mat.A11, mat.A12, mat.A13],
+                           [mat.A12, mat.A22, mat.A23],
+                           [mat.A13, mat.A23, mat.A33]])
+            fc = f.CenterOfMass
+            d = np.array([fc.x - c.x, fc.y - c.y, fc.z - c.z])
+            m += mi + f.Area * (d.dot(d) * np.eye(3) - np.outer(d, d))
         seed = V(1, 0, 0) if abs(n.x) < 0.9 else V(0, 1, 0)
         u = _unit_v(seed - n * seed.dot(n))
         vv = n.cross(u)
@@ -3597,8 +3613,8 @@ def register(state):
         # faithful extreme-fibre distance.
         pts = [np.array([p.x, p.y, p.z]) - cc
                for w in wires for e in w.Edges for p in e.discretize(64)]
-        return {"area": face.Area, "centroid": c, "vals": vals, "axes": axes,
-                "boundary": pts, "regions": len(wires)}
+        return {"area": area, "centroid": c, "vals": vals, "axes": axes,
+                "boundary": pts, "regions": len(subs)}
 
     def op_section_modulus(a):
         """Cross-section bending properties of a solid cut by a plane — the beam
