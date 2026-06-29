@@ -4123,6 +4123,97 @@ def register(state):
                         "mean_pressure": _round(F / (2.0 * b * L), 4)})
         return out
 
+    def op_fatigue(a):
+        """Constant-amplitude fatigue safety factor (mean-stress criteria).
+
+        A part under a cyclic load swings between ``stress_min`` and
+        ``stress_max``; the damaging pair is the alternating amplitude and the
+        steady mean
+
+          sigma_a = (sigma_max - sigma_min)/2 ,  sigma_m = (sigma_max + sigma_min)/2
+
+        (or pass ``stress_alt``/``stress_mean`` directly). With the endurance
+        limit ``endurance`` (Se), ultimate ``ultimate`` (Su) and yield ``yield``
+        (Sy) the fatigue factor of safety against infinite life follows the
+        chosen mean-stress line:
+
+          goodman  : 1/n = sigma_a/Se + sigma_m/Su
+          soderberg: 1/n = sigma_a/Se + sigma_m/Sy   (also guards first-cycle yield)
+          gerber   : sigma_a*n/Se + (sigma_m*n/Su)^2 = 1  (parabola; least conservative)
+
+        ``Se`` may be estimated from ``ultimate`` via ``se_factor`` (default 0.5,
+        the steel rule Se' ~= 0.5 Su). A separate first-cycle yield factor
+        Sy/sigma_max is reported when ``yield`` is given. With a Basquin pair
+        ``fatigue_coeff`` (sigma_f') and ``fatigue_exp`` (b<0) the finite-life
+        cycles to failure N = 0.5 (sigma_a/sigma_f')^(1/b) are also returned.
+
+        args: stress_alt & stress_mean, or stress_max & stress_min;
+              endurance (Se) or (ultimate & se_factor); ultimate (Su, goodman/
+              gerber); yield (Sy, soderberg/yield-check);
+              criterion (goodman|soderberg|gerber, default goodman);
+              fatigue_coeff & fatigue_exp (optional, Basquin finite life)
+        """
+        crit = a.get("criterion", "goodman")
+        if crit not in ("goodman", "soderberg", "gerber"):
+            raise ValueError(
+                "fatigue: criterion must be 'goodman', 'soderberg' or 'gerber'")
+        if "stress_alt" in a or "stress_mean" in a:
+            sa = abs(float(a.get("stress_alt", 0.0)))
+            sm = float(a.get("stress_mean", 0.0))
+        elif "stress_max" in a and "stress_min" in a:
+            smax = float(a["stress_max"])
+            smin = float(a["stress_min"])
+            sa = abs(smax - smin) / 2.0
+            sm = (smax + smin) / 2.0
+        else:
+            raise ValueError(
+                "fatigue needs 'stress_alt'(&'stress_mean') or "
+                "'stress_max'&'stress_min'")
+        if sa <= 0:
+            raise ValueError("fatigue: alternating stress must be > 0")
+        Su = float(a["ultimate"]) if "ultimate" in a else None
+        if "endurance" in a:
+            Se = float(a["endurance"])
+        elif Su is not None:
+            Se = float(a.get("se_factor", 0.5)) * Su
+        else:
+            raise ValueError(
+                "fatigue needs 'endurance' (Se) or 'ultimate' (Su) to estimate it")
+        if Se <= 0:
+            raise ValueError("fatigue: endurance limit must be > 0")
+        Sy = float(a["yield"]) if "yield" in a else None
+        if crit in ("goodman", "gerber") and Su is None:
+            raise ValueError("fatigue: %s criterion needs 'ultimate' (Su)" % crit)
+        if crit == "soderberg" and Sy is None:
+            raise ValueError("fatigue: soderberg criterion needs 'yield' (Sy)")
+        smax = sm + sa
+        if crit == "goodman":
+            inv = sa / Se + sm / Su
+            n = 1.0 / inv if inv > 0 else None
+        elif crit == "soderberg":
+            inv = sa / Se + sm / Sy
+            n = 1.0 / inv if inv > 0 else None
+        else:                                   # gerber parabola: B n^2 + A n - 1 = 0
+            A = sa / Se
+            B = (sm / Su) ** 2
+            n = (1.0 / A) if B == 0 else (-A + math.sqrt(A * A + 4.0 * B)) / (2.0 * B)
+        out = {"criterion": crit, "stress_alt": _round(sa, 4),
+               "stress_mean": _round(sm, 4), "stress_max": _round(smax, 4),
+               "endurance": _round(Se, 4), "ultimate": _round(Su) if Su else None,
+               "safety_factor": _round(n, 4) if n is not None else None,
+               "infinite_life": (n is not None and n >= 1.0)}
+        if Sy is not None:
+            out["yield"] = _round(Sy)
+            out["yield_safety"] = _round(Sy / smax, 4) if smax > 0 else None
+        if "fatigue_coeff" in a and "fatigue_exp" in a:
+            sf = float(a["fatigue_coeff"])
+            b = float(a["fatigue_exp"])
+            if b >= 0 or sf <= 0:
+                raise ValueError(
+                    "fatigue: Basquin needs fatigue_coeff>0 and fatigue_exp<0")
+            out["cycles_to_failure"] = _round(0.5 * (sa / sf) ** (1.0 / b), 2)
+        return out
+
     def op_hydrostatics(a):
         """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
 
@@ -4401,6 +4492,6 @@ def register(state):
         "beam_deflection": op_beam_deflection, "torsion": op_torsion,
         "natural_frequency": op_natural_frequency,
         "thermal_resistance": op_thermal_resistance,
-        "contact_stress": op_contact_stress,
+        "contact_stress": op_contact_stress, "fatigue": op_fatigue,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }

@@ -38,7 +38,7 @@ _SOLID_OPS = {
     "projected_area", "hydrostatics", "tolerance_stack", "clearance",
     "thermal_expansion", "pressure_vessel", "section_modulus", "buckling",
     "beam_deflection", "torsion", "natural_frequency", "thermal_resistance",
-    "contact_stress",
+    "contact_stress", "fatigue",
     "list", "delete", "export", "import_step",
 }
 
