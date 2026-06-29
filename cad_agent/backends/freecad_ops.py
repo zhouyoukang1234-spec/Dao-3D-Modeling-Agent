@@ -3076,6 +3076,11 @@ def register(state):
         gdx, gdy = [float(v) for v in a.get("ground_dir", (1.0, 0.0))[:2]]
         gn = math.hypot(gdx, gdy) or 1.0
         gdx, gdy = gdx / gn, gdy / gn
+        miss = [k for k in ("crank", "coupler", "rocker", "ground", "angle") if k not in a]
+        if miss:
+            raise ValueError(
+                "fourbar needs link lengths 'crank'/'coupler'/'rocker'/'ground' "
+                "and input 'angle' (deg); missing %s" % ", ".join(miss))
         la = float(a["crank"])
         lb = float(a["coupler"])
         lc = float(a["rocker"])
@@ -3177,6 +3182,8 @@ def register(state):
         angular-velocity ratio is (m cos a - 1)/(m^2 - 2 m cos a + 1), peaking at
         1/(m-1) at centre.
         """
+        if "slots" not in a:
+            raise ValueError("geneva needs 'slots' (number of wheel slots, >= 3)")
         n = int(a["slots"])
         if n < 3:
             raise ValueError("Geneva wheel needs at least 3 slots")
@@ -3221,6 +3228,8 @@ def register(state):
         reduction w_sun/w_carrier = 1 + N_ring/N_sun; carrier fixed degenerates
         to the ordinary train value -N_sun/N_ring (sun -> ring).
         """
+        if "teeth_sun" not in a or "teeth_ring" not in a:
+            raise ValueError("planetary needs 'teeth_sun' and 'teeth_ring'")
         ns = float(a["teeth_sun"])
         nr = float(a["teeth_ring"])
         if ns <= 0 or nr <= 0:
@@ -3266,6 +3275,8 @@ def register(state):
         d(lift)/d(theta) (so callers can verify end-smoothness) and the radial
         cam-profile radius base_radius + lift -- the parametric design output.
         """
+        if "rise" not in a or "angle" not in a:
+            raise ValueError("cam needs 'rise' (lift S) and 'angle' (cam angle, deg)")
         S = float(a["rise"])
         law = a.get("law", "cycloidal")
         br = float(a.get("rise_angle", 90.0))
@@ -3317,6 +3328,8 @@ def register(state):
         returned bounds let callers confirm the kernel-built profile matches the
         law (max radius = base + rise, min radius = base).
         """
+        if "rise" not in a or "name" not in a:
+            raise ValueError("cam_profile needs 'rise' (lift S) and 'name' (output solid)")
         S = float(a["rise"])
         base = float(a.get("base_radius", 0.0))
         thick = float(a.get("thickness", 5.0))
@@ -3384,6 +3397,10 @@ def register(state):
         train_value e = ω_out/ω_in = Π (± N_driver / N_driven). Tooth counts may
         be replaced by pitch radii -- the ratio is identical.
         """
+        if "meshes" not in a:
+            raise ValueError(
+                "geartrain needs 'meshes': a list of {driver, driven[, internal]} "
+                "stages (teeth counts or pitch radii)")
         meshes = a["meshes"]
         if not meshes:
             raise ValueError("gear train needs at least one mesh")
