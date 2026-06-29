@@ -52,6 +52,12 @@ def main():
     print("axial hole  -> undercuts=%d moldable=%s" % (zz["undercuts"], zz["moldable"]))
     assert zz["undercuts"] == 0 and zz["moldable"], zz
 
+    # a zero pull vector used to silently call every face a side wall and report
+    # the part vacuously moldable; it must now fail loud with guidance.
+    zp = s.act("solid.undercut", {"name": "z", "pull": [0, 0, 0]})
+    assert not zp.ok and "non-zero" in (zp.error or ""), zp.error
+    print("zero pull refused:", zp.error)
+
     print("UNDERCUT SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

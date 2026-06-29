@@ -1680,7 +1680,12 @@ def register(state):
         """
         sh = _get(a["name"]).Shape
         pull = _vec(a.get("pull", (0, 0, 1)))
-        plen = pull.Length or 1.0
+        # a zero pull vector makes every face's tilt collapse to 0 and silently
+        # reports the whole part as undraftable; demand a real de-mould axis.
+        if pull.Length < 1e-9:
+            raise ValueError(
+                "draft needs a non-zero 'pull' (de-mould) direction (got [0,0,0])")
+        plen = pull.Length
         com = _center(sh)
         min_draft = float(a.get("min_draft", 1.0))
         sin_min = math.sin(math.radians(min_draft))
@@ -1786,7 +1791,12 @@ def register(state):
         """
         sh = _get(a["name"]).Shape
         pull = _vec(a.get("pull", (0, 0, 1)))
-        pl = pull.Length or 1.0
+        # a zero pull vector normalises to nothing and silently calls every face
+        # a side wall (vacuously moldable); demand a real pull axis.
+        if pull.Length < 1e-9:
+            raise ValueError(
+                "undercut needs a non-zero 'pull' direction (got [0,0,0])")
+        pl = pull.Length
         pull = _vec((pull.x / pl, pull.y / pl, pull.z / pl))
         ptol = math.sin(math.radians(float(a.get("parallel_tol", 1.0))))
         ns = max(1, int(a.get("samples", 2)))
@@ -1854,7 +1864,12 @@ def register(state):
         """
         sh = _get(a["name"]).Shape
         up = _vec(a.get("build", (0, 0, 1)))
-        ul = up.Length or 1.0
+        # a zero build vector normalises to nothing and silently reports a
+        # support-free part; demand a real build axis.
+        if up.Length < 1e-9:
+            raise ValueError(
+                "overhang needs a non-zero 'build' direction (got [0,0,0])")
+        ul = up.Length
         up = _vec((up.x / ul, up.y / ul, up.z / ul))
         limit = float(a.get("max_overhang", 45.0))
         ns = max(2, int(a.get("samples", 5)))

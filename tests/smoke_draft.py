@@ -47,6 +47,12 @@ def main():
     cx = s.act("solid.draft", {"name": "c", "pull": [1, 0, 0], "min_draft": 3}).data
     assert cx["insufficient_draft"] >= 1, cx
 
+    # a zero pull vector used to silently collapse every face's tilt to 0 and
+    # report the whole part undraftable; it must now fail loud with guidance.
+    z = s.act("solid.draft", {"name": "c", "pull": [0, 0, 0]})
+    assert not z.ok and "non-zero" in (z.error or "") and "ValueError" in (z.error or ""), z.error
+    print("zero pull refused:", z.error)
+
     print("DRAFT SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

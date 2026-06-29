@@ -75,6 +75,12 @@ def main():
     assert sp["overhangs"] >= 1 and not sp["printable"], sp
     assert all(o["angle_deg"] < 45.0 for o in sp["overhang_faces"]), sp
 
+    # a zero build vector used to silently report a support-free part; it must
+    # now fail loud with guidance.
+    zb = s.act("solid.overhang", {"name": "ball", "build": [0, 0, 0]})
+    assert not zb.ok and "non-zero" in (zb.error or ""), zb.error
+    print("zero build refused:", zb.error)
+
     print("OVERHANG SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 
