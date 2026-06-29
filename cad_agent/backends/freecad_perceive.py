@@ -21,6 +21,16 @@ _VIEWS = {
 }
 
 
+def _req_path(a, op):
+    """``a['path']`` must be a non-empty filesystem string; a non-string leaks a
+    raw 'TypeError: expected str, bytes or os.PathLike'."""
+    p = a.get("path")
+    if not isinstance(p, str) or not p:
+        raise ValueError(
+            "%s 'path' must be a non-empty file path string (got %r)" % (op, p))
+    return p
+
+
 def register(state):
     doc = state.doc
 
@@ -34,6 +44,13 @@ def register(state):
         directly (their lowercase add-name) for the same effect.
         """
         objs = []
+        # 'names' must be a list of solid names; a bare int leaks 'TypeError:
+        # int object is not iterable' and a bare string would silently iterate
+        # its characters.
+        if names is not None and (isinstance(names, (str, bytes))
+                                  or not isinstance(names, (list, tuple))):
+            raise ValueError(
+                "view 'names' must be a list of solid names (got %r)" % (names,))
         if assembly:
             asm = doc.getObject(assembly)
             if asm is not None:
@@ -80,7 +97,7 @@ def register(state):
         view = a.get("view", "iso")
         tol = float(a.get("tolerance", 0.5))
         size = int(a.get("size", 700))
-        path = a["path"]
+        path = _req_path(a, "view.render")
         objs = _collect(names, a.get("assembly"))
         if not objs:
             return {"rendered": False, "reason": "no solids to render"}
@@ -127,7 +144,7 @@ def register(state):
         names = a.get("names")
         tol = float(a.get("tolerance", 0.5))
         size = int(a.get("size", 900))
-        path = a["path"]
+        path = _req_path(a, "view.views")
         objs = _collect(names, a.get("assembly"))
         if not objs:
             return {"rendered": False, "reason": "no solids"}

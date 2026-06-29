@@ -41,10 +41,75 @@ def _unit_v(v):
     return V(v.x / n, v.y / n, v.z / n) if n else v
 
 
-def _vec(seq, default=(0, 0, 0)):
+def _vec(seq, default=(0, 0, 0), label="vector"):
     if seq is None:
         seq = default
-    return V(float(seq[0]), float(seq[1]), float(seq[2]))
+    # a non-sequence (e.g. a bare string) or a wrong-length / non-numeric list
+    # otherwise leaks a raw IndexError / 'could not convert string to float'.
+    if isinstance(seq, (str, bytes)) or not isinstance(seq, (list, tuple)):
+        raise ValueError(
+            "%s must be a list of 3 numbers [x, y, z] (got %r)" % (label, seq))
+    if len(seq) != 3:
+        raise ValueError(
+            "%s must have exactly 3 components [x, y, z] (got %r)" % (label, seq))
+    try:
+        return V(float(seq[0]), float(seq[1]), float(seq[2]))
+    except (TypeError, ValueError):
+        raise ValueError(
+            "%s components must all be numbers (got %r)" % (label, seq))
+
+
+_MISSING = object()
+
+
+def _num(a, key, default=_MISSING, label=None):
+    """Coerce ``a[key]`` to float with a guided error instead of a raw
+    ``TypeError`` / ``ValueError: could not convert string to float``."""
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            # let the kernel turn a bare missing key into the canonical
+            # "<op> missing required argument '<key>'" guidance.
+            raise KeyError(key)
+        return float(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be a number (got %r)" % (name, v))
+
+
+def _int(a, key, default=_MISSING, label=None):
+    """Coerce ``a[key]`` to int with a guided error instead of a raw
+    ``ValueError: invalid literal for int()``."""
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            raise KeyError(key)
+        return int(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    if f != int(f):
+        raise ValueError("%s must be a whole number (got %r)" % (name, v))
+    return int(f)
+
+
+def _path(a, key, op):
+    """Validate ``a[key]`` is a non-empty filesystem string; a non-string
+    otherwise leaks a raw 'TypeError: expected str, bytes or os.PathLike'."""
+    p = a.get(key)
+    if not isinstance(p, str) or not p:
+        raise ValueError(
+            "%s '%s' must be a non-empty file path string (got %r)"
+            % (op, key, p))
+    return p
 
 
 def _proper_rotations():
@@ -450,36 +515,44 @@ def register(state):
 
     # ---- primitives ------------------------------------------------------- #
     def op_box(a):
-        s = Part.makeBox(a["length"], a["width"], a["height"], _vec(a.get("pos")))
+        length = _num(a, "length", label="length")
+        width = _num(a, "width", label="width")
+        height = _num(a, "height", label="height")
+        if length <= 0 or width <= 0 or height <= 0:
+            raise ValueError(
+                "box needs positive length, width and height (got %g, %g, %g)"
+                % (length, width, height))
+        s = Part.makeBox(length, width, height, _vec(a.get("pos"), label="pos"))
         _put(a["name"], s)
         return _metrics(s)
 
     def op_cylinder(a):
-        r = float(a["radius"])
-        h = float(a["height"])
+        r = _num(a, "radius", label="radius")
+        h = _num(a, "height", label="height")
         # makeCylinder accepts a negative height and returns an invalid shape
         # whose Volume read then throws a cryptic FreeCADError; reject up front.
         if r <= 0 or h <= 0:
             raise ValueError(
                 "cylinder needs positive radius and height (got radius=%g, "
                 "height=%g)" % (r, h))
-        s = Part.makeCylinder(r, h, _vec(a.get("pos")),
-                              _vec(a.get("dir", (0, 0, 1))), a.get("angle", 360))
+        s = Part.makeCylinder(r, h, _vec(a.get("pos"), label="pos"),
+                              _vec(a.get("dir", (0, 0, 1)), label="dir"),
+                              _num(a, "angle", 360, "angle"))
         _put(a["name"], s)
         return _metrics(s)
 
     def op_sphere(a):
-        r = float(a["radius"])
+        r = _num(a, "radius", label="radius")
         if r <= 0:
             raise ValueError("sphere needs a positive radius (got %g)" % r)
-        s = Part.makeSphere(r, _vec(a.get("pos")))
+        s = Part.makeSphere(r, _vec(a.get("pos"), label="pos"))
         _put(a["name"], s)
         return _metrics(s)
 
     def op_cone(a):
-        r1 = float(a["radius1"])
-        r2 = float(a["radius2"])
-        h = float(a["height"])
+        r1 = _num(a, "radius1", label="radius1")
+        r2 = _num(a, "radius2", label="radius2")
+        h = _num(a, "height", label="height")
         # one radius may be zero (a pointed apex) but not both, radii are
         # non-negative and the height must be positive -- otherwise OCC throws
         # a bare OCCDomainError 'creation of cone failed'.
@@ -487,19 +560,19 @@ def register(state):
             raise ValueError(
                 "cone needs non-negative radii (not both zero) and positive "
                 "height (got radius1=%g, radius2=%g, height=%g)" % (r1, r2, h))
-        s = Part.makeCone(r1, r2, h, _vec(a.get("pos")))
+        s = Part.makeCone(r1, r2, h, _vec(a.get("pos"), label="pos"))
         _put(a["name"], s)
         return _metrics(s)
 
     def op_torus(a):
-        r1 = float(a["radius1"])
-        r2 = float(a["radius2"])
+        r1 = _num(a, "radius1", label="radius1")
+        r2 = _num(a, "radius2", label="radius2")
         # both radii must be positive -- negatives leak a bare OCCDomainError.
         if r1 <= 0 or r2 <= 0:
             raise ValueError(
                 "torus needs positive radius1 (ring) and radius2 (tube) "
                 "(got radius1=%g, radius2=%g)" % (r1, r2))
-        s = Part.makeTorus(r1, r2, _vec(a.get("pos")))
+        s = Part.makeTorus(r1, r2, _vec(a.get("pos"), label="pos"))
         _put(a["name"], s)
         return _metrics(s)
 
@@ -521,7 +594,7 @@ def register(state):
         if "name" not in a or "profile" not in a:
             raise ValueError("revolve needs 'name' and a 'profile' (sketch/wire)")
         face = _profile_face(a["profile"])
-        angle = float(a.get("angle", 360))
+        angle = _num(a, "angle", 360, "angle")
         # a zero (or full-circle-overflow) sweep leaks a bare OCCError
         # BRepSweep_Rotation; require a usable non-zero angle.
         if abs(angle) < 1e-9:
@@ -573,7 +646,7 @@ def register(state):
         if "name" not in a or "thickness" not in a:
             raise ValueError("shell needs 'name' and 'thickness'")
         obj = _get(a["name"])
-        thickness = float(a["thickness"])
+        thickness = _num(a, "thickness", label="thickness")
         nf = len(obj.Shape.Faces)
         open_faces = a.get("open_faces")
         # makeThickness cannot hollow a solid without at least one removed face:
@@ -609,7 +682,7 @@ def register(state):
 
     def op_rotate(a):
         obj = _get(a["name"])
-        axis = _vec(a.get("axis", (0, 0, 1)))
+        axis = _vec(a.get("axis", (0, 0, 1)), label="axis")
         # a zero rotation axis leaks a bare OCCError gp_Dir() zero norm.
         if axis.Length < 1e-9:
             raise ValueError(
@@ -618,25 +691,20 @@ def register(state):
         # straight into Shape.rotate leaks a bare 'TypeError: must be real
         # number, not str' instead of the clean ValueError the other transforms
         # raise for bad numerics.
-        try:
-            angle = float(a.get("angle", 90))
-        except (TypeError, ValueError):
-            raise ValueError(
-                "rotate 'angle' must be a number in degrees (got %r)"
-                % (a.get("angle"),))
+        angle = _num(a, "angle", 90, "rotate angle")
         s = obj.Shape.copy()
-        s.rotate(_vec(a.get("center")), axis, angle)
+        s.rotate(_vec(a.get("center"), label="center"), axis, angle)
         _put(a.get("out", a["name"]), s)
         return _metrics(s)
 
     def op_mirror(a):
         obj = _get(a["name"])
-        normal = _vec(a.get("normal", (1, 0, 0)))
+        normal = _vec(a.get("normal", (1, 0, 0)), label="normal")
         # a zero mirror-plane normal leaks a bare OCCError gp_Dir() zero norm.
         if normal.Length < 1e-9:
             raise ValueError(
                 "mirror needs a non-zero 'normal' for the mirror plane (got [0,0,0])")
-        s = obj.Shape.mirror(_vec(a.get("base")), normal)
+        s = obj.Shape.mirror(_vec(a.get("base"), label="base"), normal)
         _put(a.get("out", a["name"] + "_m"), s)
         return _metrics(s)
 
@@ -715,7 +783,7 @@ def register(state):
         if "name" not in a or "radius" not in a:
             raise ValueError("fillet needs 'name' (solid) and 'radius'")
         obj = _get(a["name"])
-        r = float(a["radius"])
+        r = _num(a, "radius", label="fillet radius")
         if r <= 0:
             raise ValueError("fillet radius must be positive (got %g)" % r)
         edges = _pick_edges(obj.Shape, a.get("edges"))
@@ -734,7 +802,7 @@ def register(state):
         if "name" not in a or "size" not in a:
             raise ValueError("chamfer needs 'name' (solid) and 'size'")
         obj = _get(a["name"])
-        d = float(a["size"])
+        d = _num(a, "size", label="chamfer size")
         if d <= 0:
             raise ValueError("chamfer size must be positive (got %g)" % d)
         edges = _pick_edges(obj.Shape, a.get("edges"))
@@ -753,10 +821,10 @@ def register(state):
             raise ValueError(
                 "pattern_linear needs 'count' (>=1) and 'step' ([dx, dy, dz])")
         obj = _get(a["name"])
-        count = int(a["count"])
+        count = _int(a, "count", label="count")
         if count < 1:
             raise ValueError("pattern_linear count must be >= 1 (got %d)" % count)
-        step = _vec(a["step"])
+        step = _vec(a["step"], label="step")
         comp = obj.Shape
         acc = comp
         for i in range(1, count):
@@ -773,12 +841,12 @@ def register(state):
         if "count" not in a:
             raise ValueError("pattern_polar needs 'count' (>=1)")
         obj = _get(a["name"])
-        count = int(a["count"])
+        count = _int(a, "count", label="count")
         if count < 1:
             raise ValueError("pattern_polar count must be >= 1 (got %d)" % count)
-        total = float(a.get("angle", 360))
-        center = _vec(a.get("center"))
-        axis = _vec(a.get("axis", (0, 0, 1)))
+        total = _num(a, "angle", 360, "angle")
+        center = _vec(a.get("center"), label="center")
+        axis = _vec(a.get("axis", (0, 0, 1)), label="axis")
         # a zero array axis leaks a bare OCCError gp_Dir() zero norm once copies
         # are actually rotated (count > 1).
         if count > 1 and axis.Length < 1e-9:
@@ -807,7 +875,7 @@ def register(state):
 
     def op_inspect(a):
         sh = _get(a["name"]).Shape
-        density = float(a.get("density", 1.0))  # g/mm^3 if you like
+        density = _num(a, "density", 1.0, "density")  # g/mm^3 if you like
         m = _metrics(sh)
         m["mass"] = _round(sh.Volume * density)
         try:
@@ -832,7 +900,7 @@ def register(state):
             raise ValueError(
                 "solid.inertia needs a solid (got a shell/compound with no "
                 "volume); inertia is undefined without an enclosed mass")
-        density = float(a.get("density", 1.0))
+        density = _num(a, "density", 1.0, "density")
         about = a.get("about", "centroid")
         m, com, tensor, ref = _inertia_about(sh, density, about)
         # Principal axes are an eigendecomposition of the *centroidal* tensor.
@@ -876,7 +944,7 @@ def register(state):
             raise ValueError(
                 "solid.curvature needs a shape with faces (got a wire/vertex); "
                 "curvature is undefined without a surface")
-        grid = int(a.get("grid", 3))
+        grid = _int(a, "grid", 3, "grid")
         if grid < 1:
             raise ValueError("solid.curvature: grid must be >= 1, got %d" % grid)
         if grid > 512:
@@ -3699,7 +3767,7 @@ def register(state):
         if not names:
             raise ValueError("export has nothing to write (no solids in session)")
         objs = [_get(n) for n in names]
-        path = a["path"]
+        path = _path(a, "path", "export")
         # Writing into a directory that does not exist otherwise leaks a bare
         # OSError "Cannot open file"; name the missing directory instead.
         import os
@@ -3728,7 +3796,7 @@ def register(state):
     def op_import_step(a):
         import Import
         import os
-        path = a["path"]
+        path = _path(a, "path", "import_step")
         # Distinguish "file is missing" from "file is unreadable/not STEP":
         # FreeCAD reports both as the same opaque "Cannot read STEP file", which
         # sends callers hunting a parse problem when they merely mistyped a path.

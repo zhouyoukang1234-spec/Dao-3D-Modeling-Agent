@@ -43,6 +43,41 @@ def main():
          "must be a string")
     print("bad cylinder/cone/sphere/torus dims all refused cleanly")
 
+    # --- malformed-input guards (no_raw_leak): non-numeric dims, malformed
+    #     vectors and non-string paths used to leak raw 'could not convert string
+    #     to float' / IndexError / TypeError instead of a guided message. -------
+    def _num_guard(r, token):
+        err = r.error or ""
+        assert not r.ok, "expected failure, got %r" % (r.data,)
+        for raw in ("could not convert", "TypeError", "IndexError",
+                    "invalid literal", "not iterable", "expected str"):
+            assert raw not in err, "leaked raw %s: %r" % (raw, err)
+        assert token in err, "error %r lacks %r" % (err, token)
+
+    s.act("solid.box", {"name": "G", "length": 20, "width": 10, "height": 5})
+    _num_guard(s.act("solid.box", {"name": "Z", "length": "x", "width": 5, "height": 5}),
+               "length")
+    _num_guard(s.act("solid.cylinder", {"name": "Z", "radius": "x", "height": 5}), "radius")
+    _num_guard(s.act("solid.sphere", {"name": "Z", "radius": [1, 2]}), "radius")
+    _num_guard(s.act("solid.translate", {"name": "G", "vector": [1, 2], "out": "T"}),
+               "3 components")
+    _num_guard(s.act("solid.translate", {"name": "G", "vector": ["x", 0, 0], "out": "T"}),
+               "numbers")
+    _num_guard(s.act("solid.rotate", {"name": "G", "axis": "x", "angle": 30, "out": "R"}),
+               "axis")
+    _num_guard(s.act("solid.fillet", {"name": "G", "radius": "x"}), "radius")
+    _num_guard(s.act("solid.shell", {"name": "G", "thickness": "x", "out": "Sh"}),
+               "thickness")
+    _num_guard(s.act("solid.pattern_polar", {"name": "G", "count": "x", "out": "P"}),
+               "count")
+    _num_guard(s.act("solid.curvature", {"name": "G", "grid": "x"}), "grid")
+    _num_guard(s.act("solid.inertia", {"name": "G", "density": "x"}), "density")
+    _num_guard(s.act("solid.export", {"names": ["G"], "path": 123}), "path")
+    _num_guard(s.act("solid.import_step", {"path": 123}), "path")
+    _num_guard(s.act("view.render", {"names": ["G"], "path": 123}), "path")
+    _num_guard(s.act("view.scene", {"names": 123}), "names")
+    print("malformed numeric/vector/path inputs across solid.*/view.* refused cleanly")
+
     # a pointed cone (one zero radius) is legitimate and must still build.
     apex = s.act("solid.cone", {"name": "apex", "radius1": 0, "radius2": 10, "height": 30})
     assert apex.ok, apex.error
