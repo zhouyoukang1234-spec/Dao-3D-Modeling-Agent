@@ -438,7 +438,15 @@ def register(state):
         return _metrics(s)
 
     def op_cylinder(a):
-        s = Part.makeCylinder(a["radius"], a["height"], _vec(a.get("pos")),
+        r = float(a["radius"])
+        h = float(a["height"])
+        # makeCylinder accepts a negative height and returns an invalid shape
+        # whose Volume read then throws a cryptic FreeCADError; reject up front.
+        if r <= 0 or h <= 0:
+            raise ValueError(
+                "cylinder needs positive radius and height (got radius=%g, "
+                "height=%g)" % (r, h))
+        s = Part.makeCylinder(r, h, _vec(a.get("pos")),
                               _vec(a.get("dir", (0, 0, 1))), a.get("angle", 360))
         _put(a["name"], s)
         return _metrics(s)
@@ -449,7 +457,17 @@ def register(state):
         return _metrics(s)
 
     def op_cone(a):
-        s = Part.makeCone(a["radius1"], a["radius2"], a["height"], _vec(a.get("pos")))
+        r1 = float(a["radius1"])
+        r2 = float(a["radius2"])
+        h = float(a["height"])
+        # one radius may be zero (a pointed apex) but not both, radii are
+        # non-negative and the height must be positive -- otherwise OCC throws
+        # a bare OCCDomainError 'creation of cone failed'.
+        if r1 < 0 or r2 < 0 or (r1 == 0 and r2 == 0) or h <= 0:
+            raise ValueError(
+                "cone needs non-negative radii (not both zero) and positive "
+                "height (got radius1=%g, radius2=%g, height=%g)" % (r1, r2, h))
+        s = Part.makeCone(r1, r2, h, _vec(a.get("pos")))
         _put(a["name"], s)
         return _metrics(s)
 
