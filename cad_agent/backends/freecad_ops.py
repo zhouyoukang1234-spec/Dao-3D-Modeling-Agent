@@ -592,14 +592,24 @@ def register(state):
 
     def op_rotate(a):
         obj = _get(a["name"])
+        axis = _vec(a.get("axis", (0, 0, 1)))
+        # a zero rotation axis leaks a bare OCCError gp_Dir() zero norm.
+        if axis.Length < 1e-9:
+            raise ValueError(
+                "rotate needs a non-zero 'axis' to spin about (got [0,0,0])")
         s = obj.Shape.copy()
-        s.rotate(_vec(a.get("center")), _vec(a.get("axis", (0, 0, 1))), a.get("angle", 90))
+        s.rotate(_vec(a.get("center")), axis, a.get("angle", 90))
         _put(a.get("out", a["name"]), s)
         return _metrics(s)
 
     def op_mirror(a):
         obj = _get(a["name"])
-        s = obj.Shape.mirror(_vec(a.get("base")), _vec(a.get("normal", (1, 0, 0))))
+        normal = _vec(a.get("normal", (1, 0, 0)))
+        # a zero mirror-plane normal leaks a bare OCCError gp_Dir() zero norm.
+        if normal.Length < 1e-9:
+            raise ValueError(
+                "mirror needs a non-zero 'normal' for the mirror plane (got [0,0,0])")
+        s = obj.Shape.mirror(_vec(a.get("base")), normal)
         _put(a.get("out", a["name"] + "_m"), s)
         return _metrics(s)
 
@@ -730,6 +740,11 @@ def register(state):
         total = float(a.get("angle", 360))
         center = _vec(a.get("center"))
         axis = _vec(a.get("axis", (0, 0, 1)))
+        # a zero array axis leaks a bare OCCError gp_Dir() zero norm once copies
+        # are actually rotated (count > 1).
+        if count > 1 and axis.Length < 1e-9:
+            raise ValueError(
+                "pattern_polar needs a non-zero 'axis' to array about (got [0,0,0])")
         comp = obj.Shape
         acc = comp
         # count <= 1 is the degenerate array (just the original): no copies, and

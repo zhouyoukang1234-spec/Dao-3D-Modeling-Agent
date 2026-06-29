@@ -50,6 +50,15 @@ def main():
               s.act("solid.revolve", {"name": "V0", "profile": {"rect": [4, 6]},
                                       "axis_pos": [20, 0, 0], "axis_dir": [0, 1, 0], "angle": 0})):
         assert "OCCError" not in (r.error or ""), r.error
+    # zero axis/normal on a transform used to leak a raw OCCError gp_Dir() zero
+    # norm; they must fail loud with guidance instead.
+    _bad(s.act("solid.rotate", {"name": "A", "axis": [0, 0, 0], "angle": 45}), "non-zero")
+    _bad(s.act("solid.mirror", {"name": "A", "normal": [0, 0, 0]}), "non-zero")
+    _bad(s.act("solid.pattern_polar", {"name": "A", "axis": [0, 0, 0], "count": 6}), "non-zero")
+    for r in (s.act("solid.rotate", {"name": "A", "axis": [0, 0, 0], "angle": 45}),
+              s.act("solid.mirror", {"name": "A", "normal": [0, 0, 0]}),
+              s.act("solid.pattern_polar", {"name": "A", "axis": [0, 0, 0], "count": 6})):
+        assert "OCCError" not in (r.error or ""), r.error
     print("missing/invalid build-op args all refused cleanly")
 
     # valid calls still work
