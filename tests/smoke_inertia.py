@@ -86,6 +86,33 @@ def main():
     print("hollow wall mass=%.1f, symmetric tensor diag=%s"
           % (hi["mass"], [round(hi["tensor"][i][i]) for i in range(3)]))
 
+    # ---- multi-solid compound (boolean result) vs closed form ----------- #
+    # Two equal a x b x c boxes centred at x = +/- d. The union of two disjoint
+    # solids is a Part.Compound (no MatrixOfInertia/PrincipalProperties), the
+    # exact case that used to crash inertia. Closed form about the centroid:
+    #   Ixx = 2*me(b^2+c^2)/12          (shift is along x -> no transverse term)
+    #   Iyy = 2*(me(a^2+c^2)/12 + me*d^2)
+    #   Izz = 2*(me(a^2+b^2)/12 + me*d^2)
+    ca, cb, cc, d = 20.0, 30.0, 40.0, 50.0
+    s.act("solid.box", {"name": "pa", "length": ca, "width": cb, "height": cc})
+    s.act("solid.translate", {"name": "pa", "vector": [-d - ca / 2, -cb / 2, -cc / 2]})
+    s.act("solid.box", {"name": "pb", "length": ca, "width": cb, "height": cc})
+    s.act("solid.translate", {"name": "pb", "vector": [d - ca / 2, -cb / 2, -cc / 2]})
+    s.act("solid.union", {"a": "pa", "b": "pb", "out": "pair"})
+    pr = s.act("solid.inertia", {"name": "pair"})
+    assert pr.ok, pr.error
+    me = ca * cb * cc
+    cf2 = sorted([2 * me * (cb * cb + cc * cc) / 12.0,
+                  2 * (me * (ca * ca + cc * cc) / 12.0 + me * d * d),
+                  2 * (me * (ca * ca + cb * cb) / 12.0 + me * d * d)])
+    gp = sorted(pr.data["principal_moments"])
+    assert all(_close(g, e) for g, e in zip(gp, cf2)), (gp, cf2)
+    com = pr.data["center_of_mass"]
+    assert all(abs(x) < 1e-6 for x in com), com           # symmetric -> origin
+    assert _close(pr.data["mass"], 2 * me), pr.data["mass"]
+    print("compound pair principal moments %s == closed form %s"
+          % ([round(x) for x in gp], [round(x) for x in cf2]))
+
     # ---- a missing solid is refused loudly ------------------------------ #
     bad = s.act("solid.inertia", {"name": "nope"})
     assert not bad.ok and "no such solid" in (bad.error or "").lower()

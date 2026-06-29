@@ -13,6 +13,8 @@ import json
 import math
 import os
 
+import numpy as np
+
 import FreeCAD as App
 import Part
 
@@ -171,6 +173,12 @@ def _center(shape):
     try:
         return shape.CenterOfMass
     except (AttributeError, RuntimeError):
+        sols = getattr(shape, "Solids", None)
+        if sols:
+            tv = sum(s.Volume for s in sols) or 1.0
+            return V(sum(s.CenterOfMass.x * s.Volume for s in sols) / tv,
+                     sum(s.CenterOfMass.y * s.Volume for s in sols) / tv,
+                     sum(s.CenterOfMass.z * s.Volume for s in sols) / tv)
         bb = shape.BoundBox
         return V(bb.Center.x, bb.Center.y, bb.Center.z)
 
@@ -191,21 +199,31 @@ def _inertia_about(shape, density, about):
     """
     m = float(shape.Volume) * density
     com = _center(shape)
-    mat = shape.MatrixOfInertia
-    tensor = [[mat.A11 * density, mat.A12 * density, mat.A13 * density],
-              [mat.A12 * density, mat.A22 * density, mat.A23 * density],
-              [mat.A13 * density, mat.A23 * density, mat.A33 * density]]
     if about in (None, "centroid", "center", "com"):
         ref = com
     elif about == "origin":
         ref = V(0, 0, 0)
     else:
         ref = _vec(about)
-    d = (com.x - ref.x, com.y - ref.y, com.z - ref.z)
-    d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
-    for i in range(3):
-        for j in range(3):
-            tensor[i][j] += m * ((d2 if i == j else 0.0) - d[i] * d[j])
+    # Boolean results are routinely a Part.Compound, which (unlike a single
+    # Solid) exposes no MatrixOfInertia. Accumulate each constituent solid's
+    # centroidal tensor and parallel-axis-shift it to the common reference, so
+    # the op works on cut/union/multi-body shapes, not just primitives.
+    solids = shape.Solids or [shape]
+    tensor = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    for s in solids:
+        mi = float(s.Volume) * density
+        ci = s.CenterOfMass
+        mat = s.MatrixOfInertia
+        ti = [[mat.A11 * density, mat.A12 * density, mat.A13 * density],
+              [mat.A12 * density, mat.A22 * density, mat.A23 * density],
+              [mat.A13 * density, mat.A23 * density, mat.A33 * density]]
+        d = (ci.x - ref.x, ci.y - ref.y, ci.z - ref.z)
+        d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+        for i in range(3):
+            for j in range(3):
+                tensor[i][j] += ti[i][j] + mi * ((d2 if i == j else 0.0)
+                                                 - d[i] * d[j])
     return m, com, tensor, ref
 
 
@@ -640,19 +658,24 @@ def register(state):
         density = float(a.get("density", 1.0))
         about = a.get("about", "centroid")
         m, com, tensor, ref = _inertia_about(sh, density, about)
-        pr = sh.PrincipalProperties  # always centroid-relative
-        moments = [x * density for x in pr["Moments"]]
-        axes = [pr["FirstAxisOfInertia"], pr["SecondAxisOfInertia"],
-                pr["ThirdAxisOfInertia"]]
+        # Principal axes are an eigendecomposition of the *centroidal* tensor.
+        # Diagonalising it ourselves (rather than Shape.PrincipalProperties)
+        # keeps this working for booleans/multi-body compounds, which expose no
+        # PrincipalProperties; eigh gives ascending real eigenvalues for the
+        # symmetric tensor.
+        _, _, tcm, _ = _inertia_about(sh, density, "centroid")
+        vals, vecs = np.linalg.eigh(np.array(tcm))
+        moments = [float(v) for v in vals]
+        axes = [[float(vecs[r][c]) for r in range(3)] for c in range(3)]
+        rog = [math.sqrt(v / m) if m > 0 and v > 0 else 0.0 for v in moments]
         return {
             "mass": _round(m), "density": density,
             "center_of_mass": [_round(com.x), _round(com.y), _round(com.z)],
             "about": [_round(ref.x), _round(ref.y), _round(ref.z)],
             "tensor": [[_round(v, 3) for v in row] for row in tensor],
             "principal_moments": [_round(x, 3) for x in moments],
-            "principal_axes": [[_round(c, 6) for c in (ax.x, ax.y, ax.z)]
-                               for ax in axes],
-            "radius_of_gyration": [_round(x, 4) for x in pr["RadiusOfGyration"]],
+            "principal_axes": [[_round(c, 6) for c in ax] for ax in axes],
+            "radius_of_gyration": [_round(x, 4) for x in rog],
         }
 
     def op_curvature(a):
