@@ -3566,6 +3566,78 @@ def register(state):
                 "method": "surface-integral", "exact": all_planar,
                 "faces": len(sh.Faces)}
 
+    def op_section_modulus(a):
+        """Cross-section bending properties of a solid cut by a plane — the beam
+        numbers a structural engineer actually sizes with.
+
+        Slices the solid with the plane through ``point`` (default the solid's
+        centroid) with normal ``normal`` (default +Z), builds the section face
+        (holes handled), and reads off, about the section centroid: area ``A``,
+        the two principal second moments of area I (eigenvalues of the in-plane
+        block of the face inertia, since the area moment about a centroidal axis
+        ``e`` is ``e . M . e``), the polar moment ``J = I1 + I2`` (perpendicular-
+        axis theorem), the section modulus ``S = I / c`` (``c`` the extreme-fibre
+        distance measured *perpendicular* to each neutral axis), and the radius
+        of gyration ``r = sqrt(I/A)``. Matches the textbook closed forms exactly
+        for a rectangle (``I = b h^3/12``, ``S = b h^2/6``) and, to tessellation,
+        a circle (``I = pi r^4/4``, ``S = pi r^3/4``).
+
+        args: name, normal (cut-plane normal, default +Z),
+              point (a point on the plane, default the solid centroid)
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError("section_modulus needs a solid")
+        n = _unit_v(_vec(a.get("normal", (0, 0, 1))))
+        pt = _vec(a["point"]) if "point" in a else _center(sh)
+        wires = sh.slice(n, n.dot(pt))
+        if not wires:
+            raise ValueError(
+                "section_modulus: the plane (normal=%r through %r) misses the solid"
+                % ([_round(n.x), _round(n.y), _round(n.z)],
+                   [_round(pt.x), _round(pt.y), _round(pt.z)]))
+        face = Part.makeFace(wires, "Part::FaceMakerBullseye")
+        area = face.Area
+        c = face.CenterOfMass
+        mat = face.MatrixOfInertia
+        m = np.array([[mat.A11, mat.A12, mat.A13],
+                      [mat.A12, mat.A22, mat.A23],
+                      [mat.A13, mat.A23, mat.A33]])
+        # An orthonormal in-plane basis (u, v) perpendicular to the cut normal.
+        seed = V(1, 0, 0) if abs(n.x) < 0.9 else V(0, 1, 0)
+        u = _unit_v(seed - n * seed.dot(n))
+        vv = n.cross(u)
+        U = np.array([u.x, u.y, u.z])
+        Vn = np.array([vv.x, vv.y, vv.z])
+        block = np.array([[U @ m @ U, U @ m @ Vn], [Vn @ m @ U, Vn @ m @ Vn]])
+        vals, vecs = np.linalg.eigh(block)               # ascending eigenvalues
+        axes = [U * vecs[0, k] + Vn * vecs[1, k] for k in range(2)]
+        # Discretise the boundary (not just vertices) so curved sections get a
+        # faithful extreme-fibre distance.
+        cc = np.array([c.x, c.y, c.z])
+        pts = [np.array([p.x, p.y, p.z]) - cc
+               for w in wires for e in w.Edges for p in e.discretize(64)]
+        props = []
+        for k in range(2):
+            mom = float(vals[k])
+            perp = axes[1 - k]                           # neutral axis is axes[k]
+            ax = axes[k]
+            cmax = max(abs(p @ perp) for p in pts)
+            props.append({
+                "second_moment": _round(mom, 3),
+                "neutral_axis": [_round(float(ax[0]), 6), _round(float(ax[1]), 6),
+                                 _round(float(ax[2]), 6)],
+                "extreme_fiber": _round(cmax, 4),
+                "section_modulus": _round(mom / cmax, 3) if cmax > 1e-9 else None,
+                "radius_of_gyration": _round(math.sqrt(mom / area), 4) if area > 0 else None,
+            })
+        return {"name": a["name"],
+                "normal": [_round(n.x), _round(n.y), _round(n.z)],
+                "centroid": [_round(c.x), _round(c.y), _round(c.z)],
+                "area": _round(area, 3),
+                "polar_moment": _round(float(vals[0] + vals[1]), 3),
+                "principal": props, "regions": len(wires)}
+
     def op_hydrostatics(a):
         """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
 
@@ -3830,5 +3902,6 @@ def register(state):
         "tolerance_stack": op_tolerance_stack, "clearance": op_clearance,
         "thermal_expansion": op_thermal_expansion,
         "pressure_vessel": op_pressure_vessel,
+        "section_modulus": op_section_modulus,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
