@@ -6,7 +6,9 @@ wider machinery:
 * ``ss.*``   — a Spreadsheet whose aliased cells *drive* feature dimensions
                through the ExpressionEngine (a real parameter table).
 * ``analyze.*`` — cross-section profiles and minimum-distance measurement.
-* ``mesh.*`` — tessellation + watertight / manifold analysis.
+* ``mesh.*`` — tessellation + watertight / manifold analysis, mesh-level
+               booleans (robust where BRep booleans choke) and sewing a mesh
+               back into a BRep shape (the reverse-engineering bridge).
 * ``draw.*`` — TechDraw 2D drawing pages (multi-view projection, DXF export).
 
 These are the capabilities a human reaches for once the solid exists, now wired
@@ -51,12 +53,37 @@ def _num(a, key, default=_MISSING, label=None):
 def register(state):
     doc = state.doc
 
+    meshes = {}
+
     def _shape(name):
         if name in state.shapes and doc.getObject(state.shapes[name]):
             return doc.getObject(state.shapes[name]).Shape
         if name in state.bodies and doc.getObject(state.bodies[name]):
             return doc.getObject(state.bodies[name]).Shape
         raise KeyError("no shape: %s" % name)
+
+    def _named_shape(name, op):
+        """Like ``_shape`` but raises a guided ValueError (no raw KeyError)."""
+        try:
+            return _shape(name)
+        except KeyError:
+            raise ValueError(
+                "%s: no such solid %r -- create it (solid.*/param.*) or import "
+                "it (import_step) first" % (op, name))
+
+    def _register_shape(name, shape, kind):
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("%s 'out' name must be a non-empty string" % kind)
+        if shape is None or shape.isNull():
+            raise ValueError("%s produced an empty shape" % kind)
+        existing = state.shapes.get(name)
+        obj = doc.getObject(existing) if existing else None
+        if obj is None:
+            obj = doc.addObject("Part::Feature", name)
+            state.shapes[name] = obj.Name
+        obj.Shape = shape
+        doc.recompute()
+        return obj
 
     # ---- spreadsheet-driven parameters ----------------------------------- #
     def _require_sheet(op):
@@ -206,6 +233,91 @@ def register(state):
         return {"path": path, "facets": mesh.CountFacets,
                 "bytes": os.path.getsize(path) if os.path.exists(path) else 0}
 
+    _MESH_BOOL = {
+        "union": "unite", "fuse": "unite", "unite": "unite",
+        "difference": "difference", "cut": "difference", "subtract": "difference",
+        "intersection": "intersect", "intersect": "intersect", "common": "intersect",
+    }
+
+    def op_mesh_boolean(a):
+        """Mesh-level boolean of two solids' tessellations.
+
+        Robust where exact BRep booleans choke on dirty / non-watertight input:
+        operates on triangle meshes, not NURBS. args: a (solid name), b (solid
+        name), op (union|difference|intersection), out (mesh name),
+        tolerance (tessellation, default 0.1). The result mesh is kept so
+        ``mesh.to_shape`` can sew it back into a BRep.
+        """
+        import Mesh
+        op = a.get("op", "union")
+        if not isinstance(op, str) or op.lower() not in _MESH_BOOL:
+            raise ValueError(
+                "mesh.boolean 'op' must be one of union/difference/intersection "
+                "(got %r)" % (op,))
+        method = _MESH_BOOL[op.lower()]
+        sa = _named_shape(a.get("a", a.get("base")), "mesh.boolean 'a'")
+        sb = _named_shape(a.get("b", a.get("tool")), "mesh.boolean 'b'")
+        out = a.get("out", "MeshBool")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("mesh.boolean 'out' must be a non-empty string")
+        tol = _num(a, "tolerance", 0.1, "mesh.boolean tolerance")
+        if tol <= 0:
+            raise ValueError("mesh.boolean tolerance must be > 0 (got %r)" % tol)
+        ma = Mesh.Mesh(sa.tessellate(tol))
+        mb = Mesh.Mesh(sb.tessellate(tol))
+        try:
+            res = getattr(ma, method)(mb)
+        except Exception as exc:
+            raise ValueError(
+                "mesh.boolean %s failed (%s); the meshes may be degenerate" % (op, exc))
+        if res is None or res.CountFacets == 0:
+            raise ValueError(
+                "mesh.boolean %s produced an empty mesh (the inputs may not "
+                "overlap)" % op)
+        meshes[out] = res
+        return {"mesh": out, "op": method, "points": res.CountPoints,
+                "facets": res.CountFacets, "solid": bool(res.isSolid()),
+                "volume": _round(res.Volume)}
+
+    def op_mesh_to_shape(a):
+        """Sew a mesh back into a BRep shape (the reverse-engineering bridge).
+
+        Brings tessellated data (a ``mesh.boolean`` result or any solid's
+        tessellation) back into the solid world so BRep ops can consume it.
+        args: name (mesh from mesh.boolean OR a solid name), out (shape name),
+        tolerance (sew tolerance, default 0.1).
+        """
+        import Mesh
+        name = a.get("name", a.get("mesh"))
+        out = a.get("out", "FromMesh")
+        sew = _num(a, "tolerance", 0.1, "mesh.to_shape tolerance")
+        if sew <= 0:
+            raise ValueError("mesh.to_shape tolerance must be > 0 (got %r)" % sew)
+        if name in meshes:
+            topo = meshes[name].Topology
+        else:
+            topo = Mesh.Mesh(_named_shape(name, "mesh.to_shape 'name'")
+                             .tessellate(sew)).Topology
+        shell = Part.Shape()
+        try:
+            shell.makeShapeFromMesh(topo, sew)
+        except Exception as exc:
+            raise ValueError(
+                "mesh.to_shape could not sew the mesh (%s); try a larger "
+                "tolerance" % exc)
+        if shell.isNull():
+            raise ValueError("mesh.to_shape produced an empty shape")
+        result, kind = shell, "Shell"
+        try:
+            solid = Part.makeSolid(shell)
+            if solid is not None and not solid.isNull() and solid.Volume > 1e-6:
+                result, kind = solid, "Solid"
+        except Exception:
+            pass
+        obj = _register_shape(out, result, "mesh.to_shape")
+        return {"shape": out, "object": obj.Name, "type": kind,
+                "faces": len(result.Faces), "volume": _round(result.Volume)}
+
     # ---- TechDraw 2D drawing --------------------------------------------- #
     # standard orthographic / pictorial projection directions (first-angle)
     _DRAW_DIRS = {
@@ -333,5 +445,6 @@ def register(state):
         "ss.create": op_ss_create, "ss.bind": op_ss_bind, "ss.set": op_ss_set, "ss.table": op_ss_table,
         "analyze.section": op_section, "analyze.distance": op_distance,
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
+        "mesh.boolean": op_mesh_boolean, "mesh.to_shape": op_mesh_to_shape,
         "draw.techdraw": op_techdraw,
     }
