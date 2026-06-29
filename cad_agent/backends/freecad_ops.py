@@ -597,8 +597,18 @@ def register(state):
         if axis.Length < 1e-9:
             raise ValueError(
                 "rotate needs a non-zero 'axis' to spin about (got [0,0,0])")
+        # coerce the angle to float up front; passing a non-numeric angle
+        # straight into Shape.rotate leaks a bare 'TypeError: must be real
+        # number, not str' instead of the clean ValueError the other transforms
+        # raise for bad numerics.
+        try:
+            angle = float(a.get("angle", 90))
+        except (TypeError, ValueError):
+            raise ValueError(
+                "rotate 'angle' must be a number in degrees (got %r)"
+                % (a.get("angle"),))
         s = obj.Shape.copy()
-        s.rotate(_vec(a.get("center")), axis, a.get("angle", 90))
+        s.rotate(_vec(a.get("center")), axis, angle)
         _put(a.get("out", a["name"]), s)
         return _metrics(s)
 

@@ -59,6 +59,10 @@ def main():
               s.act("solid.mirror", {"name": "A", "normal": [0, 0, 0]}),
               s.act("solid.pattern_polar", {"name": "A", "axis": [0, 0, 0], "count": 6})):
         assert "OCCError" not in (r.error or ""), r.error
+    # a non-numeric rotate angle used to leak a raw 'TypeError: must be real
+    # number, not str' from Shape.rotate; it must fail loud with guidance.
+    _bad(s.act("solid.rotate", {"name": "A", "axis": [0, 0, 1], "angle": "ninety"}),
+         "angle")
     print("missing/invalid build-op args all refused cleanly")
 
     # valid calls still work
