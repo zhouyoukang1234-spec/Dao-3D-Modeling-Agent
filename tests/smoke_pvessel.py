@@ -59,6 +59,12 @@ def main():
     assert "TypeError" not in (bad.error or ""), bad.error
     print("missing radius refused cleanly: %s" % bad.error)
 
+    # a zero/negative radius used to silently report zero/negative membrane stress.
+    for rr in (0, -50):
+        z = s.act("solid.pressure_vessel", {"pressure": 2, "radius": rr, "thickness": 2})
+        assert not z.ok and "radius" in (z.error or ""), z.error
+    print("non-positive radius refused")
+
     print("PVESSEL SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

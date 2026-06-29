@@ -77,6 +77,12 @@ def main():
     assert "KeyError" not in (bad.error or "") and "KeyError" not in (bad2.error or "")
     print("guards ok:", bad.error, "|", bad2.error)
 
+    # a zero ultimate strength used to leak a raw ZeroDivisionError (Goodman).
+    zu = s.act("solid.fatigue", {"criterion": "goodman", "endurance": 200,
+                                 "ultimate": 0, "stress_alt": 100, "stress_mean": 50})
+    assert not zu.ok and "> 0" in (zu.error or "") and "ZeroDivision" not in (zu.error or ""), zu.error
+    print("zero ultimate refused:", zu.error)
+
     print("FATIGUE SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

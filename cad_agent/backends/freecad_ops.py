@@ -4366,6 +4366,10 @@ def register(state):
         if sa <= 0:
             raise ValueError("fatigue: alternating stress must be > 0")
         Su = float(a["ultimate"]) if "ultimate" in a else None
+        # a zero/negative ultimate strength divides by zero in the Goodman/Gerber
+        # mean-stress correction; ultimate strength is strictly positive.
+        if Su is not None and Su <= 0:
+            raise ValueError("fatigue: ultimate strength (Su) must be > 0")
         if "endurance" in a:
             Se = float(a["endurance"])
         elif Su is not None:
@@ -4638,6 +4642,10 @@ def register(state):
         t = float(tv)
         if t <= 0:
             raise ValueError("pressure_vessel needs a positive wall thickness")
+        # a zero/negative radius silently reports zero/negative membrane stress;
+        # a vessel radius is strictly positive.
+        if r <= 0:
+            raise ValueError("pressure_vessel needs a positive radius")
         if kind == "sphere":
             sh_hoop = sl = p * r / (2.0 * t)
         else:
