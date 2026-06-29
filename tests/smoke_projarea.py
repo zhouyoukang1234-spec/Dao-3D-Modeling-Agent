@@ -56,6 +56,12 @@ def main():
     print("Lbrk :", la["projected_area"])
     assert _close(la["projected_area"], 40 * 30), la  # vertical leg sits on h's footprint
 
+    # a zero projection direction used to silently report a 0 mm^2 footprint;
+    # it must now fail loud with guidance.
+    zd = s.act("solid.projected_area", {"name": "L", "dir": [0, 0, 0]})
+    assert not zd.ok and "non-zero" in (zd.error or ""), zd.error
+    print("zero dir refused:", zd.error)
+
     print("PROJAREA SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 
