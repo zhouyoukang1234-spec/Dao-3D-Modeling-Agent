@@ -69,6 +69,27 @@ def main():
     print("mesh:", {k2: r.data[k2] for k2 in ("facets", "watertight", "mesh_volume", "brep_volume")})
     assert r.data["watertight"], r.data
 
+    # --- mesh-level booleans + sewing a mesh back into a BRep (reverse) ---
+    s.act("solid.box", {"name": "mA", "length": 10, "width": 10, "height": 10})
+    s.act("solid.box", {"name": "mB", "length": 10, "width": 10, "height": 10,
+                        "pos": [5, 5, 5]})
+    mu = s.act("mesh.boolean", {"a": "mA", "b": "mB", "op": "union", "out": "MU"})
+    assert mu.ok, mu.error
+    assert mu.data["facets"] > 0, mu.data
+    md = s.act("mesh.boolean", {"a": "mA", "b": "mB", "op": "difference",
+                                "out": "MD"})
+    assert md.ok and md.data["facets"] > 0, md.error or md.data
+    print("mesh.boolean union/difference -> %d/%d facets"
+          % (mu.data["facets"], md.data["facets"]))
+    # sew the union mesh back into a BRep shape, then perceive it (fusable).
+    ts = s.act("mesh.to_shape", {"name": "MU", "out": "Sewn"})
+    assert ts.ok, ts.error
+    assert ts.data["faces"] > 0, ts.data
+    assert s.act("analyze.section", {"name": "Sewn", "plane": "XY",
+                                     "offset": 5}).ok
+    print("mesh.to_shape sewn %s, %d faces (fusable)"
+          % (ts.data["type"], ts.data["faces"]))
+
     # --- malformed-input guards (no_raw_leak): non-numeric tolerance/scale and
     #     a non-string export path used to leak raw 'could not convert string to
     #     float' / TypeError; they must be guided. -----------------------------
@@ -96,6 +117,13 @@ def main():
             "'XY'/'XZ'/'YZ'")
     _guided(s.act("analyze.section", {"name": "Brk", "plane": 123}),
             "'XY'/'XZ'/'YZ'")
+    _guided(s.act("mesh.boolean", {"a": "mA", "b": "mB", "op": "xor"}),
+            "union/difference/intersection")
+    _guided(s.act("mesh.boolean", {"a": "Nope", "b": "mB"}), "no such solid")
+    _guided(s.act("mesh.boolean", {"a": "mA", "b": "mB", "tolerance": "x"}),
+            "must be a number")
+    _guided(s.act("mesh.to_shape", {"name": "Nope"}), "no such solid")
+    _guided(s.act("mesh.to_shape", {"name": "MU", "tolerance": 0}), "> 0")
     print("mesh/draw malformed-input guards refused cleanly")
 
     # --- perception renders ---
