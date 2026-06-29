@@ -3852,6 +3852,78 @@ def register(state):
                 "torsional_stiffness": _round(G * J / L, 3),
                 "circular": circular}
 
+    # First few dimensionless eigenvalues (beta*L) of the Euler-Bernoulli beam
+    # for each boundary condition; f_n = (beta L)^2/(2 pi) sqrt(E I/(rho A L^4)).
+    _BEAM_MODES = {
+        "cantilever": (1.8751040687, 4.6940911330, 7.8547574382),
+        "simply_supported": (math.pi, 2 * math.pi, 3 * math.pi),
+        "fixed_fixed": (4.7300407449, 7.8532046241, 10.9956078380),
+        "free_free": (4.7300407449, 7.8532046241, 10.9956078380),
+    }
+
+    def op_natural_frequency(a):
+        """Bending natural frequencies of the solid as an Euler-Bernoulli beam.
+
+        Reads the real section (shared ``_section_props``) for the bending ``I``
+        and area ``A``, the span ``L`` along ``axis``, and with mass density
+        ``density`` (mass per volume) and Young's modulus ``modulus`` returns the
+        first ``modes`` flexural frequencies
+
+          f_n = (beta_n L)^2 / (2 pi) * sqrt(E I / (rho A L^4))   [Hz]
+
+        where ``beta_n L`` are the boundary-condition eigenvalues
+        (cantilever 1.875, 4.694, ...; simply-supported n*pi; fixed-fixed /
+        free-free 4.730, 7.853, ...). Bends about the strong axis by default
+        (``bending='min'`` for the weak axis). For a simply-supported beam this is
+        the exact closed form ``f_1 = (pi/2/L^2) sqrt(E I/(rho A))`` and the modes
+        follow 1:4:9.
+
+        args: name, modulus E (required), density rho (required, mass/volume),
+              axis (default +Z), length L (default extent along axis),
+              support (default cantilever), bending (max|min), modes (default 3)
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError("natural_frequency needs a solid")
+        if "modulus" not in a or "density" not in a:
+            raise ValueError(
+                "natural_frequency needs 'modulus' (E) and 'density' (rho, "
+                "mass per unit volume)")
+        E = float(a["modulus"])
+        rho = float(a["density"])
+        support = a.get("support", "cantilever")
+        if support not in _BEAM_MODES:
+            raise ValueError(
+                "natural_frequency: unsupported support=%r; pick one of %s"
+                % (support, sorted(_BEAM_MODES)))
+        n_modes = int(a.get("modes", 3))
+        axis = _unit_v(_vec(a.get("axis", (0, 0, 1))))
+        corners = [V(x, y, z)
+                   for x in (sh.BoundBox.XMin, sh.BoundBox.XMax)
+                   for y in (sh.BoundBox.YMin, sh.BoundBox.YMax)
+                   for z in (sh.BoundBox.ZMin, sh.BoundBox.ZMax)]
+        proj = [p.dot(axis) for p in corners]
+        L = float(a["length"]) if "length" in a else max(proj) - min(proj)
+        if L <= 0:
+            raise ValueError("natural_frequency: beam length along axis is zero")
+        sp = _section_props(sh, axis, _center(sh), "natural_frequency")
+        weak = a.get("bending") == "min"
+        i_b = float(sp["vals"][0 if weak else 1])
+        area = sp["area"]
+        m_bar = rho * area                       # mass per unit length
+        base = math.sqrt(E * i_b / (m_bar * L ** 4))
+        betas = _BEAM_MODES[support][:max(1, n_modes)]
+        freqs = [_round((bl ** 2) / (2 * math.pi) * base, 4) for bl in betas]
+        return {"name": a["name"], "support": support, "modulus": E,
+                "density": rho,
+                "axis": [_round(axis.x), _round(axis.y), _round(axis.z)],
+                "length": _round(L, 4),
+                "bending_axis": "min" if weak else "max",
+                "I": _round(i_b, 3), "area": _round(area, 3),
+                "mass_per_length": _round(m_bar, 6),
+                "beta_L": [_round(bl, 6) for bl in betas],
+                "frequencies_hz": freqs}
+
     def op_hydrostatics(a):
         """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
 
@@ -4118,5 +4190,6 @@ def register(state):
         "pressure_vessel": op_pressure_vessel,
         "section_modulus": op_section_modulus, "buckling": op_buckling,
         "beam_deflection": op_beam_deflection, "torsion": op_torsion,
+        "natural_frequency": op_natural_frequency,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
