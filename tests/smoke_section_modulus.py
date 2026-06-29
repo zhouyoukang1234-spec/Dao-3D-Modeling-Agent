@@ -93,6 +93,13 @@ def main():
     assert not miss.ok and "miss" in (miss.error or "").lower(), miss.error
     print("plane missing the solid refused: %s" % miss.error)
 
+    # ---- a zero cut-plane normal is refused with a guided error, not a --
+    #      bare OCCError "gp_Dir() ... zero norm" leak -------------------- #
+    zn = s.act("solid.section_modulus", {"name": "bar", "normal": [0, 0, 0]})
+    assert not zn.ok and "non-zero 'normal'" in (zn.error or ""), zn.error
+    assert "OCCError" not in (zn.error or ""), zn.error
+    print("zero normal refused (no raw OCCError leak): %s" % zn.error)
+
     print("SECTION MODULUS SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

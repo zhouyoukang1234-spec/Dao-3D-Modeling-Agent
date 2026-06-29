@@ -3867,7 +3867,14 @@ def register(state):
         sh = _get(a["name"]).Shape
         if not sh.Solids:
             raise ValueError("section_modulus needs a solid")
-        n = _unit_v(_vec(a.get("normal", (0, 0, 1))))
+        n = _vec(a.get("normal", (0, 0, 1)))
+        # a zero cut-plane normal feeds gp_Dir a zero-norm vector and leaks a
+        # bare OCCError; demand a real normal like the sibling `section` op.
+        if n.Length < 1e-9:
+            raise ValueError(
+                "section_modulus needs a non-zero 'normal' (cutting-plane "
+                "normal); got [0,0,0]")
+        n = _unit_v(n)
         pt = _vec(a["point"]) if "point" in a else _center(sh)
         sp = _section_props(sh, n, pt, "section_modulus")
         area, c, vals, axes, pts = (sp["area"], sp["centroid"], sp["vals"],
