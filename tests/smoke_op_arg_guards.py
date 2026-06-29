@@ -37,6 +37,16 @@ def main():
     _bad(s.act("solid.pattern_linear", {"name": "A", "step": [5, 0, 0]}), "count")
     _bad(s.act("solid.pattern_linear", {"name": "A", "count": 0, "step": [5, 0, 0]}), ">= 1")
     _bad(s.act("solid.pattern_polar", {"name": "A", "count": 0}), ">= 1")
+
+    # zero-magnitude sweeps used to leak a raw OCCError BRepSweep_*::Constructor.
+    _bad(s.act("solid.extrude", {"name": "E0", "profile": {"rect": [10, 6]}, "height": 0}), "non-zero")
+    _bad(s.act("solid.extrude", {"name": "Ed", "profile": {"rect": [10, 6]}, "dir": [0, 0, 0]}), "non-zero")
+    _bad(s.act("solid.revolve", {"name": "V0", "profile": {"rect": [4, 6]},
+                                 "axis_pos": [20, 0, 0], "axis_dir": [0, 1, 0], "angle": 0}), "non-zero")
+    for r in (s.act("solid.extrude", {"name": "E0", "profile": {"rect": [10, 6]}, "height": 0}),
+              s.act("solid.revolve", {"name": "V0", "profile": {"rect": [4, 6]},
+                                      "axis_pos": [20, 0, 0], "axis_dir": [0, 1, 0], "angle": 0})):
+        assert "OCCError" not in (r.error or ""), r.error
     print("missing/invalid build-op args all refused cleanly")
 
     # valid calls still work

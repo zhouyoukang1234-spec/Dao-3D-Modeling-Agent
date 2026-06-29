@@ -490,7 +490,13 @@ def register(state):
         if "name" not in a or "profile" not in a:
             raise ValueError("extrude needs 'name' and a 'profile' (sketch/wire)")
         face = _profile_face(a["profile"])
-        s = face.extrude(_vec(a.get("dir", (0, 0, a.get("height", 10)))))
+        d = _vec(a.get("dir", (0, 0, a.get("height", 10))))
+        # a zero-length sweep vector leaks a bare OCCError BRepSweep_Translation;
+        # name the actual cause instead.
+        if d.Length < 1e-9:
+            raise ValueError(
+                "extrude needs a non-zero height/direction (got dir length 0)")
+        s = face.extrude(d)
         _put(a["name"], s)
         return _metrics(s)
 
@@ -498,8 +504,14 @@ def register(state):
         if "name" not in a or "profile" not in a:
             raise ValueError("revolve needs 'name' and a 'profile' (sketch/wire)")
         face = _profile_face(a["profile"])
+        angle = float(a.get("angle", 360))
+        # a zero (or full-circle-overflow) sweep leaks a bare OCCError
+        # BRepSweep_Rotation; require a usable non-zero angle.
+        if abs(angle) < 1e-9:
+            raise ValueError(
+                "revolve needs a non-zero angle in degrees (got %g)" % angle)
         s = face.revolve(_vec(a.get("axis_pos")), _vec(a.get("axis_dir", (0, 1, 0))),
-                         a.get("angle", 360))
+                         angle)
         _put(a["name"], s)
         return _metrics(s)
 
