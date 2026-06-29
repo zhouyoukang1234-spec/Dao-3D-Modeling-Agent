@@ -3924,6 +3924,74 @@ def register(state):
                 "beta_L": [_round(bl, 6) for bl in betas],
                 "frequencies_hz": freqs}
 
+    def op_thermal_resistance(a):
+        """Steady-state thermal resistance of the solid as a heat path.
+
+        Conduction along ``axis`` over span ``L`` through the real cross-section
+        area ``A`` (shared ``_section_props``) with conductivity ``conductivity``
+        ``k``:
+
+          R_cond = L / (k A)        [K/W]      conductance = 1/R_cond
+
+        If a film coefficient ``film_coefficient`` ``h`` is given, the convective
+        resistance off the *lateral* wetted area ``A_s`` (total surface minus the
+        two end caps ~= 2A) is ``R_conv = 1/(h A_s)`` and the series total
+        ``R_total = R_cond + R_conv`` is also returned. With a ``heat_flow`` ``Q``
+        the conductive temperature drop ``dT = Q R_cond`` is reported (or, given
+        ``temperature_drop`` instead, the conducted ``Q = dT/R_cond``).
+
+        Exact for a prism / cylinder: a bar of section A, length L conducts
+        ``R = L/(kA)`` and drops ``dT = Q L/(kA)``.
+
+        args: name, conductivity k (required), axis (default +Z),
+              length L (default extent along axis), film_coefficient h,
+              heat_flow Q, temperature_drop dT
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError("thermal_resistance needs a solid")
+        if "conductivity" not in a:
+            raise ValueError(
+                "thermal_resistance needs 'conductivity' (k, power/(length.K))")
+        k = float(a["conductivity"])
+        if k <= 0:
+            raise ValueError("thermal_resistance: conductivity must be > 0")
+        axis = _unit_v(_vec(a.get("axis", (0, 0, 1))))
+        corners = [V(x, y, z)
+                   for x in (sh.BoundBox.XMin, sh.BoundBox.XMax)
+                   for y in (sh.BoundBox.YMin, sh.BoundBox.YMax)
+                   for z in (sh.BoundBox.ZMin, sh.BoundBox.ZMax)]
+        proj = [p.dot(axis) for p in corners]
+        L = float(a["length"]) if "length" in a else max(proj) - min(proj)
+        if L <= 0:
+            raise ValueError("thermal_resistance: path length along axis is zero")
+        sp = _section_props(sh, axis, _center(sh), "thermal_resistance")
+        area = sp["area"]
+        r_cond = L / (k * area)
+        out = {"name": a["name"], "conductivity": k,
+               "axis": [_round(axis.x), _round(axis.y), _round(axis.z)],
+               "length": _round(L, 4), "area": _round(area, 3),
+               "conduction_resistance": _round(r_cond, 6),
+               "conductance": _round(1.0 / r_cond, 6)}
+        if "film_coefficient" in a:
+            h = float(a["film_coefficient"])
+            a_lat = max(sh.Area - 2.0 * area, 0.0)   # strip the two end caps
+            r_conv = 1.0 / (h * a_lat) if h > 0 and a_lat > 0 else None
+            out["film_coefficient"] = h
+            out["lateral_area"] = _round(a_lat, 3)
+            out["convection_resistance"] = _round(r_conv, 6) if r_conv else None
+            if r_conv:
+                out["total_resistance"] = _round(r_cond + r_conv, 6)
+        if "heat_flow" in a:
+            Q = float(a["heat_flow"])
+            out["heat_flow"] = Q
+            out["temperature_drop"] = _round(Q * r_cond, 4)
+        elif "temperature_drop" in a:
+            dT = float(a["temperature_drop"])
+            out["temperature_drop"] = dT
+            out["heat_flow"] = _round(dT / r_cond, 4)
+        return out
+
     def op_hydrostatics(a):
         """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
 
@@ -4191,5 +4259,6 @@ def register(state):
         "section_modulus": op_section_modulus, "buckling": op_buckling,
         "beam_deflection": op_beam_deflection, "torsion": op_torsion,
         "natural_frequency": op_natural_frequency,
+        "thermal_resistance": op_thermal_resistance,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
