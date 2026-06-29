@@ -337,6 +337,11 @@ def register(state):
     # ---- body / sketch ---------------------------------------------------- #
     def op_body(a):
         name = a["name"]
+        # addObject's object name must be a string; a non-string (e.g. an int)
+        # otherwise leaks 'TypeError: argument 2 must be str, not int'.
+        if not isinstance(name, str):
+            raise ValueError(
+                "param.body 'name' must be a string (got %r)" % (name,))
         b = doc.addObject("PartDesign::Body", name)
         state.bodies[name] = b.Name
         doc.recompute()

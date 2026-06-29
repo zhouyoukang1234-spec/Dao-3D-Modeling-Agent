@@ -37,6 +37,10 @@ def main():
     _bad(s.act("solid.sphere", {"name": "sp", "radius": 0}), "sphere")
     _bad(s.act("solid.torus", {"name": "to", "radius1": -10, "radius2": 3}), "torus")
     _bad(s.act("solid.torus", {"name": "to", "radius1": 10, "radius2": -3}), "torus")
+    # a non-string solid name used to leak 'TypeError: argument 2 must be str,
+    # not int' from addObject; it must be refused with guidance.
+    _bad(s.act("solid.box", {"name": 123, "length": 5, "width": 5, "height": 5}),
+         "must be a string")
     print("bad cylinder/cone/sphere/torus dims all refused cleanly")
 
     # a pointed cone (one zero radius) is legitimate and must still build.

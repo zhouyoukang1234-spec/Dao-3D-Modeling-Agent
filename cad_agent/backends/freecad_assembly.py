@@ -53,6 +53,11 @@ def register(state):
     # ---- container & components ------------------------------------------ #
     def op_create(a):
         name = a.get("name", "Assembly")
+        # addObject's object name must be a string; a non-string (e.g. an int)
+        # otherwise leaks 'TypeError: argument 2 must be str, not int'.
+        if not isinstance(name, str):
+            raise ValueError(
+                "asm.create 'name' must be a string (got %r)" % (name,))
         asm = doc.addObject("Assembly::AssemblyObject", name)
         state.assembly = asm.Name
         doc.recompute()

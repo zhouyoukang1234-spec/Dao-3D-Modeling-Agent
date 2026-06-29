@@ -35,10 +35,32 @@ def register(state):
         raise KeyError("no shape: %s" % name)
 
     # ---- spreadsheet-driven parameters ----------------------------------- #
+    def _require_sheet(op):
+        """Return the live spreadsheet, or refuse with guidance.
+
+        ``ss.set``/``ss.bind``/``ss.table`` all read ``state._sheet`` directly;
+        when ``ss.create`` was never called that attribute is absent and leaks a
+        bare ``AttributeError: 'KernelState' object has no attribute '_sheet'``.
+        Point the caller at the missing ``ss.create`` instead.
+        """
+        name = state.__dict__.get("_sheet")
+        sheet = doc.getObject(name) if name else None
+        if sheet is None:
+            raise ValueError(
+                "%s: no parameter spreadsheet yet -- call ss.create first to "
+                "define one" % op)
+        return sheet
+
     def op_ss_create(a):
+        name = a.get("name", "Spreadsheet")
+        # addObject's object name must be a string; a non-string (e.g. an int)
+        # otherwise leaks 'TypeError: argument 2 must be str, not int'.
+        if not isinstance(name, str):
+            raise ValueError(
+                "ss.create 'name' must be a string (got %r)" % (name,))
         sheet = doc.getObject(state.__dict__.get("_sheet", "")) if state.__dict__.get("_sheet") else None
         if sheet is None:
-            sheet = doc.addObject("Spreadsheet::Sheet", a.get("name", "Spreadsheet"))
+            sheet = doc.addObject("Spreadsheet::Sheet", name)
             state._sheet = sheet.Name
             state._cells = {}
         col = "A"
@@ -52,9 +74,9 @@ def register(state):
 
     def op_ss_bind(a):
         """Bind a registered param to a spreadsheet alias via the ExpressionEngine."""
+        sheet = _require_sheet("ss.bind")
         key = a["param"]
         alias = a["alias"]
-        sheet = doc.getObject(state._sheet)
         v = state.params.get(key)
         if v is None:
             raise KeyError("no such param: %s" % key)
@@ -68,15 +90,21 @@ def register(state):
         return {"bound": key, "to": expr}
 
     def op_ss_set(a):
-        sheet = doc.getObject(state._sheet)
+        sheet = _require_sheet("ss.set")
         alias = a["alias"]
-        cell = state._cells[alias]
+        # an unknown alias otherwise leaks a bare KeyError; name the valid ones.
+        cells = state.__dict__.get("_cells", {})
+        if alias not in cells:
+            raise ValueError(
+                "ss.set: no such alias %r; defined aliases: %s"
+                % (alias, sorted(cells)))
+        cell = cells[alias]
         sheet.set(cell, str(a["value"]))
         doc.recompute()
         return {"alias": alias, "value": a["value"]}
 
     def op_ss_table(a):
-        sheet = doc.getObject(state._sheet)
+        sheet = _require_sheet("ss.table")
         out = {}
         for alias, cell in state.__dict__.get("_cells", {}).items():
             try:

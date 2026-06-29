@@ -11,6 +11,13 @@ def main():
     k = s.registry.kernel
     print("ops with param.*:", [o for o in k.ops if o.startswith("param.")])
 
+    # a non-string body name used to leak 'TypeError: argument 2 must be str,
+    # not int' from addObject; it must be refused with guidance.
+    nb = s.act("param.body", {"name": 123})
+    assert not nb.ok and "must be a string" in (nb.error or ""), nb.error
+    assert "TypeError" not in (nb.error or ""), nb.error
+    print("non-string param.body name refused (no raw TypeError): %s" % nb.error)
+
     # 1) parametric plate: pad a centered 60x40 rect to height 8
     assert s.act("param.body", {"name": "P"}).ok
     r = s.act("param.pad", {"body": "P", "feature": "Plate",

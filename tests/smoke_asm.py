@@ -19,6 +19,13 @@ def main():
     assert s.act("param.pad", {"body": "Block", "feature": "BlockPad",
                               "profile": {"rect": [20, 20]}, "length": 20}).ok
 
+    # a non-string assembly name used to leak 'TypeError: argument 2 must be
+    # str, not int' from addObject; it must be refused with guidance.
+    na = s.act("asm.create", {"name": 123})
+    assert not na.ok and "must be a string" in (na.error or ""), na.error
+    assert "TypeError" not in (na.error or ""), na.error
+    print("non-string asm.create name refused (no raw TypeError): %s" % na.error)
+
     # assemble
     assert s.act("asm.create", {"name": "Asm"}).ok
     assert s.act("asm.add", {"name": "base", "body": "Base", "fixed": True}).ok

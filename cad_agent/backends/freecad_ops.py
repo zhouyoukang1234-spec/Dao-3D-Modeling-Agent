@@ -414,6 +414,11 @@ def register(state):
 
     def _put(name, shape):
         """Store a shape into a named Part::Feature object (create or update)."""
+        # the object name must be a string; a non-string (e.g. an int) otherwise
+        # leaks 'TypeError: argument 2 must be str, not int' from addObject.
+        if not isinstance(name, str):
+            raise ValueError(
+                "solid 'name'/'out' must be a string (got %r)" % (name,))
         # refuse to shadow a parametric body: otherwise the same logical name
         # would resolve to a body via param.* and to this result via solid.*
         # (two different shapes), a silent collision. Force an explicit 'out'.
