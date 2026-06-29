@@ -452,7 +452,10 @@ def register(state):
         return _metrics(s)
 
     def op_sphere(a):
-        s = Part.makeSphere(a["radius"], _vec(a.get("pos")))
+        r = float(a["radius"])
+        if r <= 0:
+            raise ValueError("sphere needs a positive radius (got %g)" % r)
+        s = Part.makeSphere(r, _vec(a.get("pos")))
         _put(a["name"], s)
         return _metrics(s)
 
@@ -472,7 +475,14 @@ def register(state):
         return _metrics(s)
 
     def op_torus(a):
-        s = Part.makeTorus(a["radius1"], a["radius2"], _vec(a.get("pos")))
+        r1 = float(a["radius1"])
+        r2 = float(a["radius2"])
+        # both radii must be positive -- negatives leak a bare OCCDomainError.
+        if r1 <= 0 or r2 <= 0:
+            raise ValueError(
+                "torus needs positive radius1 (ring) and radius2 (tube) "
+                "(got radius1=%g, radius2=%g)" % (r1, r2))
+        s = Part.makeTorus(r1, r2, _vec(a.get("pos")))
         _put(a["name"], s)
         return _metrics(s)
 
