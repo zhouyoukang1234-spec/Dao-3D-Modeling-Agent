@@ -59,6 +59,14 @@ def main():
     assert not zu.ok and "non-zero" in (zu.error or ""), zu.error
     print("zero up refused:", zu.error)
 
+    # a massless part (density 0) collapses the submerged solid to an empty
+    # compound -> used to leak AttributeError on Part.Compound.CenterOfMass.
+    zd = s.act("solid.hydrostatics", {"name": "hull", "density": 0,
+                                      "fluid_density": 1.0})
+    assert not zd.ok and "positive" in (zd.error or "") \
+        and "CenterOfMass" not in (zd.error or ""), zd.error
+    print("zero density refused:", zd.error)
+
     print("HYDRO SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

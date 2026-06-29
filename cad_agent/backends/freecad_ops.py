@@ -4600,6 +4600,10 @@ def register(state):
         up = _unit_v(upv)
         rho = _num(a, "density", 1.0, "density")
         rho_f = _num(a, "fluid_density", 1.0, "fluid_density")
+        if rho <= 0 or rho_f <= 0:
+            raise ValueError(
+                "hydrostatics needs positive 'density' and 'fluid_density' "
+                "(got density=%g, fluid_density=%g)" % (rho, rho_f))
         vtot = sh.Volume
         ratio = rho / rho_f
         if ratio >= 1.0:

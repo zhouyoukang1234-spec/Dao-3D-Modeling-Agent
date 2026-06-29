@@ -523,6 +523,10 @@ def register(state):
         Falls back to a spur gear when ``beta`` is 0."""
         m_ = _num(a, "module", label="module")
         z_ = _int(a, "teeth", label="teeth")
+        if m_ <= 0 or z_ < 1:
+            raise ValueError(
+                "helical gear needs module > 0 and teeth >= 1 "
+                "(got module=%g, teeth=%d)" % (m_, z_))
         w_ = _num(a, "length", 10, "length")
         beta = _num(a, "helix_angle", 0.0, "helix_angle")
         nsec = max(2, _int(a, "sections", 5, "sections"))
@@ -553,6 +557,10 @@ def register(state):
         Ro=R/sin(gamma), axial height H=face_width*cos(gamma)."""
         m_ = _num(a, "module", label="module")
         z_ = _int(a, "teeth", label="teeth")
+        if m_ <= 0 or z_ < 1:
+            raise ValueError(
+                "bevel gear needs module > 0 and teeth >= 1 "
+                "(got module=%g, teeth=%d)" % (m_, z_))
         gamma = math.radians(_num(a, "pitch_cone_angle", 45.0, "pitch_cone_angle"))
         b_ = _num(a, "face_width", 10.0, "face_width")
         nsec = max(2, _int(a, "sections", 6, "sections"))

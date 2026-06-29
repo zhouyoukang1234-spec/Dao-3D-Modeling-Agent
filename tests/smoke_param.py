@@ -340,6 +340,11 @@ def main():
          "module")
     _bad(s.act("param.bevel", {"body": "Empty", "module": 2, "teeth": "x"}),
          "teeth")
+    # module/teeth == 0 makes pitch radius 0 -> used to leak ZeroDivisionError.
+    _bad(s.act("param.helical", {"body": "Empty", "module": 0, "teeth": 12}),
+         "module > 0")
+    _bad(s.act("param.bevel", {"body": "Empty", "module": 2, "teeth": 0}),
+         "teeth >= 1")
     print("param empty-body and gear-arg guards ok")
 
     print("PARAM SMOKE OK", s.summary())
