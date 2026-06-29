@@ -65,11 +65,10 @@ def register(state):
 
     def _placement(spec):
         spec = spec or {}
-        pos = spec.get("pos", (0, 0, 0))
-        axis = spec.get("axis", (0, 0, 1))
-        angle = float(spec.get("angle", 0))
-        return App.Placement(V(*[float(x) for x in pos]),
-                             ROT(V(*[float(x) for x in axis]), angle))
+        pos = _vec3(spec.get("pos", (0, 0, 0)), "place 'pos'")
+        axis = _vec3(spec.get("axis", (0, 0, 1)), "place 'axis'")
+        angle = _num(spec, "angle", 0, "place 'angle'")
+        return App.Placement(V(*pos), ROT(V(*axis), angle))
 
     def _src_object(ref):
         """Resolve a logical name to a source object (param body or solid)."""
@@ -133,7 +132,7 @@ def register(state):
     def op_move(a):
         link = _comp(a["name"])
         p = link.Placement
-        p.Base = p.Base + V(*[float(x) for x in a["vector"]])
+        p.Base = p.Base + V(*_vec3(a["vector"], "move 'vector'"))
         link.Placement = p
         doc.recompute()
         return {"component": a["name"], "placement": list(link.Placement.Base)}
@@ -390,8 +389,12 @@ def register(state):
         # (volume) tensor about the component CoM, so scale by density.
         ax = a.get("inertia_axis")
         if ax and tot_v > 0:
-            p = V(*ax.get("point", (0, 0, 0)))
-            d = V(*ax.get("dir", (0, 0, 1)))
+            if not isinstance(ax, dict):
+                raise ValueError(
+                    "'inertia_axis' must be a dict {point:[x,y,z], dir:[x,y,z]} "
+                    "(got %r)" % (ax,))
+            p = V(*_vec3(ax.get("point", (0, 0, 0)), "inertia_axis 'point'"))
+            d = V(*_vec3(ax.get("dir", (0, 0, 1)), "inertia_axis 'dir'"))
             d = d.normalize() if d.Length > 1e-9 else V(0, 0, 1)
             inertia = 0.0
             for n in names:

@@ -218,7 +218,8 @@ def main():
         assert not res.ok, ("expected failure", res.data)
         e = res.error or ""
         for raw in ("could not convert", "TypeError", "AttributeError",
-                    "KeyError", "invalid literal"):
+                    "KeyError", "invalid literal", "Expected sequence",
+                    "not enough values", "string indices"):
             assert raw not in e, (raw, e)
         for n in needles:
             assert n in e, (n, e)
@@ -229,6 +230,15 @@ def main():
          "'x'/'y'/'z'")
     _bad(p.act("asm.stack", {"base": "g1", "top": "g2", "gap": "x"}), "gap")
     _bad(p.act("asm.bom", {"density": "x"}), "density")
+    # nested placement / move-vector / inertia-axis specs used to leak a bare
+    # float() 'could not convert' or a V(*seq) 'Expected sequence of size 3'.
+    _bad(p.act("asm.place", {"name": "g2", "pos": "x"}), "pos")
+    _bad(p.act("asm.place", {"name": "g2", "axis": [1, 2]}), "axis")
+    _bad(p.act("asm.place", {"name": "g2", "angle": "x"}), "angle")
+    _bad(p.act("asm.move", {"name": "g2", "vector": "x"}), "vector")
+    _bad(p.act("asm.move", {"name": "g2", "vector": ["x", 0, 0]}), "vector")
+    _bad(p.act("asm.measure", {"inertia_axis": "x"}), "inertia_axis")
+    _bad(p.act("asm.measure", {"inertia_axis": {"point": "x"}}), "point")
     print("asm malformed-arg guards ok")
     pk.shutdown()
 
