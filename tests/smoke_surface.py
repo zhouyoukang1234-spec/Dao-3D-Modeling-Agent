@@ -84,6 +84,25 @@ def main():
     assert p.data["solids"] == 6, p.data
     print("draft.polar_array 6x -> %d solids" % p.data["solids"])
 
+    # draft.path_array: distribute a solid along a polyline spine, then mesh it.
+    assert s.act("solid.box", {"name": "Tie", "length": 2, "width": 2,
+                               "height": 2}).ok
+    pa = s.act("draft.path_array", {"source": "Tie", "out": "Fence",
+                                    "path": [[0, 0, 0], [30, 0, 0], [30, 30, 0]],
+                                    "count": 5})
+    assert pa.ok, pa.error
+    assert pa.data["solids"] == 5, pa.data
+    assert s.act("mesh.analyze", {"name": "Fence"}).ok
+    print("draft.path_array 5 along spine -> %d solids, meshes" % pa.data["solids"])
+
+    # draft.offset: grow a closed profile outward, then it stays a closed wire.
+    do = s.act("draft.offset", {"out": "Bigger", "distance": 3,
+                                "points": [[0, 0, 0], [20, 0, 0], [20, 20, 0],
+                                           [0, 20, 0]]})
+    assert do.ok, do.error
+    assert do.data["closed"] and do.data["length"] > 80, do.data
+    print("draft.offset +3mm -> closed wire length %.2f" % do.data["length"])
+
     # points.cloud + reverse-engineered BSpline surface from scan data.
     pts = [[i * 5.0, j * 5.0,
             3.0 * math.sin(i * 5.0 / 10.0) + 2.0 * math.cos(j * 5.0 / 12.0)]
@@ -121,6 +140,15 @@ def main():
     _guided(s.act("draft.ortho_array", {"source": "Cell", "nx": 0}), ">= 1")
     _guided(s.act("draft.polar_array", {"source": "Cell", "angle": "x"}), "number")
     _guided(s.act("draft.polar_array", {"source": "Cell", "center": [1, 2]}), "3 numbers")
+    _guided(s.act("draft.path_array", {"source": "Nope", "path": [[0, 0, 0],
+            [1, 0, 0]]}), "no such solid")
+    _guided(s.act("draft.path_array", {"source": "Cell", "path": [[0, 0, 0]]}),
+            "at least 2")
+    _guided(s.act("draft.path_array", {"source": "Cell", "path": [[0, 0, 0],
+            [1, 0, 0]], "count": 1}), ">= 2")
+    _guided(s.act("draft.offset", {"points": [[0, 0, 0], [1, 0, 0]],
+            "distance": 0}), "non-zero")
+    _guided(s.act("draft.offset", {"points": "x", "distance": 1}), "list of")
     _guided(s.act("points.cloud", {"name": "C", "points": 5}), "list of")
     _guided(s.act("points.reverse", {"cloud": "Ghost"}), "no cloud named")
     _guided(s.act("points.reverse", {"points": [[0, 0, 0]] * 3}), "at least 9")

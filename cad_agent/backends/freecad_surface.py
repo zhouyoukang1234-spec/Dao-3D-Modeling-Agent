@@ -9,8 +9,10 @@ so the agent can drive them as first-class, fusable ops:
                   ``interpolate`` a BSpline through a grid (exact fit), and
                   ``offset`` a solid's faces into a parallel shell
                   (``makeOffsetShape``).
-* ``draft.*``   — real Draft orthogonal / polar arrays of an existing solid,
-                  registered back as a shape so booleans/FEM can consume them.
+* ``draft.*``   — the Draft workbench: orthogonal / polar / ``path`` arrays of
+                  an existing solid (the baked compound is re-registered so
+                  booleans/FEM can consume it) and ``offset`` of a planar
+                  polyline profile (``makeOffset2D``).
 * ``points.*``  — a point cloud and its reverse-engineered BSpline surface
                   (``ReverseEngineering.approxSurface``): scan data -> geometry,
                   the reverse-modelling core.
@@ -326,6 +328,77 @@ def register(state):
         return {"array": out, "object": obj.Name, "count": count,
                 "solids": len(shape.Solids)}
 
+    def op_path_array(a):
+        """Real Draft path array: distribute a solid evenly along a polyline.
+
+        args: source (solid name), path [[x,y,z]...>=2] (the spine), count
+              (>=2), out (name). The baked compound is re-registered so
+              booleans/mesh/FEM can consume it.
+        """
+        import Draft
+        src = _shape(a.get("source", a.get("body", a.get("name"))))
+        pts = _points(a, "path", "draft.path_array 'path'", need=2)
+        out = a.get("out", "PathArray")
+        count = _int(a, "count", 4, "draft.path count")
+        if count < 2:
+            raise ValueError("draft.path count must be >= 2 (got %d)" % count)
+        for i in range(len(pts) - 1):
+            if (V(*pts[i + 1]) - V(*pts[i])).Length < 1e-9:
+                raise ValueError(
+                    "draft.path_array: path points %d and %d are coincident; "
+                    "remove duplicate spine points" % (i, i + 1))
+        path = Draft.make_wire([V(*p) for p in pts])
+        doc.recompute()
+        arr = Draft.make_path_array(src, path, count)
+        doc.recompute()
+        shape = getattr(arr, "Shape", None)
+        if shape is None or shape.isNull():
+            for tmp in (arr, path):
+                try:
+                    doc.removeObject(tmp.Name)
+                except Exception:
+                    pass
+            raise ValueError("draft.path_array produced no geometry")
+        obj = _register_shape(out, shape.copy(), "draft.path_array")
+        for tmp in (arr, path):
+            try:
+                doc.removeObject(tmp.Name)
+            except Exception:
+                pass
+        return {"array": out, "object": obj.Name, "count": count,
+                "solids": len(shape.Solids)}
+
+    def op_draft_offset(a):
+        """Offset a planar polyline profile inward/outward by a distance.
+
+        The Draft 2D-offset primitive (``Wire.makeOffset2D``): a positive
+        distance grows a closed profile outward, negative shrinks it. The
+        offset wire registers as a first-class shape (extrudable downstream).
+        args: points [[x,y,z]...>=2] (profile), distance (!=0), out (name),
+        closed (bool, default true).
+        """
+        pts = _points(a, "points", "draft.offset 'points'", need=2)
+        out = a.get("out", a.get("name", "OffsetWire"))
+        dist = _num(a, "distance", label="draft.offset distance")
+        if abs(dist) < 1e-9:
+            raise ValueError("draft.offset distance must be non-zero")
+        closed = a.get("closed", True)
+        vs = [V(*p) for p in pts]
+        if closed and (vs[-1] - vs[0]).Length > 1e-9:
+            vs.append(vs[0])
+        wire = Part.makePolygon(vs)
+        try:
+            off = wire.makeOffset2D(dist)
+        except Exception as exc:
+            raise ValueError(
+                "draft.offset could not offset the profile by %g (%s); a "
+                "negative offset may collapse a small/concave loop" % (dist, exc))
+        if off is None or off.isNull():
+            raise ValueError("draft.offset produced an empty wire")
+        obj = _register_shape(out, off, "draft.offset")
+        return {"wire": out, "object": obj.Name, "length": _round(off.Length),
+                "distance": _round(dist), "closed": bool(off.isClosed())}
+
     # ---- points.* + reverse engineering ----------------------------------- #
     def op_cloud(a):
         """Create a point cloud (scan data) the reverse op can rebuild.
@@ -402,6 +475,8 @@ def register(state):
         "surface.offset": op_offset,
         "draft.ortho_array": op_ortho_array,
         "draft.polar_array": op_polar_array,
+        "draft.path_array": op_path_array,
+        "draft.offset": op_draft_offset,
         "points.cloud": op_cloud,
         "points.reverse": op_reverse,
     }
