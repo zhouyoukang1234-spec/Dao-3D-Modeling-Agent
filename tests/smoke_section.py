@@ -66,6 +66,12 @@ def main():
     miss = s.act("solid.section", {"name": "c", "normal": [0, 0, 1], "d": 999}).data
     assert not miss["hit"] and miss["area"] == 0.0, miss
 
+    # a zero cutting-plane normal used to leak a bare OCCError "gp_Dir() ...
+    # zero norm"; it must now fail loud with guidance.
+    zn = s.act("solid.section", {"name": "c", "normal": [0, 0, 0]})
+    assert not zn.ok and "non-zero" in (zn.error or "") and "OCCError" not in (zn.error or ""), zn.error
+    print("zero normal refused:", zn.error)
+
     print("SECTION SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

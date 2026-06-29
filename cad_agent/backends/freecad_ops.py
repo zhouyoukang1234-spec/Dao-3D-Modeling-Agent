@@ -1947,7 +1947,12 @@ def register(state):
         """
         sh = _get(a["name"]).Shape
         n = _vec(a.get("normal", (0, 0, 1)))
-        nl = n.Length or 1.0
+        # a zero section normal leaks a bare OCCError "gp_Dir() ... zero norm";
+        # demand a real cutting-plane normal.
+        if n.Length < 1e-9:
+            raise ValueError(
+                "section needs a non-zero 'normal' (cutting-plane normal); got [0,0,0]")
+        nl = n.Length
         n = _vec((n.x / nl, n.y / nl, n.z / nl))
         if a.get("at") is not None:
             p = _vec(a["at"])
