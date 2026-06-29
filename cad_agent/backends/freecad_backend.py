@@ -37,7 +37,7 @@ _SOLID_OPS = {
     "rackpinion", "cam", "planetary", "geneva", "cam_profile", "spatial_mobility",
     "projected_area", "hydrostatics", "tolerance_stack", "clearance",
     "thermal_expansion", "pressure_vessel", "section_modulus", "buckling",
-    "beam_deflection", "torsion",
+    "beam_deflection", "torsion", "natural_frequency",
     "list", "delete", "export", "import_step",
 }
 
