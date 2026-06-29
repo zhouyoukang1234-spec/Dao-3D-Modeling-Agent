@@ -37,6 +37,13 @@ def main():
     _bad(s.act("solid.cut", {"b": "B", "out": "c"}), "operand")
     _bad(s.act("solid.common", {"out": "i"}), "operand")
 
+    # empty boolean results must fail loud, not store a 0-volume part that
+    # downstream ops/export silently choke on.
+    s.act("solid.box", {"name": "D", "length": 10, "width": 10, "height": 10, "pos": [100, 0, 0]})
+    s.act("solid.box", {"name": "Big", "length": 60, "width": 60, "height": 60, "pos": [-25, -25, -25]})
+    _bad(s.act("solid.common", {"a": "A", "b": "D", "out": "x"}), "empty intersection")
+    _bad(s.act("solid.cut", {"a": "A", "b": "Big", "out": "y"}), "nothing remains")
+
     # fillet / chamfer arg + dimension guards
     _bad(s.act("solid.fillet", {"name": "A"}), "radius")
     _bad(s.act("solid.fillet", {"name": "A", "radius": -2}), "positive")

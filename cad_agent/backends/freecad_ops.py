@@ -590,6 +590,19 @@ def register(state):
         else:
             raise ValueError(kind)
         s = s.removeSplitter()
+        # An empty boolean result (null shape / no solids) is almost never what
+        # the caller wanted, yet it silently stores and even exports a 0-volume
+        # part that makes every downstream op fail confusingly. Reject it with
+        # the likely cause, mirroring the empty-result guard in solid.shell.
+        if s.isNull() or not s.Solids:
+            why = {
+                "common": "the two solids do not overlap (empty intersection) -- "
+                          "use solid.clearance/interference to probe the gap",
+                "cut": "the tool fully encloses the base, so nothing remains",
+                "union": "the fused result has no solid volume",
+            }[kind]
+            raise ValueError(
+                "%s produced an empty solid: %s" % (kind, why))
         out = a.get("out", a["a"])
         _put(out, s)
         # absorb the operands like FreeCAD's own Part booleans do: hide any
