@@ -3789,6 +3789,69 @@ def register(state):
                 "max_moment": _round(m_max, 4),
                 "max_bending_stress": _round(sigma, 4) if sigma else None}
 
+    def op_torsion(a):
+        """Torsion of the solid as a shaft about ``axis`` — twist and shear.
+
+        Reads the real cross-section (shared ``_section_props``) for the polar
+        second moment of area ``J = I1 + I2`` (perpendicular-axis theorem) and the
+        outer radius ``c`` (max distance from the section centroid), then applies
+        the circular-shaft theory:
+
+          angle of twist   phi = T L / (G J)        [rad]
+          max shear stress tau = T c / J
+          torsional stiffness  k = G J / L = T / phi
+
+        ``G`` is the shear modulus, ``T`` the applied torque, ``L`` the shaft
+        length along ``axis`` (bounding extent unless given). This is exact for
+        solid and hollow *circular* shafts (``J = pi r^4/2``); for non-circular
+        sections the St-Venant torsion constant is smaller than the polar moment
+        of area, so the returned stiffness is an upper bound — ``circular`` flags
+        whether the section is (near-)axisymmetric.
+
+        args: name, torque T (required), shear_modulus G (required), axis
+              (default +Z), length L (default = extent along axis)
+        """
+        sh = _get(a["name"]).Shape
+        if not sh.Solids:
+            raise ValueError("torsion needs a solid shaft")
+        if "torque" not in a or "shear_modulus" not in a:
+            raise ValueError(
+                "torsion needs 'torque' (T) and 'shear_modulus' (G)")
+        T = float(a["torque"])
+        G = float(a["shear_modulus"])
+        axis = _unit_v(_vec(a.get("axis", (0, 0, 1))))
+        corners = [V(x, y, z)
+                   for x in (sh.BoundBox.XMin, sh.BoundBox.XMax)
+                   for y in (sh.BoundBox.YMin, sh.BoundBox.YMax)
+                   for z in (sh.BoundBox.ZMin, sh.BoundBox.ZMax)]
+        proj = [p.dot(axis) for p in corners]
+        L = float(a["length"]) if "length" in a else max(proj) - min(proj)
+        if L <= 0:
+            raise ValueError("torsion: shaft length along axis is zero")
+        sp = _section_props(sh, axis, _center(sh), "torsion")
+        J = float(sp["vals"][0] + sp["vals"][1])
+        radii = [math.sqrt(float(p @ p)) for p in sp["boundary"]]
+        c = max(radii)
+        r_min = min(radii)
+        # Axisymmetric sections (solid disk, concentric tube) have every boundary
+        # point at either the inner or the outer radius, so their polar moment of
+        # area equals the St-Venant torsion constant exactly. A square shares
+        # I1==I2 but its corner-to-edge radius varies continuously, so we test the
+        # geometry, not the principal moments.
+        tol = 0.02 * c
+        circular = all(abs(r - c) <= tol or abs(r - r_min) <= tol for r in radii)
+        phi = T * L / (G * J)
+        tau = T * c / J
+        return {"name": a["name"], "torque": T, "shear_modulus": G,
+                "axis": [_round(axis.x), _round(axis.y), _round(axis.z)],
+                "length": _round(L, 4),
+                "polar_moment": _round(J, 3), "outer_radius": _round(c, 4),
+                "angle_of_twist": _round(phi, 8),
+                "angle_of_twist_deg": _round(math.degrees(phi), 6),
+                "max_shear_stress": _round(tau, 4),
+                "torsional_stiffness": _round(G * J / L, 3),
+                "circular": circular}
+
     def op_hydrostatics(a):
         """Free-floating hydrostatics of a solid in a fluid (naval / buoyancy).
 
@@ -4054,6 +4117,6 @@ def register(state):
         "thermal_expansion": op_thermal_expansion,
         "pressure_vessel": op_pressure_vessel,
         "section_modulus": op_section_modulus, "buckling": op_buckling,
-        "beam_deflection": op_beam_deflection,
+        "beam_deflection": op_beam_deflection, "torsion": op_torsion,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }
