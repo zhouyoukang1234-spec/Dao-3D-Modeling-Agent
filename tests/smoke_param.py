@@ -55,6 +55,13 @@ def main():
     _guided(s.act("param.chamfer", {"body": "P", "size": "x"}), "size")
     _guided(s.act("param.loft", {"body": "P", "sections": "x"}), "sections")
     _guided(s.act("param.mirror", {"body": "P", "feature": 123}), "must be a string")
+    # numeric coercion happens before newObject (no half-built feature, no raw
+    # 'could not convert string to float').
+    _guided(s.act("param.shell", {"body": "P", "thickness": "x"}), "thickness")
+    _guided(s.act("param.pattern_linear", {"body": "P", "length": "x"}), "length")
+    _guided(s.act("param.pattern_linear", {"body": "P", "count": "x"}), "count")
+    _guided(s.act("param.pattern_polar", {"body": "P", "angle": "x"}), "angle")
+    _guided(s.act("param.pattern_polar", {"body": "P", "count": "x"}), "count")
     # measuring a body with no feature yet must guide, not leak a null-shape OCCError.
     assert s.act("param.body", {"name": "Empty"}).ok
     _guided(s.act("param.measure", {"body": "Empty"}), "no valid solid")

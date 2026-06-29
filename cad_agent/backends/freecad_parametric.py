@@ -134,6 +134,26 @@ def _num(a, key, default=_MISSING, label=None):
         raise ValueError("%s must be a number (got %r)" % (name, v))
 
 
+def _int(a, key, default=_MISSING, label=None):
+    """Fetch ``a[key]`` and coerce to a whole int with guided errors -- a bare
+    ``int(a.get(key))`` leaks 'ValueError: invalid literal for int()'."""
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            raise ValueError("missing required integer argument %r" % name)
+        return int(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    if f != int(f):
+        raise ValueError("%s must be a whole number (got %r)" % (name, v))
+    return int(f)
+
+
 def _check_profile(profile):
     """A non-dict profile (e.g. the bare string "rect") otherwise satisfies the
     ``"rect" in profile`` substring test and then leaks 'TypeError: string
@@ -690,6 +710,7 @@ def register(state):
         is the wall (inward by default; ``outward=True`` grows it instead)."""
         body = _body(a["body"])
         feat = a.get("feature", "Shell")
+        thickness = _num(a, "thickness", label="thickness")
         tip = body.Tip
         refs = a.get("faces")
         if refs is None:
@@ -711,7 +732,7 @@ def register(state):
         f = body.newObject("PartDesign::Thickness", feat)
         _reg_feature(a["body"], feat, f)
         f.Base = (tip, refs)
-        f.Value = float(a["thickness"])
+        f.Value = thickness
         f.Reversed = not bool(a.get("outward", False))  # default: wall grows inward
         f.Mode = 0   # Skin
         f.Join = 0   # Arc
@@ -759,6 +780,8 @@ def register(state):
     def op_pattern_polar(a):
         body = _body(a["body"])
         feat = _check_feature_name(a.get("feature", "PolarPattern"))
+        angle = _num(a, "angle", 360, "angle")
+        count = _int(a, "count", 4, "count")
         originals = _originals(body, a)
         f = body.newObject("PartDesign::PolarPattern", feat)
         _reg_feature(a["body"], feat, f)
@@ -768,8 +791,8 @@ def register(state):
         # `count` copies at 360/count spacing (the original at 0 included, no
         # last==first overlap). Don't override BaseFeature; instead advance the
         # body Tip so the pattern joins the solid chain (else it stays inert).
-        f.Angle = float(a.get("angle", 360))
-        f.Occurrences = int(a.get("count", 4))
+        f.Angle = angle
+        f.Occurrences = count
         for o in originals:
             o.Visibility = False
         body.Tip = f
@@ -783,6 +806,8 @@ def register(state):
     def op_pattern_linear(a):
         body = _body(a["body"])
         feat = _check_feature_name(a.get("feature", "LinearPattern"))
+        length = _num(a, "length", 50, "length")
+        count = _int(a, "count", 3, "count")
         originals = _originals(body, a)
         f = body.newObject("PartDesign::LinearPattern", feat)
         _reg_feature(a["body"], feat, f)
@@ -790,8 +815,8 @@ def register(state):
         f.Direction = (_origin_axis(body, a.get("axis", "X")), [""])
         f.Reversed = bool(a.get("reversed", False))
         # Length is the total span across all `count` copies (endpoints inclusive).
-        f.Length = float(a.get("length", 50))
-        f.Occurrences = int(a.get("count", 3))
+        f.Length = length
+        f.Occurrences = count
         for o in originals:
             o.Visibility = False
         body.Tip = f
