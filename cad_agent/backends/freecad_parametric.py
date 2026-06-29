@@ -165,6 +165,25 @@ def _check_profile(profile):
     return profile
 
 
+def _pt2(seq, label):
+    """Coerce a 2-element [x, y] sequence to floats with a guided error -- a
+    bare ``float(seq[0])`` leaks 'could not convert' / 'string indices must be
+    integers' when ``seq`` is a string or holds a non-number."""
+    if isinstance(seq, (str, bytes)) or not isinstance(seq, (list, tuple)):
+        raise ValueError("%s must be an [x, y] pair (got %r)" % (label, seq))
+    if len(seq) < 2:
+        raise ValueError("%s must have 2 components [x, y] (got %r)" % (label, seq))
+    out = []
+    for v in seq[:2]:
+        if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+            raise ValueError("%s must hold numbers (got %r)" % (label, seq))
+        try:
+            out.append(float(v))
+        except (TypeError, ValueError):
+            raise ValueError("%s must hold numbers (got %r)" % (label, seq))
+    return out[0], out[1]
+
+
 def _check_feature_name(feat):
     """newObject's name must be a string; a non-string (e.g. an int) leaks
     'TypeError: argument 2 must be str, not int'."""
@@ -231,9 +250,8 @@ def register(state):
         doc.recompute()
 
         if "circle" in profile:
-            r = float(profile["circle"])
-            at = profile.get("at", [0, 0])
-            cx, cy = float(at[0]), float(at[1])
+            r = _num(profile, "circle", label="profile circle radius")
+            cx, cy = _pt2(profile.get("at", [0, 0]), "profile circle 'at'")
             gi = sk.addGeometry(Part.Circle(V(cx, cy, 0), V(0, 0, 1), r), False)
             if cx == 0 and cy == 0:
                 sk.addConstraint(Sketcher.Constraint("Coincident", gi, 3, -1, 1))  # center->origin
@@ -252,7 +270,7 @@ def register(state):
                 _reg_param(feature, "radius", sk, "datum", "radius", bodyname)
 
         elif "rect" in profile:
-            w, h = [float(v) for v in profile["rect"]]
+            w, h = _pt2(profile["rect"], "profile rect [w, h]")
             x0, y0 = -w / 2.0, -h / 2.0
             pts = [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)]
             g = [sk.addGeometry(Part.LineSegment(V(*pts[i], 0), V(*pts[(i + 1) % 4], 0)), False)
@@ -279,11 +297,15 @@ def register(state):
             # patterns / MultiTransform is unreliable headless, so a fully
             # constrained sketch grid is the robust way to a hole array.
             gd = profile["grid"]
-            r = float(gd["circle"])
-            nx, ny = int(gd.get("nx", 2)), int(gd.get("ny", 2))
-            dx, dy = float(gd.get("dx", 10)), float(gd.get("dy", 10))
-            at = gd.get("at", [-(nx - 1) * dx / 2.0, -(ny - 1) * dy / 2.0])
-            x0, y0 = float(at[0]), float(at[1])
+            if not isinstance(gd, dict):
+                raise ValueError(
+                    "profile 'grid' must be a dict {circle, nx, ny, dx, dy} "
+                    "(got %r)" % (gd,))
+            r = _num(gd, "circle", label="grid circle radius")
+            nx, ny = _int(gd, "nx", 2, "grid nx"), _int(gd, "ny", 2, "grid ny")
+            dx, dy = _num(gd, "dx", 10, "grid dx"), _num(gd, "dy", 10, "grid dy")
+            x0, y0 = _pt2(gd.get("at", [-(nx - 1) * dx / 2.0, -(ny - 1) * dy / 2.0]),
+                          "grid 'at'")
             for j in range(ny):
                 for i in range(nx):
                     cx, cy = x0 + i * dx, y0 + j * dy
@@ -293,8 +315,16 @@ def register(state):
                     sk.addConstraint(Sketcher.Constraint("Radius", gi, r))
 
         elif "polygon" in profile:
-            pts = [V(float(p[0]), float(p[1]), 0) for p in profile["polygon"]]
+            poly = profile["polygon"]
+            if isinstance(poly, (str, bytes)) or not isinstance(poly, (list, tuple)):
+                raise ValueError(
+                    "profile 'polygon' must be a list of [x, y] points "
+                    "(got %r)" % (poly,))
+            pts = [V(*_pt2(p, "polygon point"), 0) for p in poly]
             n = len(pts)
+            if n < 3:
+                raise ValueError(
+                    "profile 'polygon' needs at least 3 points (got %d)" % n)
             g = [sk.addGeometry(Part.LineSegment(pts[i], pts[(i + 1) % n]), False) for i in range(n)]
             for i in range(n):
                 sk.addConstraint(Sketcher.Constraint("Coincident", g[i], 2, g[(i + 1) % n], 1))
@@ -319,14 +349,23 @@ def register(state):
             # a ring (internal) gear: an outer rim circle with an inward-toothed
             # bore, padded into an annulus.
             gp = profile["gear"]
-            m_ = float(gp["module"])
-            z_ = int(gp["teeth"])
-            raw, _info = _gear_points(m_, z_, float(gp.get("pressure_angle", 20.0)),
-                                      int(gp.get("samples", 6)))
+            if not isinstance(gp, dict):
+                raise ValueError(
+                    "profile 'gear' must be a dict {module, teeth, ...} "
+                    "(got %r)" % (gp,))
+            m_ = _num(gp, "module", label="gear module")
+            z_ = _int(gp, "teeth", label="gear teeth")
+            if m_ <= 0 or z_ < 1:
+                raise ValueError(
+                    "gear profile needs module > 0 and teeth >= 1 "
+                    "(got module=%g, teeth=%d)" % (m_, z_))
+            raw, _info = _gear_points(
+                m_, z_, _num(gp, "pressure_angle", 20.0, "gear pressure_angle"),
+                _int(gp, "samples", 6, "gear samples"))
             # optional rigid rotation of the whole outline about the gear axis
             # (degrees). Used to build helical gears: lofting cross-sections
             # rotated by an increasing angle produces a twisted (helical) tooth.
-            rot_deg = float(gp.get("rotate", 0.0))
+            rot_deg = _num(gp, "rotate", 0.0, "gear rotate")
             if rot_deg:
                 ca, sa = math.cos(math.radians(rot_deg)), math.sin(math.radians(rot_deg))
                 raw = [(x * ca - y * sa, x * sa + y * ca) for x, y in raw]
@@ -585,13 +624,21 @@ def register(state):
         body = _body(a["body"])
         feat = a.get("feature", "Pipe")
         pathspec = a["path"]
+        if not isinstance(pathspec, dict):
+            raise ValueError(
+                "sweep 'path' must be a dict {'points':[[x,y],...]} or "
+                "{'helix':{radius,pitch,height}} (got %r)" % (pathspec,))
 
         if "helix" in pathspec:
             # helical sweep (coil spring / thread). The helix starts at
             # (R,0,0) with tangent ~ +Y, so the profile must sit on the XZ
             # plane centered at the start radius for a perpendicular sweep.
             hx = pathspec["helix"]
-            radius = float(hx["radius"])
+            if not isinstance(hx, dict):
+                raise ValueError(
+                    "sweep 'helix' must be a dict {radius, pitch, height} "
+                    "(got %r)" % (hx,))
+            radius = _num(hx, "radius", label="helix radius")
             # lift the helix base so threads sit on a shank. NOTE for cut=True:
             # the helix must overrun BOTH ends of the target solid (start/end on
             # a free FLAT end face, not mid-surface) or OCC yields an invalid
@@ -599,12 +646,19 @@ def register(state):
             # tool exiting the end face leaves a near-zero-volume helical lip, so
             # the cut solid's volume/turns are exact but its bbox may be slightly
             # inflated at the run-out (matches how a real thread runs off an end).
-            z0 = float(hx.get("z", 0))
+            z0 = _num(hx, "z", 0, "helix z")
+            pitch = _num(hx, "pitch", label="helix pitch")
+            height = _num(hx, "height", label="helix height")
+            if pitch <= 0 or height <= 0 or radius <= 0:
+                raise ValueError(
+                    "helix needs radius, pitch and height all > 0 "
+                    "(got radius=%g, pitch=%g, height=%g)"
+                    % (radius, pitch, height))
             helix = doc.addObject("Part::Helix", feat + "_helix")
-            helix.Pitch = float(hx["pitch"])
-            helix.Height = float(hx["height"])
+            helix.Pitch = pitch
+            helix.Height = height
             helix.Radius = radius
-            helix.Angle = float(hx.get("angle", 0))  # 0 = cylindrical, >0 = conical
+            helix.Angle = _num(hx, "angle", 0, "helix angle")  # 0=cyl, >0=conical
             if z0:
                 helix.Placement = App.Placement(V(0, 0, z0), ROT())
             helix.Visibility = False  # helper spine: keep out of bbox/renders
@@ -623,7 +677,9 @@ def register(state):
             f.Spine = (helix, [])
             doc.recompute()
             if f.Shape.isNull() or not f.Shape.isValid():
-                raise RuntimeError("helical sweep produced invalid shape")
+                raise ValueError(
+                    "helical sweep produced an invalid shape; check that the "
+                    "profile fits the helix radius and the pitch clears it")
             return {"feature": feat,
                     "turns": round(float(helix.Height) / float(helix.Pitch), 3),
                     **_metrics(body.Tip.Shape)}
@@ -636,7 +692,15 @@ def register(state):
         psk.AttachmentSupport = [(_origin_plane(body, pathspec.get("plane", "XZ")), "")]
         psk.MapMode = "FlatFace"
         doc.recompute()
-        pts = [V(float(p[0]), float(p[1]), 0) for p in pathspec["points"]]
+        ppts = pathspec.get("points")
+        if isinstance(ppts, (str, bytes)) or not isinstance(ppts, (list, tuple)):
+            raise ValueError(
+                "sweep path 'points' must be a list of [x, y] points "
+                "(got %r)" % (ppts,))
+        pts = [V(*_pt2(p, "path point"), 0) for p in ppts]
+        if len(pts) < 2:
+            raise ValueError(
+                "sweep path needs at least 2 points (got %d)" % len(pts))
         for i in range(len(pts) - 1):
             gi = psk.addGeometry(Part.LineSegment(pts[i], pts[i + 1]), False)
             if i > 0:
@@ -656,7 +720,9 @@ def register(state):
                 pass
         doc.recompute()
         if f.Shape.isNull() or not f.Shape.isValid():
-            raise RuntimeError("sweep produced invalid shape")
+            raise ValueError(
+                "sweep produced an invalid shape; check that the path is not "
+                "self-intersecting and the profile fits its turns")
         return {"feature": feat, **_metrics(body.Tip.Shape)}
 
     # ---- dressups --------------------------------------------------------- #
@@ -764,6 +830,9 @@ def register(state):
                     "body %r has no feature to pattern/mirror; add a pad or "
                     "pocket first (or pass 'originals')" % (a["body"],))
             return [body.Tip]
+        if isinstance(names, (str, bytes)) or not isinstance(names, (list, tuple)):
+            raise ValueError(
+                "'originals' must be a list of feature names (got %r)" % (names,))
         bodyname = a["body"]
         objs = []
         for n in names:

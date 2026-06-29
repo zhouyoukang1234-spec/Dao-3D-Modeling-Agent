@@ -345,7 +345,30 @@ def main():
          "module > 0")
     _bad(s.act("param.bevel", {"body": "Empty", "module": 2, "teeth": 0}),
          "teeth >= 1")
-    print("param empty-body and gear-arg guards ok")
+    # malformed nested profile/sweep specs must guide, never leak a bare
+    # float() 'could not convert', a 'string indices' or an OCC/RuntimeError.
+    assert s.act("param.body", {"name": "PF"}).ok
+    _bad(s.act("param.pad", {"body": "PF", "feature": "p1",
+                             "profile": {"rect": "x"}, "length": 5}), "rect")
+    _bad(s.act("param.pad", {"body": "PF", "feature": "p2",
+                             "profile": {"circle": "x"}, "length": 5}), "circle")
+    _bad(s.act("param.pad", {"body": "PF", "feature": "p3",
+                             "profile": {"polygon": "x"}, "length": 5}), "polygon")
+    _bad(s.act("param.pad", {"body": "PF", "feature": "p4",
+                             "profile": {"polygon": [[0, 0]]}, "length": 5}),
+         "at least 3 points")
+    _bad(s.act("param.sweep", {"body": "PF", "feature": "s1",
+                               "profile": {"circle": 2}, "path": "x"}), "path")
+    _bad(s.act("param.sweep", {"body": "PF", "feature": "s2",
+                               "profile": {"circle": 2},
+                               "path": {"points": "x"}}), "points")
+    _bad(s.act("param.sweep", {"body": "PF", "feature": "s3",
+                               "profile": {"circle": 2},
+                               "path": {"points": [[0, 0]]}}), "at least 2")
+    _bad(s.act("param.sweep", {"body": "PF", "feature": "s4",
+                               "profile": {"circle": 2},
+                               "path": {"helix": "x"}}), "helix")
+    print("param empty-body, gear-arg and nested-profile guards ok")
 
     print("PARAM SMOKE OK", s.summary())
     k.shutdown()
