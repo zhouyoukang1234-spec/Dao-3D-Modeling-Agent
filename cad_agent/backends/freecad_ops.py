@@ -1097,7 +1097,7 @@ def register(state):
             raise ValueError(
                 "solid.symmetry needs a solid (got a shell/compound with no "
                 "volume); symmetry is measured against an enclosed mass")
-        tol = float(a.get("tol", 1e-3))
+        tol = _num(a, "tol", 1e-3, "tol")
         orders = a.get("orders", [2, 3, 4, 5, 6, 8])
         if len(sols) != 1:
             raise ValueError(
@@ -1743,7 +1743,7 @@ def register(state):
             raise ValueError(
                 "solid.chirality expects a single solid (got %d); handedness is "
                 "a property of one part" % len(sols))
-        tol = float(a.get("tol", 1e-3))
+        tol = _num(a, "tol", 1e-3, "tol")
         body = sols[0]
         method = a.get("method", "exact")
         if method not in ("exact", "invariant"):
@@ -2261,7 +2261,7 @@ def register(state):
         base = {"name": a["name"], "faces": len(faces), "surfaces": kinds,
                 "bbox_size": [_round(bb.XLength), _round(bb.YLength), _round(bb.ZLength)],
                 "volume": _round(vol)}
-        tol = float(a.get("tol", 1e-3))
+        tol = _num(a, "tol", 1e-3, "tol")
 
         def accept(kind, params, pred_vol):
             rel = abs(pred_vol - vol) / max(abs(vol), 1e-9)
@@ -2415,7 +2415,7 @@ def register(state):
                 "and analyse one part at a time" % len(sols))
         body = sols[0]
         diag = body.BoundBox.DiagonalLength or 1.0
-        ptol = max(float(a.get("tol", 1e-4)) * diag, 1e-6)
+        ptol = max(_num(a, "tol", 1e-4, "tol") * diag, 1e-6)
         eps = max(1e-3, 1e-4 * diag)
         raw = []
         for idx, f in enumerate(body.Faces):
@@ -2612,7 +2612,7 @@ def register(state):
                 "solid.decompose and analyse one part at a time" % len(sols))
         body = sols[0]
         diag = body.BoundBox.DiagonalLength or 1.0
-        ptol = max(float(a.get("tol", 1e-4)) * diag, 1e-6)
+        ptol = max(_num(a, "tol", 1e-4, "tol") * diag, 1e-6)
 
         def _coaxial(ax0, p0, ax1, p1):
             return (abs(abs(ax0.dot(ax1)) - 1.0) <= 1e-6
@@ -2858,7 +2858,7 @@ def register(state):
         """
         name = _name(a, "name", "solid.reverse_build")
         out = a.get("out") or (name + "_rebuilt")
-        tol = float(a.get("tol", 1e-3))
+        tol = _num(a, "tol", 1e-3, "tol")
         sols = _get(name).Shape.Solids
         if len(sols) != 1:
             raise ValueError(
@@ -3419,7 +3419,7 @@ def register(state):
         ``geartrain`` to get the train value.
         """
         names = a.get("parts") or list(state.shapes.keys())
-        tol = float(a.get("tol", 1e-2))
+        tol = _num(a, "tol", 1e-2, "tol")
         parts = []
         for n in names:
             cyls = _cyl_axes(_get(n).Shape)
@@ -4061,7 +4061,7 @@ def register(state):
             raise ValueError(
                 "buckling needs 'modulus': Young's modulus E (consistent units, "
                 "e.g. MPa with mm gives N)")
-        E = float(a["modulus"])
+        E = _num(a, "modulus", label="modulus")
         # a zero/negative modulus silently reports a 0 (or non-physical) critical
         # load; Young's modulus is strictly positive.
         if E <= 0:
@@ -4289,8 +4289,8 @@ def register(state):
             raise ValueError(
                 "natural_frequency needs 'modulus' (E) and 'density' (rho, "
                 "mass per unit volume)")
-        E = float(a["modulus"])
-        rho = float(a["density"])
+        E = _num(a, "modulus", label="modulus")
+        rho = _num(a, "density", label="density")
         # a zero density divides by zero in sqrt(EI/(rho A)); both E and rho are
         # strictly positive physical quantities.
         if E <= 0 or rho <= 0:
@@ -4598,8 +4598,8 @@ def register(state):
             raise ValueError(
                 "hydrostatics needs a non-zero 'up' (vertical) direction (got [0,0,0])")
         up = _unit_v(upv)
-        rho = float(a.get("density", 1.0))
-        rho_f = float(a.get("fluid_density", 1.0))
+        rho = _num(a, "density", 1.0, "density")
+        rho_f = _num(a, "fluid_density", 1.0, "fluid_density")
         vtot = sh.Volume
         ratio = rho / rho_f
         if ratio >= 1.0:
@@ -4763,8 +4763,8 @@ def register(state):
             raise ValueError(
                 "thermal_expansion needs 'cte' (alpha, 1/K e.g. 23e-6 for Al) "
                 "and 'delta_t' (temperature change, K)")
-        alpha = float(a["cte"])
-        dt = float(a["delta_t"])
+        alpha = _num(a, "cte", label="cte")
+        dt = _num(a, "delta_t", label="delta_t")
         eps = alpha * dt                       # linear strain
         s = 1.0 + eps
         bb = sh.BoundBox

@@ -18,6 +18,7 @@ def _bad(r, token):
     err = r.error or ""
     assert not r.ok, "expected failure, got %r" % (r.data,)
     assert "KeyError" not in err and "TypeError" not in err, err
+    assert "could not convert" not in err, err
     assert token in err, "error %r lacks %r" % (err, token)
 
 
@@ -72,6 +73,23 @@ def main():
     _bad(neg, "circle radius must be positive")
     assert "OCCError" not in (neg.error or ""), neg.error
     print("missing/invalid build-op args all refused cleanly")
+
+    # analysis/engineering ops coerced numerics with a bare float() and leaked
+    # 'could not convert string to float'; they now guide on a non-numeric arg.
+    _bad(s.act("solid.symmetry", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.recognize", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.fillets", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.holes", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.reverse", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.reverse_build", {"name": "A", "tol": "x"}), "tol")
+    _bad(s.act("solid.gearmesh", {"tol": "x"}), "tol")
+    _bad(s.act("solid.buckling", {"name": "A", "modulus": "x"}), "modulus")
+    _bad(s.act("solid.natural_frequency", {"name": "A", "modulus": "x",
+                                           "density": 1.0}), "modulus")
+    _bad(s.act("solid.hydrostatics", {"name": "A", "density": "x"}), "density")
+    _bad(s.act("solid.thermal_expansion", {"name": "A", "cte": "x",
+                                           "delta_t": 10}), "cte")
+    print("analysis/engineering numeric guards all refused cleanly")
 
     # valid calls still work
     assert s.act("solid.extrude", {"name": "E", "profile": {"rect": [10, 6]}, "height": 4}).ok
