@@ -79,7 +79,8 @@ def register(state):
                     if par is None or par.Name != asm.Name:
                         continue
                     lo = o.LinkedObject
-                    if lo is None or not hasattr(lo, "Shape") or lo.Shape.isNull():
+                    if lo is None or not hasattr(getattr(lo, "Shape", None),
+                                                 "isNull") or lo.Shape.isNull():
                         continue
                     shp = lo.Shape.copy()
                     shp.Placement = o.Placement.multiply(lo.Placement)
@@ -99,9 +100,16 @@ def register(state):
                     objs.append((n, shp))
         else:
             for o in doc.Objects:
-                if getattr(o, "Visibility", False) and hasattr(o, "Shape") \
-                        and not o.Shape.isNull() and o.Shape.Solids:
-                    objs.append((o.Label, o.Shape))
+                # some object kinds (FEM constraints, TechDraw views, links)
+                # expose a 'Shape' attribute that is not a TopoShape; calling
+                # .isNull()/.Solids on it leaks a raw AttributeError.
+                shp = getattr(o, "Shape", None)
+                if not getattr(o, "Visibility", False) \
+                        or not hasattr(shp, "isNull") \
+                        or not hasattr(shp, "Solids"):
+                    continue
+                if not shp.isNull() and shp.Solids:
+                    objs.append((o.Label, shp))
         return objs
 
     def _tris(shape, tol):

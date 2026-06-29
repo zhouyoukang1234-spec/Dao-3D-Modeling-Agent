@@ -91,6 +91,14 @@ def main():
     _bad(s.act("fem.spin", {"hz": 10, "axis": "x"}), "axis")
     _bad(s.act("fem.buckle", {"modes": "x"}), "modes")
     print("  malformed fem.* selectors/values refused cleanly")
+
+    # the document now holds FEM analysis / mesh / result objects whose 'Shape'
+    # attribute is not a TopoShape; view.scene used to leak a raw
+    # "'Part.Feature' object has no attribute 'isNull'" walking doc.Objects.
+    vs = s.act("view.scene", {})
+    assert vs.ok, ("view.scene leaked over FEM objects", vs.error)
+    assert "isNull" not in (vs.error or ""), vs.error
+    print("  view.scene tolerates non-TopoShape FEM objects")
     s.registry.kernel.shutdown()
 
     # ---- 2. the false-pass guard ------------------------------------------- #
@@ -119,6 +127,21 @@ def main():
         assert "fem.setup first" in err, (op, err)
     q.registry.kernel.shutdown()
     print("  out-of-order fem.* guided cleanly (no raw RuntimeError)")
+
+    # ---- 4. solve with no boundary conditions guides, never leaks ---------- #
+    #     fem.solve / fem.thermal after setup but with no fix/load used to
+    #     surface CalculiX's "RuntimeError: FEM prerequisites not met: ...".
+    p = new_session("fem_noc")
+    p.act("solid.box", {"name": "bar", "length": 60, "width": 10, "height": 10})
+    assert p.act("fem.setup", {"target": "bar", "material": "steel",
+                               "order": 1, "mesh_size": 5}).ok
+    nc = p.act("fem.solve", {})
+    err = nc.error or ""
+    assert not nc.ok, nc.data
+    assert "RuntimeError" not in err, err
+    assert "fem.fix" in err or "boundary" in err, err
+    print("  fem.solve w/o constraints guided cleanly (no raw RuntimeError)")
+    p.registry.kernel.shutdown()
 
     print("FEM GUARD SMOKE OK")
 

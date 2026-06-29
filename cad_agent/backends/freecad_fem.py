@@ -465,14 +465,20 @@ def register(state):
         fea.purge_results()
         msg = fea.check_prerequisites()
         if msg and "Working directory" not in msg:
-            raise RuntimeError("FEM prerequisites not met: %s" % msg)
+            raise ValueError(
+                "cannot run the solve yet: %s. Define boundary conditions "
+                "with fem.fix / fem.support and apply loads with fem.load "
+                "(or fem.temperature for a thermal run) before fem.solve / "
+                "fem.thermal" % msg)
         fea.write_inp_file()
         fea.ccx_run()
         fea.load_results()
         state.fem["workdir"] = workdir
         results = [o for o in doc.Objects if o.isDerivedFrom("Fem::FemResultObject")]
         if not results:
-            raise RuntimeError("CalculiX produced no result object")
+            raise ValueError(
+                "CalculiX produced no result object -- the model has no "
+                "loads or constraints to solve; add fem.fix and fem.load first")
         return results
 
     def solve(a):
@@ -491,7 +497,7 @@ def register(state):
         # the mesh but no nodal results. Reporting that as max_vm=0 / safety=inf
         # would be a dangerous false pass, so fail loudly instead.
         if not vm and not disp:
-            raise RuntimeError(
+            raise ValueError(
                 "CalculiX produced no stress/displacement field — the static "
                 "solve did not converge (often a distorted/nonpositive-Jacobian "
                 "mesh); refine the mesh or drop to 1st-order elements")
