@@ -53,6 +53,12 @@ def main():
                   {"pressure": p, "radius": 30.0, "thickness": 10.0}).data
     assert thick["thin_wall"] is False, thick
 
+    # missing radius/thickness -> a guided error, not a raw TypeError on float(None).
+    bad = s.act("solid.pressure_vessel", {"pressure": p, "thickness": t})
+    assert not bad.ok and "radius" in (bad.error or ""), bad.error
+    assert "TypeError" not in (bad.error or ""), bad.error
+    print("missing radius refused cleanly: %s" % bad.error)
+
     print("PVESSEL SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

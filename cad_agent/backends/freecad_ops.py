@@ -4257,6 +4257,10 @@ def register(state):
         args: name, cte (1/K, e.g. 23e-6 for Al), delta_t (K)
         """
         sh = _get(a["name"]).Shape
+        if "cte" not in a or "delta_t" not in a:
+            raise ValueError(
+                "thermal_expansion needs 'cte' (alpha, 1/K e.g. 23e-6 for Al) "
+                "and 'delta_t' (temperature change, K)")
         alpha = float(a["cte"])
         dt = float(a["delta_t"])
         eps = alpha * dt                       # linear strain
@@ -4279,16 +4283,22 @@ def register(state):
         membrane stresses are, for a ``cylinder``: hoop ``sigma_h = p*r/t`` and
         longitudinal ``sigma_l = p*r/(2t)``; for a ``sphere`` both equal
         ``p*r/(2t)``. The governing (max) stress drives a von-Mises equivalent
-        and, when a material ``yield_strength`` is given, a safety factor. ``r``
-        and ``t`` may be passed directly or derived from a hollow round ``name``.
+        and, when a material ``yield_strength`` is given, a safety factor.
 
         args: pressure, radius|r, thickness|t, kind(cylinder|sphere),
-              yield_strength(optional), name(optional, to read r,t)
+              yield_strength(optional)
         """
         kind = a.get("kind", "cylinder")
+        if "pressure" not in a:
+            raise ValueError("pressure_vessel needs 'pressure' (internal gauge p)")
+        rv = a.get("radius", a.get("r"))
+        tv = a.get("thickness", a.get("t"))
+        if rv is None or tv is None:
+            raise ValueError(
+                "pressure_vessel needs 'radius' (r) and 'thickness' (t)")
         p = float(a["pressure"])
-        r = float(a.get("radius", a.get("r")))
-        t = float(a.get("thickness", a.get("t")))
+        r = float(rv)
+        t = float(tv)
         if t <= 0:
             raise ValueError("pressure_vessel needs a positive wall thickness")
         if kind == "sphere":

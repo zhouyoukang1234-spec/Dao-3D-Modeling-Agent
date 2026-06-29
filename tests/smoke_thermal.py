@@ -42,6 +42,12 @@ def main():
               {"name": "blk", "cte": alpha, "delta_t": 0}).data
     assert _close(z["linear_strain"], 0.0) and _close(z["expanded_dims"][0], L), z
 
+    # missing required args -> a guided error, not a raw KeyError.
+    bad = s.act("solid.thermal_expansion", {"name": "blk", "delta_t": dt})
+    assert not bad.ok and "cte" in (bad.error or ""), bad.error
+    assert "KeyError" not in (bad.error or ""), bad.error
+    print("missing cte refused cleanly: %s" % bad.error)
+
     print("THERMAL SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 
