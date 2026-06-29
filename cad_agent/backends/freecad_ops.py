@@ -3753,7 +3753,13 @@ def register(state):
               deflection (mesh tolerance for curved faces, default 0.05)
         """
         sh = _get(a["name"]).Shape
-        d = _unit_v(_vec(a.get("dir", (0, 0, 1))))
+        dv = _vec(a.get("dir", (0, 0, 1)))
+        # a zero projection direction makes every |n.d| vanish and silently
+        # reports a 0 mm^2 footprint; demand a real projection axis.
+        if dv.Length < 1e-9:
+            raise ValueError(
+                "projected_area needs a non-zero 'dir' projection direction (got [0,0,0])")
+        d = _unit_v(dv)
         defl = float(a.get("deflection", 0.05))
         acc = 0.0
         all_planar = True
@@ -4390,7 +4396,13 @@ def register(state):
         sh = _get(a["name"]).Shape
         if not sh.Solids:
             raise ValueError("hydrostatics needs a solid with volume")
-        up = _unit_v(_vec(a.get("up", (0, 0, 1))))
+        upv = _vec(a.get("up", (0, 0, 1)))
+        # a zero 'up' gives a degenerate waterplane and silently mis-solves the
+        # float; demand a real vertical (gravity/buoyancy) axis.
+        if upv.Length < 1e-9:
+            raise ValueError(
+                "hydrostatics needs a non-zero 'up' (vertical) direction (got [0,0,0])")
+        up = _unit_v(upv)
         rho = float(a.get("density", 1.0))
         rho_f = float(a.get("fluid_density", 1.0))
         vtot = sh.Volume

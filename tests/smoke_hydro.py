@@ -53,6 +53,12 @@ def main():
                                         "fluid_density": 1.0}).data
     assert sink["floats"] is False, sink
 
+    # a zero 'up' axis gives a degenerate waterplane; it must now fail loud.
+    zu = s.act("solid.hydrostatics", {"name": "hull", "density": 1.0,
+                                      "fluid_density": 3.0, "up": [0, 0, 0]})
+    assert not zu.ok and "non-zero" in (zu.error or ""), zu.error
+    print("zero up refused:", zu.error)
+
     print("HYDRO SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 
