@@ -3564,6 +3564,31 @@ def register(state):
                         "minus": _round(rss_minus, 4), "sigma": sigma},
                 "dominant": dom["name"], "detail": detail}
 
+    def op_clearance(a):
+        """Minimum gap (and the closest points) between two separate solids — the
+        airgap/clearance complement of ``interference``.
+
+        Uses OCCT's exact BRep extrema (``Shape.distToShape``) so the result is
+        the true geometric minimum distance between the boundaries, not a mesh
+        approximation: e.g. two spheres give ``center_distance - r1 - r2`` and
+        two axis-aligned boxes give the exact face-to-face air gap. When the
+        solids touch or overlap the distance is ~0 and ``touching`` is True; the
+        signed-style ``interfering`` flag is raised when they share volume.
+
+        args: a, b (object names)
+        returns: distance, touching, interfering, point_a, point_b
+        """
+        sa = _get(a["a"]).Shape
+        sb = _get(a["b"]).Shape
+        dist, pts, _info = sa.distToShape(sb)
+        pa, pb = pts[0]
+        overlap = sa.common(sb)
+        interfering = bool(overlap.Solids) and overlap.Volume > 1e-6
+        return {"a": a["a"], "b": a["b"], "distance": _round(dist, 4),
+                "touching": dist < 1e-6, "interfering": interfering,
+                "point_a": [_round(pa.x), _round(pa.y), _round(pa.z)],
+                "point_b": [_round(pb.x), _round(pb.y), _round(pb.z)]}
+
     return {
         "box": op_box, "cylinder": op_cylinder, "sphere": op_sphere, "cone": op_cone,
         "torus": op_torus, "extrude": op_extrude, "revolve": op_revolve, "loft": op_loft,
@@ -3592,6 +3617,6 @@ def register(state):
         "geneva": op_geneva, "cam_profile": op_cam_profile,
         "spatial_mobility": op_spatial_mobility,
         "projected_area": op_projected_area, "hydrostatics": op_hydrostatics,
-        "tolerance_stack": op_tolerance_stack,
+        "tolerance_stack": op_tolerance_stack, "clearance": op_clearance,
         "list": op_list, "delete": op_delete, "export": op_export, "import_step": op_import_step,
     }

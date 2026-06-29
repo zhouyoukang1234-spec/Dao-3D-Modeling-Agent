@@ -48,7 +48,8 @@ SUITES = ["tests.smoke_kernel", "tests.smoke_param", "tests.smoke_asm",
           "tests.smoke_holes", "tests.smoke_fillets",
           "tests.smoke_design_intent", "tests.smoke_library_query",
           "tests.smoke_reverse_build", "tests.smoke_reuse",
-          "tests.smoke_projarea", "tests.smoke_hydro", "tests.smoke_tolstack"]
+          "tests.smoke_projarea", "tests.smoke_hydro", "tests.smoke_tolstack",
+          "tests.smoke_clearance"]
 
 
 def main() -> int:
