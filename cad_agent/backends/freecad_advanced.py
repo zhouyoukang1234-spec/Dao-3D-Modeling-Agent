@@ -246,9 +246,17 @@ def register(state):
         views = a.get("views", ["front"])
         if isinstance(views, str):
             views = [views]
+        if not isinstance(views, (list, tuple)):
+            raise ValueError(
+                "draw.techdraw 'views' must be a view name or list of names "
+                "(got %r)" % (views,))
         scale = _num(a, "scale", 1.0, "draw scale")
         made = []
         for vname in views:
+            if not isinstance(vname, str):
+                raise ValueError(
+                    "draw.techdraw view names must be strings like 'front'/'top'"
+                    "/'iso' (got %r)" % (vname,))
             key = vname.lower()
             if key not in _DRAW_DIRS:
                 raise ValueError("unknown view %r (choose from %s)" % (vname, sorted(_DRAW_DIRS)))

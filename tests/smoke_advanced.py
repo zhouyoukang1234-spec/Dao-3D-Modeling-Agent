@@ -84,6 +84,10 @@ def main():
     _guided(s.act("mesh.export", {"name": "Brk", "path": os.path.join(OUT, "b.stl"),
                                   "tolerance": "x"}), "must be a number")
     _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
+    # a non-string view name used to leak 'int has no attribute lower' (or a
+    # bare 'int not iterable' when views itself was a scalar).
+    _guided(s.act("draw.techdraw", {"name": "Brk", "views": 5}), "views")
+    _guided(s.act("draw.techdraw", {"name": "Brk", "views": [5]}), "view names")
     # analyze.section coerced offset with a bare float() and indexed an unchecked
     # plane dict: a non-numeric offset / bad plane must guide, not leak.
     _guided(s.act("analyze.section", {"name": "Brk", "offset": "x"}),
