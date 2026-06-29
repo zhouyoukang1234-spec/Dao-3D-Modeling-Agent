@@ -3466,7 +3466,18 @@ def register(state):
         return {"deleted": a["name"]}
 
     def op_export(a):
-        names = a.get("names") or list(state.shapes.keys())
+        # Accept the library-wide singular ``name`` as well as ``names``; only
+        # fall back to "export the whole scene" when *no* selector is given.
+        # Silently dumping every solid when a caller said name="part" (a key the
+        # rest of the library uses everywhere) was a quiet footgun.
+        if "names" in a:
+            names = a["names"]
+        elif "name" in a:
+            names = [a["name"]]
+        else:
+            names = list(state.shapes.keys())
+        if not names:
+            raise ValueError("export has nothing to write (no solids in session)")
         objs = [_get(n) for n in names]
         path = a["path"]
         fmt = a.get("format", path.rsplit(".", 1)[-1]).lower()
