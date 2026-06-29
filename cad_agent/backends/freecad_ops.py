@@ -524,14 +524,31 @@ def register(state):
                 "loft needs 'sections': a list of >=2 cross-sections, each with "
                 "a 'profile'")
         wires = []
+        offsets = []
         for sec in sections:
             if "profile" not in sec:
                 raise ValueError("loft: every section needs a 'profile'")
             face = _profile_face(sec["profile"])
             w = face.Wires[0]
-            w.translate(_vec((0, 0, sec.get("offset", 0))))
+            off = sec.get("offset", 0)
+            w.translate(_vec((0, 0, off)))
             wires.append(w)
-        s = Part.makeLoft(wires, a.get("solid", True), a.get("ruled", False))
+            offsets.append(off)
+        # Two consecutive sections sharing an offset put both wires in the same
+        # plane, which makes OCC throw a bare RuntimeError "Segments of a Loft
+        # must not be at the same position"; flag the real cause first.
+        for i in range(1, len(offsets)):
+            if abs(offsets[i] - offsets[i - 1]) < 1e-9:
+                raise ValueError(
+                    "loft sections %d and %d share offset %g; give each section a "
+                    "distinct 'offset' so they lie in different planes"
+                    % (i - 1, i, offsets[i]))
+        try:
+            s = Part.makeLoft(wires, a.get("solid", True), a.get("ruled", False))
+        except Exception as e:
+            raise ValueError(
+                "loft could not be built from the given sections (they may be "
+                "self-intersecting or out of order): %s" % e)
         _put(a["name"], s)
         return _metrics(s)
 

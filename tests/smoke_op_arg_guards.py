@@ -31,6 +31,9 @@ def main():
     _bad(s.act("solid.loft", {"name": "L"}), "sections")
     _bad(s.act("solid.loft", {"name": "L", "sections": [{"profile": {"rect": [5, 5]}}]}), "sections")
     _bad(s.act("solid.loft", {"name": "L", "sections": [{"offset": 0}, {"offset": 5}]}), "profile")
+    _bad(s.act("solid.loft", {"name": "L", "sections": [
+        {"profile": {"rect": [10, 10]}, "offset": 0},
+        {"profile": {"rect": [4, 4]}, "offset": 0}]}), "distinct 'offset'")
     _bad(s.act("solid.shell", {"name": "A"}), "thickness")
     _bad(s.act("solid.translate", {"name": "A"}), "vector")
     _bad(s.act("solid.pattern_linear", {"name": "A"}), "count")
