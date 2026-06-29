@@ -3601,6 +3601,13 @@ def register(state):
             raise ValueError("export has nothing to write (no solids in session)")
         objs = [_get(n) for n in names]
         path = a["path"]
+        # Writing into a directory that does not exist otherwise leaks a bare
+        # OSError "Cannot open file"; name the missing directory instead.
+        import os
+        parent = os.path.dirname(os.path.abspath(path))
+        if not os.path.isdir(parent):
+            raise ValueError(
+                "export: output directory does not exist: %s" % parent)
         fmt = a.get("format", path.rsplit(".", 1)[-1]).lower()
         if fmt in ("step", "stp"):
             import Import
@@ -3617,7 +3624,6 @@ def register(state):
             objs[0].Shape.exportBrep(path)
         else:
             raise ValueError("unknown export format: %s" % fmt)
-        import os
         return {"path": path, "format": fmt, "bytes": os.path.getsize(path) if os.path.exists(path) else 0}
 
     def op_import_step(a):
