@@ -65,6 +65,32 @@ def main():
     q.registry.kernel.shutdown()
     print("out-of-order path.* guided cleanly (no raw RuntimeError)")
 
+    # malformed face/hole selectors used to leak a bare 'could not convert',
+    # 'str object has no attribute get', 'Expected sequence of size 3' or
+    # 'invalid literal' from _select_faces / _select_holes. They must guide.
+    def _bad(r, *needles):
+        err = r.error or ""
+        assert not r.ok, ("expected failure", r.data)
+        for raw in ("could not convert", "TypeError", "AttributeError",
+                    "KeyError", "invalid literal", "Expected sequence",
+                    "not enough values", "string indices"):
+            assert raw not in err, (raw, err)
+        for nd in needles:
+            assert nd in err, (nd, err)
+
+    _bad(s.act("path.profile", {"select": "x"}), "select")
+    _bad(s.act("path.profile", {"select": {"index": 1.5}}), "whole face")
+    _bad(s.act("path.profile", {"select": {"normal": [0, 0, "x"]}}), "normal")
+    _bad(s.act("path.pocket", {"select": {"axis": "w"}}), "axis")
+    _bad(s.act("path.pocket", {"select": {"axis": 5}}), "axis")
+    _bad(s.act("path.drill", {"select": {"diameter": "x"}}), "diameter")
+    _bad(s.act("path.drill", {"select": {"axis_dir": "x"}}), "axis_dir")
+    _bad(s.act("path.drill", {"select": 5}), "select")
+    _bad(s.act("path.pocket", {"select": {"index": [0]}}), "out of range")
+    _bad(s.act("path.pocket", {"select": {"index": [1]}, "start_depth": "x"}),
+         "start_depth")
+    print("malformed path.* selectors/depths refused cleanly")
+
     print("PATH SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 

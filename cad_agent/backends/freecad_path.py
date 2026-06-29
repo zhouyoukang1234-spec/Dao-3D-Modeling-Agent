@@ -26,6 +26,44 @@ def _round(x, n=4):
     return round(float(x), n)
 
 
+def _sel_num(d, key, default, label):
+    """Coerce ``d[key]`` to float with a guided error -- a bare
+    ``float(d[key])`` leaks 'could not convert string to float'."""
+    if key not in d or d[key] is None:
+        return float(default)
+    v = d[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be a number (got %r)" % (label, v))
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be a number (got %r)" % (label, v))
+
+
+def _sel_vec(seq, label):
+    """Coerce a 3-vector with a guided error instead of a raw
+    'Expected sequence of size 3' / 'could not convert'."""
+    if isinstance(seq, (str, bytes)) or not isinstance(seq, (list, tuple)) \
+            or len(seq) != 3:
+        raise ValueError(
+            "%s must be a list of 3 numbers [x, y, z] (got %r)" % (label, seq))
+    try:
+        return V(float(seq[0]), float(seq[1]), float(seq[2]))
+    except (TypeError, ValueError):
+        raise ValueError(
+            "%s components must all be numbers (got %r)" % (label, seq))
+
+
+def _check_sel(sel):
+    """A non-dict selector leaks 'str/int object has no attribute get' or
+    'string indices must be integers'; demand a real dict up front."""
+    if not isinstance(sel, dict):
+        raise ValueError(
+            "'select' must be a dict like {'index':[0]} / {'normal':[0,0,1]} / "
+            "{'axis':'z','side':'max'} / {'diameter':d}; got %r" % (sel,))
+    return sel
+
+
 def register(state):
     import Path  # noqa: F401  (ensures the Path module initialises)
     import Path.Main.Job as PJob
@@ -55,33 +93,56 @@ def register(state):
         This isolates e.g. a pocket *floor* (an upward +Z face that is NOT the
         topmost +Z face) which neither predicate can pick alone.
         """
+        _check_sel(sel)
         faces = shape.Faces
         if "index" in sel:
             idx = sel["index"]
-            idx = [idx] if isinstance(idx, (int, float)) else idx
-            return ["Face%d" % int(i) for i in idx]
+            idx = [idx] if isinstance(idx, (int, float)) and not isinstance(idx, bool) else idx
+            if isinstance(idx, (str, bytes)) or not isinstance(idx, (list, tuple)):
+                raise ValueError(
+                    "'index' must be an int or list of ints (got %r)" % (idx,))
+            nf = len(faces)
+            out = []
+            for i in idx:
+                if isinstance(i, bool) or not isinstance(i, (int, float)) \
+                        or float(i) != int(i):
+                    raise ValueError(
+                        "'index' values must be whole face numbers (got %r)"
+                        % (idx,))
+                fi = int(i)
+                if fi < 1 or fi > nf:
+                    raise ValueError(
+                        "'index' face number %d out of range; the solid has %d "
+                        "faces (1..%d)" % (fi, nf, nf))
+                out.append("Face%d" % fi)
+            return out
 
         cand = list(range(len(faces)))
         if "normal" in sel:
-            d = V(*sel["normal"])
+            d = _sel_vec(sel["normal"], "'normal'")
             d = d.normalize() if d.Length > 1e-9 else d
+            min_dot = _sel_num(sel, "min_dot", 0.95, "'min_dot'")
             keep = []
             for i in cand:
                 f = faces[i]
                 u0, u1, v0, v1 = f.ParameterRange
                 n = f.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
-                if n.Length > 1e-9 and n.normalize().dot(d) >= sel.get("min_dot", 0.95):
+                if n.Length > 1e-9 and n.normalize().dot(d) >= min_dot:
                     keep.append(i)
             cand = keep
 
         if "axis" in sel:
-            ax = {"x": 0, "y": 1, "z": 2}[sel["axis"].lower()]
-            side = sel.get("side", "max").lower()
+            axkey = sel["axis"]
+            if not isinstance(axkey, str) or axkey.lower() not in ("x", "y", "z"):
+                raise ValueError(
+                    "'axis' must be 'x', 'y' or 'z' (got %r)" % (axkey,))
+            ax = {"x": 0, "y": 1, "z": 2}[axkey.lower()]
+            side = str(sel.get("side", "max")).lower()
             vals = {i: faces[i].CenterOfMass[ax] for i in cand}
             if not vals:
                 return []
             target = min(vals.values()) if side == "min" else max(vals.values())
-            tol = sel.get("tol", 1e-4)
+            tol = _sel_num(sel, "tol", 1e-4, "'tol'")
             return ["Face%d" % (i + 1) for i, v in vals.items() if abs(v - target) <= tol]
 
         if "normal" in sel:
@@ -103,10 +164,12 @@ def register(state):
         names plus the distinct hole-center XY positions and the z-extent the
         bores span (so the drill depth can be bound from geometry).
         """
-        axis = V(*sel.get("axis_dir", (0, 0, 1)))
+        _check_sel(sel)
+        axis = _sel_vec(sel.get("axis_dir", (0, 0, 1)), "'axis_dir'")
         axis = axis.normalize() if axis.Length > 1e-9 else V(0, 0, 1)
-        want_r = float(sel["diameter"]) / 2.0 if sel.get("diameter") else None
-        rtol = float(sel.get("tol", 0.5))
+        want_r = _sel_num(sel, "diameter", 0.0, "'diameter'") / 2.0 \
+            if sel.get("diameter") else None
+        rtol = _sel_num(sel, "tol", 0.5, "'tol'")
         names, centers, zmin, zmax = [], [], None, None
         for i, f in enumerate(shape.Faces):
             surf = f.Surface
@@ -229,8 +292,8 @@ def register(state):
             top = j.Stock.Shape.BoundBox.ZMax
         except Exception:
             top = obj.Shape.BoundBox.ZMax
-        start = float(a.get("start_depth", top))
-        final = float(a.get("final_depth", floor_z))
+        start = _sel_num(a, "start_depth", top, "'start_depth'")
+        final = _sel_num(a, "final_depth", floor_z, "'final_depth'")
         for prop, val in (("StartDepth", start), ("FinalDepth", final)):
             if prop in op.PropertiesList:
                 try:
@@ -240,11 +303,12 @@ def register(state):
                 setattr(op, prop, val)
         step = a.get("step_down")
         if step and "StepDown" in op.PropertiesList:
+            step = _sel_num(a, "step_down", 0.0, "'step_down'")
             try:
                 op.setExpression("StepDown", None)
             except Exception:
                 pass
-            op.StepDown = float(step)
+            op.StepDown = step
         doc.recompute()
         n = len(op.Path.Commands) if op.Path else 0
         state.cam["ops"].append(op.Name)
@@ -281,8 +345,12 @@ def register(state):
         op.ToolController = doc.getObject(state.cam["tc"])
         j.Proxy.addOperation(op)
         doc.recompute()
-        start = float(a.get("start_depth", zmax if zmax is not None else obj.Shape.BoundBox.ZMax))
-        final = float(a.get("final_depth", zmin if zmin is not None else obj.Shape.BoundBox.ZMin))
+        start = _sel_num(a, "start_depth",
+                         zmax if zmax is not None else obj.Shape.BoundBox.ZMax,
+                         "'start_depth'")
+        final = _sel_num(a, "final_depth",
+                         zmin if zmin is not None else obj.Shape.BoundBox.ZMin,
+                         "'final_depth'")
         for prop, val in (("StartDepth", start), ("FinalDepth", final)):
             if prop in op.PropertiesList:
                 try:
@@ -292,9 +360,10 @@ def register(state):
                 setattr(op, prop, val)
         peck = a.get("peck")
         if peck and "PeckDepth" in op.PropertiesList:
+            peck = _sel_num(a, "peck", 0.0, "'peck'")
             if "PeckEnabled" in op.PropertiesList:
                 op.PeckEnabled = True
-            op.PeckDepth = float(peck)
+            op.PeckDepth = peck
         doc.recompute()
         n = len(op.Path.Commands) if op.Path else 0
         state.cam["ops"].append(op.Name)
