@@ -112,6 +112,27 @@ def _path(a, key, op):
     return p
 
 
+def _name(a, key, op):
+    """A solid name must be a string; a non-string otherwise leaks a raw
+    ``TypeError`` (e.g. on ``name + '_part'`` or ``addObject``)."""
+    v = a.get(key)
+    if not isinstance(v, str) or not v:
+        raise ValueError(
+            "%s '%s' must be a non-empty solid name string (got %r)"
+            % (op, key, v))
+    return v
+
+
+def _names(a, key, op):
+    """``names`` must be a list/tuple of solid names; a bare int leaks a raw
+    'TypeError: int object is not iterable' and a string iterates characters."""
+    v = a[key] if key in a else None
+    if not isinstance(v, (list, tuple)):
+        raise ValueError(
+            "%s '%s' must be a list of solid names (got %r)" % (op, key, v))
+    return list(v)
+
+
 def _proper_rotations():
     """The 24 axis-aligned proper rotations (signed permutation matrices, det +1).
 
@@ -2192,7 +2213,7 @@ def register(state):
         downloaded model often is, without fusing the parts the way ``union``
         would. Round-trips with ``decompose``.
         """
-        names = a["names"]
+        names = _names(a, "names", "solid.compound")
         comp = Part.makeCompound([_get(n).Shape for n in names])
         _put(a.get("out", "compound"), comp)
         return _metrics(comp)
@@ -2835,7 +2856,7 @@ def register(state):
         exactly and are reported in ``skipped`` with ``volume_match`` telling the
         honest truth rather than a silent near-miss. args: name, out, tol.
         """
-        name = a["name"]
+        name = _name(a, "name", "solid.reverse_build")
         out = a.get("out") or (name + "_rebuilt")
         tol = float(a.get("tol", 1e-3))
         sols = _get(name).Shape.Solids
@@ -3720,8 +3741,9 @@ def register(state):
         if a.get("parts"):
             names = list(a["parts"])
         else:
-            names = [p["name"] for p in op_decompose({"name": a["name"],
-                                                       "prefix": a.get("prefix", a["name"] + "_part")})["part_list"]]
+            nm0 = _name(a, "name", "solid.reverse")
+            names = [p["name"] for p in op_decompose({"name": nm0,
+                                                       "prefix": a.get("prefix", nm0 + "_part")})["part_list"]]
         bom = []
         for nm in names:
             r = op_recognize({"name": nm, "tol": a.get("tol", 1e-3)})
@@ -3759,7 +3781,7 @@ def register(state):
         # Silently dumping every solid when a caller said name="part" (a key the
         # rest of the library uses everywhere) was a quiet footgun.
         if "names" in a:
-            names = a["names"]
+            names = _names(a, "names", "export")
         elif "name" in a:
             names = [a["name"]]
         else:

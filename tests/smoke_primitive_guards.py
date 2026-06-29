@@ -75,8 +75,21 @@ def main():
     _num_guard(s.act("solid.export", {"names": ["G"], "path": 123}), "path")
     _num_guard(s.act("solid.import_step", {"path": 123}), "path")
     _num_guard(s.act("view.render", {"names": ["G"], "path": 123}), "path")
+    _num_guard(s.act("view.render", {"names": ["G"], "path": "/tmp/x.png",
+                                     "tolerance": "x"}), "number")
+    _num_guard(s.act("view.render", {"names": ["G"], "path": "/tmp/x.png",
+                                     "size": "x"}), "number")
     _num_guard(s.act("view.scene", {"names": 123}), "names")
-    print("malformed numeric/vector/path inputs across solid.*/view.* refused cleanly")
+    _num_guard(s.act("view.scene", {"names": ["G"], "tolerance": "x"}), "number")
+    # non-list names and non-string names on the compound/export/reverse paths
+    # used to leak 'int object is not iterable' / "+: 'int' and 'str'".
+    _num_guard(s.act("solid.compound", {"names": 123}), "list of solid names")
+    _num_guard(s.act("solid.export", {"names": 123, "path": "/tmp/x.step"}),
+               "list of solid names")
+    _num_guard(s.act("solid.reverse", {"name": 123}), "solid name")
+    _num_guard(s.act("solid.reverse_build", {"name": 123}), "solid name")
+    _num_guard(s.act("doc.save", {"path": 123}), "path")
+    print("malformed numeric/vector/path inputs across solid.*/view.*/doc.* refused cleanly")
 
     # a pointed cone (one zero radius) is legitimate and must still build.
     apex = s.act("solid.cone", {"name": "apex", "radius1": 0, "radius2": 10, "height": 30})

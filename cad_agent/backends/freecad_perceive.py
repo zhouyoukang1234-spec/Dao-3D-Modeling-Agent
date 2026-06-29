@@ -31,6 +31,24 @@ def _req_path(a, op):
     return p
 
 
+def _fnum(a, key, default, op):
+    """Coerce ``a[key]`` to float; a non-numeric value otherwise leaks a raw
+    'ValueError: could not convert string to float'."""
+    v = a.get(key, default)
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s '%s' must be a number (got %r)" % (op, key, v))
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s '%s' must be a number (got %r)" % (op, key, v))
+
+
+def _fint(a, key, default, op):
+    """Coerce ``a[key]`` to int; a non-integer otherwise leaks a raw
+    'ValueError: invalid literal for int()'."""
+    return int(_fnum(a, key, default, op))
+
+
 def register(state):
     doc = state.doc
 
@@ -95,8 +113,8 @@ def register(state):
     def op_render(a):
         names = a.get("names")
         view = a.get("view", "iso")
-        tol = float(a.get("tolerance", 0.5))
-        size = int(a.get("size", 700))
+        tol = _fnum(a, "tolerance", 0.5, "view.render")
+        size = _fint(a, "size", 700, "view.render")
         path = _req_path(a, "view.render")
         objs = _collect(names, a.get("assembly"))
         if not objs:
@@ -142,8 +160,8 @@ def register(state):
     def op_views(a):
         """Render a contact sheet of front/top/right/iso into one PNG."""
         names = a.get("names")
-        tol = float(a.get("tolerance", 0.5))
-        size = int(a.get("size", 900))
+        tol = _fnum(a, "tolerance", 0.5, "view.views")
+        size = _fint(a, "size", 900, "view.views")
         path = _req_path(a, "view.views")
         objs = _collect(names, a.get("assembly"))
         if not objs:
@@ -195,7 +213,7 @@ def register(state):
         live document the agent edits, streamed to the browser as real geometry.
         """
         names = a.get("names")
-        tol = float(a.get("tolerance", 0.3))
+        tol = _fnum(a, "tolerance", 0.3, "view.scene")
         objs = _collect(names, a.get("assembly"))
         palette = ["#4f8cc9", "#c97f4f", "#69b36b", "#b36bb0", "#b0b36b", "#5fb0c9"]
         out = []

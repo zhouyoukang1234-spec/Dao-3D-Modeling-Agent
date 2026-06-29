@@ -61,7 +61,13 @@ class KernelState:
 def _doc_handlers(state):
     """Document-level ops (save/open/info) for persisting the live model."""
     def save(a):
-        path = a["path"]
+        path = a.get("path")
+        # saveAs needs a filesystem string; a non-string leaks a raw
+        # 'TypeError: argument 1 must be str, ...'.
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "doc.save 'path' must be a non-empty file path string (got %r)"
+                % (path,))
         state.doc.recompute()
         state.doc.saveAs(path)
         return {"path": path, "bytes": os.path.getsize(path) if os.path.exists(path) else 0,
