@@ -860,7 +860,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     ``inspect_document`` / ``set_expression`` / ``set_dimension`` read and edit
     an existing document; this *creates* one from nothing. Each entry in
     ``objects`` is ``{"type": <Part primitive>, "name": str, "properties":
-    {prop: value}, "placement": {"position": [x,y,z]}?}``. Only the Part
+    {prop: value}, "placement": {"position": [x,y,z]}?, "expressions": {path:
+    formula}?}``. ``expressions`` author an ``ExpressionEngine`` per object --
+    so a *parametric* model can be written from nothing, e.g. one primitive's
+    dimension bound to ``"Other.Radius * 2"``; the cross-object references are
+    resolved into dependency edges in ``ObjectDeps``. Only the Part
     primitives in ``_PRIMITIVES`` are accepted -- their ``execute()`` rebuilds
     the Shape from these scalars, so the file needs no BREP: the kernel
     generates the geometry on its first ``recompute(force=True)`` (after a
@@ -876,6 +880,41 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     if not isinstance(objects, list) or not objects:
         raise ValueError("synthesize: objects must be a non-empty list")
 
+    # First pass: validate every spec and learn all names, so cross-object
+    # expression references can be resolved into dependency edges.
+    seen: set = set()
+    for idx, spec in enumerate(objects, start=1):
+        if not isinstance(spec, dict):
+            raise ValueError("synthesize: object #%d must be a dict" % idx)
+        if spec.get("type") not in _PRIMITIVES:
+            raise ValueError(
+                "synthesize: object #%d has unknown primitive type %r "
+                "(supported: %s)"
+                % (idx, spec.get("type"), ", ".join(sorted(_PRIMITIVES))))
+        name = spec.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
+        if name in seen:
+            raise ValueError("synthesize: duplicate object name %r" % name)
+        seen.add(name)
+        props = spec.get("properties") or {}
+        if not isinstance(props, dict):
+            raise ValueError("synthesize: %r properties must be a dict" % name)
+        unknown = sorted(set(props) - set(_PRIMITIVES[spec["type"]]))
+        if unknown:
+            raise ValueError(
+                "synthesize: %s (%s) has no propert%s %s (defines: %s)"
+                % (name, spec["type"], "y" if len(unknown) == 1 else "ies",
+                   ", ".join(unknown), ", ".join(sorted(_PRIMITIVES[spec["type"]]))))
+        exprs = spec.get("expressions") or {}
+        if not isinstance(exprs, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in exprs.items()):
+            raise ValueError(
+                "synthesize: %r expressions must be a {path: formula} of strings"
+                % name)
+
+    all_names = [s["name"] for s in objects]
+
     root = ET.Element("Document", {"SchemaVersion": schema_version,
                                    "ProgramVersion": program_version,
                                    "FileVersion": "1"})
@@ -885,34 +924,18 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                              "Dependencies": str(len(objects))})
     data_el = ET.SubElement(root, "ObjectData", {"Count": str(len(objects))})
 
-    seen: set = set()
     for idx, spec in enumerate(objects, start=1):
-        if not isinstance(spec, dict):
-            raise ValueError("synthesize: object #%d must be a dict" % idx)
-        otype = spec.get("type")
-        if otype not in _PRIMITIVES:
-            raise ValueError(
-                "synthesize: object #%d has unknown primitive type %r "
-                "(supported: %s)"
-                % (idx, otype, ", ".join(sorted(_PRIMITIVES))))
-        name = spec.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
-        if name in seen:
-            raise ValueError("synthesize: duplicate object name %r" % name)
-        seen.add(name)
+        name, otype = spec["name"], spec["type"]
         schema = _PRIMITIVES[otype]
         props = spec.get("properties") or {}
-        if not isinstance(props, dict):
-            raise ValueError("synthesize: %r properties must be a dict" % name)
-        unknown = sorted(set(props) - set(schema))
-        if unknown:
-            raise ValueError(
-                "synthesize: %s (%s) has no propert%s %s (defines: %s)"
-                % (name, otype, "y" if len(unknown) == 1 else "ies",
-                   ", ".join(unknown), ", ".join(sorted(schema))))
-
-        ET.SubElement(objs_el, "ObjectDeps", {"Name": name, "Count": "0"})
+        exprs = spec.get("expressions") or {}
+        # an object depends on every *other* object referenced in its formulae.
+        deps = [other for other in all_names if other != name and any(
+            re.search(r"\b%s\b" % re.escape(other), f) for f in exprs.values())]
+        dep_el = ET.SubElement(objs_el, "ObjectDeps",
+                               {"Name": name, "Count": str(len(deps))})
+        for dep in deps:
+            ET.SubElement(dep_el, "Dep", {"Name": dep})
         ET.SubElement(objs_el, "Object",
                       {"type": otype, "name": name, "id": str(idx)})
 
@@ -920,10 +943,19 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         placement = spec.get("placement") or {}
         position = placement.get("position") if isinstance(placement, dict) else None
         prop_items = [(p, schema[p], v) for p, v in props.items()]
+        prop_count = len(prop_items) + (1 if position else 0) + (1 if exprs else 0)
         props_el = ET.SubElement(
-            od, "Properties",
-            {"Count": str(len(prop_items) + (1 if position else 0)),
-             "TransientCount": "0"})
+            od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
+        if exprs:
+            ee = ET.SubElement(props_el, "Property",
+                               {"name": "ExpressionEngine",
+                                "type": "App::PropertyExpressionEngine",
+                                "status": "67108864"})
+            elist = ET.SubElement(ee, "ExpressionEngine",
+                                  {"count": str(len(exprs))})
+            for epath, formula in exprs.items():
+                ET.SubElement(elist, "Expression",
+                              {"path": epath, "expression": formula})
         for pname, ptype, value in prop_items:
             pe = ET.SubElement(props_el, "Property",
                                {"name": pname, "type": ptype})

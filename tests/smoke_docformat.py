@@ -400,6 +400,35 @@ def main():
     print("docformat.synthesize: hand-authored file -> kernel builds box %.0f + "
           "cylinder %.0f (a written file is a model)" % (box_vol, cyl_vol))
 
+    # ---- synthesize parametric: an expression-driven model from nothing -- #
+    # a box whose Height is bound to Cyl.Radius*2, authored straight to file;
+    # the cross-object reference becomes a dependency edge, and the kernel
+    # evaluates the formula on recompute -- file-first *parametric* modelling.
+    par_p = os.path.join(OUT, "synth_param.FCStd")
+    docformat.synthesize(par_p, [
+        {"type": "Part::Cylinder", "name": "Cyl",
+         "properties": {"Radius": 5, "Height": 10}},
+        {"type": "Part::Box", "name": "Bx2",
+         "properties": {"Length": 3, "Width": 3, "Height": 1},
+         "expressions": {"Height": "Cyl.Radius * 2"}},
+    ])
+    par_ix = docformat.inspect_document(par_p)
+    assert par_ix["expression_edges"] == ["Bx2->Cyl"], par_ix["expression_edges"]
+    assert par_ix["expressions"]["Bx2"][0]["formula"] == "Cyl.Radius * 2", par_ix
+    pd = App.openDocument(par_p)
+    try:
+        for o in pd.Objects:
+            o.touch()
+        pd.recompute(None, True)
+        bx2 = pd.getObject("Bx2")
+        bx2_h, bx2_vol = float(bx2.Height), bx2.Shape.Volume
+    finally:
+        App.closeDocument(pd.Name)
+    assert abs(bx2_h - 10) < 1e-6, bx2_h            # 5 * 2
+    assert abs(bx2_vol - 3 * 3 * 10) < 1e-6, bx2_vol
+    print("docformat.synthesize: authored parametric edge Bx2.Height=Cyl.Radius*2"
+          " -> kernel evaluates to %.0f (file-first parametric)" % bx2_h)
+
     # guarded: empty spec, unknown primitive, duplicate name, undefined property.
     _sy = docformat.synthesize
     bad = os.path.join(OUT, "synth_bad.FCStd")
