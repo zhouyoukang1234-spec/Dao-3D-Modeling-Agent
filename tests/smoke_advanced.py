@@ -107,6 +107,20 @@ def main():
     print("mesh.decimate %d->%d, repair->%d faces sewn"
           % (dec.data["facets_before"], dec.data["facets"], sewn2.data["faces"]))
 
+    # --- mesh.import: ingest a mesh file (the resource.download tail) and fuse.
+    # Export a solid to STL, re-import it as a fusable mesh, repair, sew to BRep.
+    stl = os.path.join(OUT, "ring.stl")
+    assert s.act("mesh.export", {"name": "mA", "path": stl, "tolerance": 0.5}).ok
+    imp = s.act("mesh.import", {"path": stl, "out": "Ingested"})
+    assert imp.ok, imp.error
+    assert imp.data["facets"] > 0 and imp.data["format"] == "stl", imp.data
+    ir = s.act("mesh.repair", {"name": "Ingested", "out": "IngestedClean"})
+    assert ir.ok and ir.data["facets"] > 0, ir.error or ir.data
+    isew = s.act("mesh.to_shape", {"name": "IngestedClean", "out": "IngestedSolid"})
+    assert isew.ok and isew.data["faces"] > 0, isew.error or isew.data
+    print("mesh.import %d facets -> repair -> sewn %d faces"
+          % (imp.data["facets"], isew.data["faces"]))
+
     # --- malformed-input guards (no_raw_leak): non-numeric tolerance/scale and
     #     a non-string export path used to leak raw 'could not convert string to
     #     float' / TypeError; they must be guided. -----------------------------
@@ -128,6 +142,10 @@ def main():
             "below the current")
     _guided(s.act("mesh.repair", {"name": "Nope"}), "no such solid")
     _guided(s.act("mesh.repair", {"name": "mA", "tolerance": 0}), "> 0")
+    _guided(s.act("mesh.import", {"path": 123}), "non-empty file path")
+    _guided(s.act("mesh.import", {"path": os.path.join(OUT, "nope.stl")}),
+            "no such file")
+    _guided(s.act("mesh.import", {"path": stl + ".step"}), "unsupported mesh format")
     _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
     # a non-string view name used to leak 'int has no attribute lower' (or a
     # bare 'int not iterable' when views itself was a scalar).
