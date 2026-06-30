@@ -87,6 +87,45 @@ def main():
     print("docformat: re-opened %s -> %d objects match the file-level parse"
           % (os.path.basename(path), len(reloaded)))
 
+    # ---- diff: the verify half -- what an edit changed, read from files --- #
+    # identical documents diff to nothing.
+    same = docformat.diff(path, path2)
+    assert same["identical"], same
+    # now make real edits on the kernel and prove the file-level diff reports
+    # exactly them -- across all three layers a change can hide in:
+    #   * a new object           (Document.xml object graph)
+    #   * a resized plain solid  (the BREP file -- not Document.xml)
+    #   * a spreadsheet cell      (a complex container property)
+    assert s.act("solid.cylinder", {"name": "Pin2", "radius": 2,
+                                     "height": 8}).ok        # new object
+    assert s.act("solid.box", {"name": "Blk", "length": 25, "width": 10,
+                               "height": 10}).ok             # resize -> new BREP
+    assert s.act("ss.create", {"cells": {"k": 1}}).ok        # sheet (also new)
+    assert s.act("ss.set", {"alias": "k", "value": 42}).ok   # edit a cell
+    path3 = os.path.join(OUT, "fusion3.FCStd")
+    assert s.act("doc.save", {"path": path3}).ok
+    d = docformat.diff(path, path3)
+    assert not d["identical"], d
+    assert "Pin2" in d["objects_added"], d
+    assert d["objects_removed"] == [], d
+    # the resized box surfaces only in its BREP hash (geometry, not Document.xml).
+    assert "Blk.Shape.brp" in d["brep_changes"], d
+    print("docformat.diff: +%s objects, %d BREP changed -- edit read from files"
+          % (d["objects_added"], len(d["brep_changes"])))
+
+    # a complex container property (a spreadsheet cell) edited on a *shared*
+    # object is caught via the canonical-XML value, not lost.
+    s.act("solid.box", {"name": "Anchor", "length": 1, "width": 1, "height": 1})
+    s.act("ss.create", {"cells": {"w": 3}})
+    base = os.path.join(OUT, "cellA.FCStd")
+    assert s.act("doc.save", {"path": base}).ok
+    assert s.act("ss.set", {"alias": "w", "value": 7}).ok
+    after = os.path.join(OUT, "cellB.FCStd")
+    assert s.act("doc.save", {"path": after}).ok
+    cd = docformat.diff(base, after)
+    assert "Spreadsheet" in cd["property_changes"], cd
+    print("docformat.diff: spreadsheet cell edit caught on shared object")
+
     # ---- guided failures (no raw BadZipFile / KeyError leak) ------------- #
     def _guided(call, token):
         try:

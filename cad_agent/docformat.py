@@ -23,6 +23,7 @@ prove a scripted build round-trips through the file format unchanged.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import xml.etree.ElementTree as ET
 import zipfile
@@ -58,7 +59,20 @@ def _prop_value(prop: ET.Element) -> Any:
         return _maybe_float(k.attrib["value"])
     if "file" in k.attrib:
         return {"file": k.attrib["file"]}
-    return {"_tag": tag}
+    # complex container property (spreadsheet Cells, ExpressionEngine, ...):
+    # collapse the whole subtree to a canonical string so a genuine edit to its
+    # contents is still detected by a value comparison, rather than vanishing.
+    return {"xml": "".join(_canon(c) for c in kids)}
+
+
+def _canon(el: ET.Element) -> str:
+    """Stable, order-insensitive string for an XML subtree (tag + sorted attrs
+    + children), so two serialisations compare equal iff they are structurally
+    the same."""
+    parts = [el.tag]
+    parts += ["%s=%s" % (k, el.attrib[k]) for k in sorted(el.attrib)]
+    parts += [_canon(c) for c in el]
+    return "(" + " ".join(parts) + ")"
 
 
 def _maybe_float(s: str) -> Any:
@@ -121,8 +135,8 @@ def inspect_document(path: str) -> Dict[str, Any]:
 
     Returns the document metadata, the object graph (each object's name /
     ``TypeId`` / id), the dependency DAG, the persisted properties, and the BREP
-    geometry files with their byte sizes -- everything needed to reason about
-    what a document *is* on disk. Raises ``ValueError`` (never a raw
+    geometry files with their byte size and a content hash -- everything needed
+    to reason about what a document *is* on disk. Raises ``ValueError`` (never a raw
     ``BadZipFile`` / ``KeyError``) for anything that is not a readable FreeCAD
     document.
     """
@@ -152,8 +166,13 @@ def inspect_document(path: str) -> Dict[str, Any]:
         objects = _object_types(objects_el)
         deps = _object_deps(objects_el)
         props = _object_properties(data_el)
-        breps = [{"file": n, "bytes": z.getinfo(n).file_size}
-                 for n in names if n.lower().endswith(_BREP_EXT)]
+        breps = []
+        for n in names:
+            if not n.lower().endswith(_BREP_EXT):
+                continue
+            data = z.read(n)
+            breps.append({"file": n, "bytes": len(data),
+                          "sha1": hashlib.sha1(data).hexdigest()[:16]})
         type_counts: Dict[str, int] = {}
         for o in objects:
             t = o["type"] or "?"
@@ -193,4 +212,68 @@ def fingerprint(path: str) -> Dict[str, Any]:
         "type_counts": info["type_counts"],
         "dependency_edges": edges,
         "brep_count": len(info["brep_files"]),
+    }
+
+
+def _edge_set(deps: Dict[str, List[str]]) -> set:
+    return {(src, dst) for src, dsts in deps.items() for dst in dsts}
+
+
+def diff(path_a: str, path_b: str) -> Dict[str, Any]:
+    """Structural diff between two ``.FCStd`` documents (``a`` -> ``b``).
+
+    The *verify* half of working at the persistence layer: given the file before
+    and after an edit (scripted or GUI), report exactly what changed without the
+    kernel -- which objects were added / removed, whose ``TypeId`` changed, which
+    dependency edges appeared or vanished, and, for objects present in both,
+    which property values differ. ``identical`` is True iff nothing structural or
+    value-level changed.
+    """
+    a = inspect_document(path_a)
+    b = inspect_document(path_b)
+    a_types = {o["name"]: o["type"] for o in a["objects"]}
+    b_types = {o["name"]: o["type"] for o in b["objects"]}
+    added = sorted(set(b_types) - set(a_types))
+    removed = sorted(set(a_types) - set(b_types))
+    shared = sorted(set(a_types) & set(b_types))
+    retyped = {n: {"from": a_types[n], "to": b_types[n]}
+               for n in shared if a_types[n] != b_types[n]}
+
+    a_edges, b_edges = _edge_set(a["dependencies"]), _edge_set(b["dependencies"])
+    edges_added = sorted("%s->%s" % e for e in (b_edges - a_edges))
+    edges_removed = sorted("%s->%s" % e for e in (a_edges - b_edges))
+
+    prop_changes: Dict[str, Dict[str, Any]] = {}
+    a_props, b_props = a["properties"], b["properties"]
+    for n in shared:
+        pa, pb = a_props.get(n, {}), b_props.get(n, {})
+        changed: Dict[str, Any] = {}
+        for key in sorted(set(pa) | set(pb)):
+            va = pa.get(key, {}).get("value")
+            vb = pb.get(key, {}).get("value")
+            if va != vb:
+                changed[key] = {"from": va, "to": vb}
+        if changed:
+            prop_changes[n] = changed
+
+    # geometry lives in the per-shape BREP files, not Document.xml: a resized
+    # plain solid changes only its .brp, often without changing its byte size
+    # (same topology, different coordinates). Compare a content hash so any
+    # geometry edit is caught.
+    a_brep = {b["file"]: b["sha1"] for b in a["brep_files"]}
+    b_brep = {b["file"]: b["sha1"] for b in b["brep_files"]}
+    brep_changes = sorted(f for f in (set(a_brep) & set(b_brep))
+                          if a_brep[f] != b_brep[f])
+
+    identical = not (added or removed or retyped or edges_added
+                     or edges_removed or prop_changes or brep_changes)
+    return {
+        "identical": identical,
+        "objects_added": added,
+        "objects_removed": removed,
+        "types_changed": retyped,
+        "edges_added": edges_added,
+        "edges_removed": edges_removed,
+        "property_changes": prop_changes,
+        "brep_changes": brep_changes,
     }
