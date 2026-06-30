@@ -802,6 +802,57 @@ def main():
           "file -> closed wire area %g, round-trips identically (逆流到最上游)"
           % sk_area)
 
+    # ---- Part::Extrusion: sweep a sketch profile into a solid ------------ #
+    # the join between the sketch layer and the solid layer: author a 10x5
+    # rectangle sketch + an extrusion that sweeps it 7 along +Z. The kernel
+    # turns the 2D loop into a body of volume 50*7 = 350 on recompute -- the
+    # file-first equivalent of the GUI's Pad, no clicks. summarize recovers the
+    # base/length and the spec round-trips to an identical document.
+    ex_p = os.path.join(OUT, "synth_extrude.FCStd")
+    docformat.synthesize(ex_p, [
+        {"type": "Sketcher::SketchObject", "name": "Sk", "geometry": [
+            {"start": [0, 0], "end": [10, 0]},
+            {"start": [10, 0], "end": [10, 5]},
+            {"start": [10, 5], "end": [0, 5]},
+            {"start": [0, 5], "end": [0, 0]},
+        ]},
+        {"type": "Part::Extrusion", "name": "Ext", "base": "Sk", "length": 7},
+    ])
+    ex_spec = next(s for s in docformat.summarize(ex_p) if s["name"] == "Ext")
+    assert ex_spec["base"] == "Sk" and ex_spec["length"] == 7, ex_spec
+    ex_rt = os.path.join(OUT, "synth_extrude_rt.FCStd")
+    docformat.synthesize(ex_rt, docformat.summarize(ex_p))
+    assert docformat.fingerprint(ex_p) == docformat.fingerprint(ex_rt)
+    # the extrusion records its dependency on the sketch (recompute DAG edge).
+    ex_file_deps = docformat.inspect_document(ex_p)["dependencies"].get("Ext", [])
+    assert "Sk" in ex_file_deps, ex_file_deps
+    ed = App.openDocument(ex_p)
+    try:
+        for o in ed.Objects:
+            o.touch()
+        ed.recompute(None, True)
+        ex_vol = ed.getObject("Ext").Shape.Volume
+        ex_dep_names = [d.Name for d in ed.getObject("Ext").OutList]
+    finally:
+        App.closeDocument(ed.Name)
+    assert abs(ex_vol - 350.0) < 1e-6, ex_vol
+    assert "Sk" in ex_dep_names, ex_dep_names
+    for bad, token in (
+            ([{"type": "Sketcher::SketchObject", "name": "Sk", "geometry": [
+                {"start": [0, 0], "end": [1, 0]}]},
+              {"type": "Part::Extrusion", "name": "Ex", "base": "Sk",
+               "length": 0}], "positive 'length'"),
+            ([{"type": "Part::Extrusion", "name": "Ex", "base": "Nope",
+               "length": 5}], "is not a defined object")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_ex.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat Part::Extrusion: sketch swept from file -> solid volume %g "
+          "(50*7), depends on its profile, round-trips identically" % ex_vol)
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an

@@ -625,6 +625,17 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                     seg["construction"] = True
                 segs.append(seg)
             spec["geometry"] = segs
+        elif otype == _EXTRUDE_TYPE:
+            spec["base"] = _link_target(props.get("Base"))
+            length = props.get("LengthFwd", {}).get("value")
+            if isinstance(length, (int, float)) and not isinstance(length, bool):
+                spec["length"] = length
+            dir_vec = _vector_spec(props.get("Dir"))
+            if dir_vec and dir_vec != _EXTRUDE_DEFAULT_DIR:
+                spec["dir"] = dir_vec
+            solid = props.get("Solid", {}).get("value")
+            if solid is False:
+                spec["solid"] = False
         else:
             raise ValueError(
                 "summarize: object %s has type %r that synthesize cannot author"
@@ -1138,6 +1149,17 @@ _MIRROR_DEFAULT_NORMAL = [0.0, 0.0, 1.0]
 # and the kernel turns it into a face on recompute. 逆流到最上游.
 _SKETCH_TYPE = "Sketcher::SketchObject"
 
+# A ``Part::Extrusion`` sweeps a 2D profile (a sketch / wire ``Base``) along a
+# ``Dir`` for ``LengthFwd``, optionally capping it into a ``Solid``. It is the
+# join between the sketch layer and the solid layer -- author a sketch + an
+# extrusion from file and the kernel turns the 2D loop into a 3D body on
+# recompute, the file-first equivalent of the GUI's Pad. The ``DirMode`` =
+# Custom (enum 0) and the bullseye ``FaceMakerClass`` are fixed so a closed wire
+# becomes a face.
+_EXTRUDE_TYPE = "Part::Extrusion"
+_EXTRUDE_DEFAULT_DIR = [0.0, 0.0, 1.0]
+_EXTRUDE_FACEMAKER = "Part::FaceMakerBullseye"
+
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
     """Append a ``Spreadsheet::PropertySheet`` ``cells`` property.
@@ -1194,6 +1216,41 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
                        "EndY": "%.16f" % float(ey), "EndZ": "%.16f" % 0.0})
         ET.SubElement(g, "Construction",
                       {"value": "1" if seg.get("construction") else "0"})
+
+
+def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
+    """Append the ``Part::Extrusion`` properties that turn a 2D ``base`` profile
+    into a swept (optionally solid) body.
+
+    Six properties carry the feature: ``Base`` (link to the profile), ``Dir`` +
+    ``DirMode`` = Custom (enum 0) for an explicit sweep direction, ``LengthFwd``
+    for the distance, ``Solid`` to cap the ends, and a bullseye ``FaceMakerClass``
+    so a closed wire becomes a face the sweep can fill. The kernel does the
+    sweep on recompute; the file just declares it.
+    """
+    bp = ET.SubElement(parent, "Property",
+                       {"name": "Base", "type": "App::PropertyLink"})
+    ET.SubElement(bp, "Link", {"value": spec["base"]})
+    dvec = spec.get("dir") or _EXTRUDE_DEFAULT_DIR
+    dp = ET.SubElement(parent, "Property",
+                       {"name": "Dir", "type": "App::PropertyVector"})
+    ET.SubElement(dp, "PropertyVector",
+                  {"valueX": "%.16f" % float(dvec[0]),
+                   "valueY": "%.16f" % float(dvec[1]),
+                   "valueZ": "%.16f" % float(dvec[2])})
+    dm = ET.SubElement(parent, "Property",
+                       {"name": "DirMode", "type": "App::PropertyEnumeration"})
+    ET.SubElement(dm, "Integer", {"value": "0"})
+    lp = ET.SubElement(parent, "Property",
+                       {"name": "LengthFwd", "type": "App::PropertyDistance"})
+    ET.SubElement(lp, "Float", {"value": "%.16f" % float(spec["length"])})
+    solid = spec.get("solid", True)
+    sp = ET.SubElement(parent, "Property",
+                       {"name": "Solid", "type": "App::PropertyBool"})
+    ET.SubElement(sp, "Bool", {"value": "true" if solid else "false"})
+    fp = ET.SubElement(parent, "Property",
+                       {"name": "FaceMakerClass", "type": "App::PropertyString"})
+    ET.SubElement(fp, "String", {"value": _EXTRUDE_FACEMAKER})
 
 
 def _placement_element(parent: ET.Element, position: "List[float]",
@@ -1282,12 +1339,14 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         otype = spec.get("type")
         if (otype not in _PRIMITIVES and otype not in _BOOLEANS
                 and otype not in _LINKLIST_TYPES and otype != _SHEET_TYPE
-                and otype != _MIRROR_TYPE and otype != _SKETCH_TYPE):
+                and otype != _MIRROR_TYPE and otype != _SKETCH_TYPE
+                and otype != _EXTRUDE_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
                     set(_PRIMITIVES) | _BOOLEANS | set(_LINKLIST_TYPES)
-                    | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE}))))
+                    | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
+                       _EXTRUDE_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -1398,6 +1457,37 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: sketch %s takes 'geometry', not properties"
                     % name)
+        elif otype == _EXTRUDE_TYPE:
+            base = spec.get("base")
+            if not isinstance(base, str) or not base.strip():
+                raise ValueError(
+                    "synthesize: extrusion %s needs a 'base' object name" % name)
+            if base == name:
+                raise ValueError(
+                    "synthesize: extrusion %s cannot reference itself" % name)
+            length = spec.get("length")
+            if (isinstance(length, bool) or not isinstance(length, (int, float))
+                    or length <= 0):
+                raise ValueError(
+                    "synthesize: extrusion %s needs a positive 'length'" % name)
+            d = spec.get("dir")
+            if d is not None and (
+                    not isinstance(d, (list, tuple)) or len(d) != 3
+                    or not all(isinstance(c, (int, float))
+                               and not isinstance(c, bool) for c in d)):
+                raise ValueError(
+                    "synthesize: extrusion %s 'dir' must be [x, y, z] numbers"
+                    % name)
+            if d is not None and not any(d):
+                raise ValueError(
+                    "synthesize: extrusion %s 'dir' must be non-zero" % name)
+            if "solid" in spec and not isinstance(spec["solid"], bool):
+                raise ValueError(
+                    "synthesize: extrusion %s 'solid' must be a bool" % name)
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: extrusion %s takes base/length/dir/solid, not "
+                    "properties" % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -1429,6 +1519,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: mirror %s source=%r is not a defined object"
                     % (spec["name"], spec["source"]))
+        elif spec["type"] == _EXTRUDE_TYPE:
+            if spec["base"] not in all_names:
+                raise ValueError(
+                    "synthesize: extrusion %s base=%r is not a defined object"
+                    % (spec["name"], spec["base"]))
         elif spec["type"] in _LINKLIST_TYPES:
             key, _prop = _LINKLIST_TYPES[spec["type"]]
             for ref in spec[key]:
@@ -1454,15 +1549,17 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_sheet = otype == _SHEET_TYPE
         is_mirror = otype == _MIRROR_TYPE
         is_sketch = otype == _SKETCH_TYPE
+        is_extrude = otype == _EXTRUDE_TYPE
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
-                        or is_sketch)
+                        or is_sketch or is_extrude)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
         # referenced in a formula -- together the object's dependency edges.
         links = ([spec["base"], spec["tool"]] if is_bool
                  else list(spec[ll_key]) if is_linklist
-                 else [spec["source"]] if is_mirror else [])
+                 else [spec["source"]] if is_mirror
+                 else [spec["base"]] if is_extrude else [])
         dep_set = list(links)
         for other in all_names:
             if other != name and other not in dep_set and any(
@@ -1485,18 +1582,21 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
         prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
-                             or is_sketch)
+                             or is_sketch or is_extrude)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
                       + (1 if is_linklist else 0) + (1 if is_sheet else 0)
-                      + (3 if is_mirror else 0) + (1 if is_sketch else 0))
+                      + (3 if is_mirror else 0) + (1 if is_sketch else 0)
+                      + (6 if is_extrude else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
             _cells_element(props_el, spec["cells"])
         if is_sketch:
             _geometry_element(props_el, spec["geometry"])
+        if is_extrude:
+            _extrusion_properties(props_el, spec)
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
