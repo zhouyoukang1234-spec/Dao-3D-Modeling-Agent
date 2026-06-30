@@ -495,6 +495,107 @@ def fingerprint(path: str) -> Dict[str, Any]:
     }
 
 
+def _content_to_value(content: str) -> Any:
+    """Map a spreadsheet cell's stored ``content`` back to a synthesize value: a
+    literal number becomes ``int``/``float``, anything else (a formula, text)
+    stays a string -- the inverse of how ``_cells_element`` wrote it."""
+    try:
+        f = float(content)
+    except (TypeError, ValueError):
+        return content
+    return int(f) if f.is_integer() else f
+
+
+def summarize(path: str) -> "List[Dict[str, Any]]":
+    """Decompile an authored ``.FCStd`` back into a ``synthesize`` spec list.
+
+    The inverse of :func:`synthesize`: reading the file (no kernel), reconstruct
+    the per-object spec that would author it again -- primitives with their
+    scalar ``properties``/``placement``/``expressions``, booleans with their
+    ``base``/``tool``, N-ary booleans with their ``shapes``, and spreadsheets
+    with their ``cells``. Feeding the result back to ``synthesize`` reproduces a
+    structurally identical document (same fingerprint), so the author->read loop
+    closes on *every* type the authoring layer can write -- 反者道之动, the model
+    read straight back out of the file it was written into.
+
+    Raises ``ValueError`` if the document holds a type ``synthesize`` cannot
+    author, since the round-trip would otherwise silently drop it.
+    """
+    info = inspect_document(path)
+    props_all = info["properties"]
+    exprs_all = info["expressions"]
+    sheets = info["spreadsheets"]
+    specs: List[Dict[str, Any]] = []
+    for obj in info["objects"]:
+        name, otype = obj["name"], obj["type"]
+        if name is None or otype is None:
+            continue
+        props = props_all.get(name, {})
+        spec: Dict[str, Any] = {"type": otype, "name": name}
+        if otype in _PRIMITIVES:
+            defined = _PRIMITIVES[otype]
+            scalars = {p: props[p]["value"] for p in defined
+                       if p in props and isinstance(props[p]["value"], (int, float))
+                       and not isinstance(props[p]["value"], bool)}
+            spec["properties"] = scalars
+            placement = _placement_spec(props.get("Placement"))
+            if placement:
+                spec["placement"] = placement
+        elif otype in _BOOLEANS:
+            spec["base"] = _link_target(props.get("Base"))
+            spec["tool"] = _link_target(props.get("Tool"))
+        elif otype in _MULTI_BOOLEANS:
+            shapes_val = props.get("Shapes", {}).get("value")
+            spec["shapes"] = (list(shapes_val["link_list"])
+                              if isinstance(shapes_val, dict)
+                              and "link_list" in shapes_val else [])
+        elif otype == _SHEET_TYPE:
+            spec["cells"] = {alias: _content_to_value(content)
+                             for alias, content
+                             in sheets.get(name, {}).get("aliases", {}).items()}
+        else:
+            raise ValueError(
+                "summarize: object %s has type %r that synthesize cannot author"
+                % (name, otype))
+        bound = exprs_all.get(name)
+        if bound:
+            spec["expressions"] = {e["path"]: e["formula"] for e in bound}
+        specs.append(spec)
+    return specs
+
+
+def _link_target(prop: "Optional[Dict[str, Any]]") -> "Optional[str]":
+    """The link target name of an ``App::PropertyLink`` property value."""
+    if not isinstance(prop, dict):
+        return None
+    val = prop.get("value")
+    return val["link"] if isinstance(val, dict) and "link" in val else None
+
+
+def _placement_spec(prop: "Optional[Dict[str, Any]]") -> "Optional[Dict[str, Any]]":
+    """Reconstruct a synthesize ``placement`` from a persisted ``Placement``
+    property: position from ``Px/Py/Pz`` and, when the stored axis-angle ``A`` is
+    non-zero, the rotation axis ``Ox/Oy/Oz`` and angle in degrees. Returns
+    ``None`` for an identity placement (nothing to author)."""
+    if not isinstance(prop, dict):
+        return None
+    val = prop.get("value")
+    if not isinstance(val, dict) or "placement" not in val:
+        return None
+    p = val["placement"]
+    px, py, pz = (float(p.get("Px", 0)), float(p.get("Py", 0)),
+                  float(p.get("Pz", 0)))
+    angle_rad = float(p.get("A", 0))
+    out: Dict[str, Any] = {}
+    if px or py or pz:
+        out["position"] = [px, py, pz]
+    if abs(angle_rad) > 1e-12:
+        out["axis"] = [float(p.get("Ox", 0)), float(p.get("Oy", 0)),
+                       float(p.get("Oz", 1))]
+        out["angle"] = math.degrees(angle_rad)
+    return out or None
+
+
 def _edge_set(deps: Dict[str, List[str]]) -> set:
     return {(src, dst) for src, dsts in deps.items() for dst in dsts}
 
