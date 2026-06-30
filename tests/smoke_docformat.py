@@ -278,6 +278,74 @@ def main():
     assert docformat.diff(ex_a, ex_a)["expression_changes"] == {}, "self-diff"
     print("docformat.diff: expression re-binding named in expression_changes")
 
+    # ---- set_expression: the act half for wiring -- author the binding ---- #
+    # ex_a binds Pad.Length -> Spreadsheet.plen (=5). Re-point it to pwid (=9)
+    # purely by file surgery (no kernel), then prove the kernel honours the
+    # rewired graph on reopen: the body's volume follows the new alias.
+    ex_set = os.path.join(OUT, "expr_set.FCStd")
+    r = docformat.set_expression(ex_a, "Pad", "Length", "Spreadsheet.pwid",
+                                 out=ex_set)
+    assert r["old"] == "Spreadsheet.plen" and r["new"] == "Spreadsheet.pwid", r
+    # file-level view confirms the rewire with no kernel.
+    si = docformat.inspect_document(ex_set)
+    sb = {e["path"]: e["formula"] for e in si["expressions"]["Pad"]}
+    assert sb.get("Length") == "Spreadsheet.pwid", si["expressions"]
+    assert docformat.diff(ex_a, ex_set)["expression_changes"].get("Pad.Length") == {
+        "from": "Spreadsheet.plen", "to": "Spreadsheet.pwid"}, ex_set
+    # the kernel honours the file-authored binding: pwid=9 -> 40*30*9 = 10800.
+    doc3 = App.openDocument(ex_set)
+    try:
+        doc3.getObject("Pad").touch()
+        doc3.recompute(None, True)
+        body3 = next(o for o in doc3.Objects
+                     if o.TypeId.startswith("PartDesign::Body"))
+        vol3 = body3.Shape.Volume
+    finally:
+        App.closeDocument(doc3.Name)
+    assert abs(vol3 - 40 * 30 * 9) < 1.0, vol3
+    print("docformat.set_expression: file-authored re-point plen->pwid -> kernel "
+          "volume %.0f (file edit rewires the parametric graph)" % vol3)
+
+    # removing the binding (formula=None) leaves the property unbound.
+    ex_rm = os.path.join(OUT, "expr_rm.FCStd")
+    rr = docformat.set_expression(ex_set, "Pad", "Length", None, out=ex_rm)
+    assert rr["old"] == "Spreadsheet.pwid" and rr["new"] is None, rr
+    assert docformat.inspect_document(ex_rm)["expression_count"] == 0, ex_rm
+
+    # author a binding where none existed: the now-unbound Pad gets re-wired to
+    # plen (=5) purely from the file -- and the kernel builds 40*30*5 = 6000.
+    ex_add = os.path.join(OUT, "expr_add.FCStd")
+    ra = docformat.set_expression(ex_rm, "Pad", "Length", "Spreadsheet.plen",
+                                  out=ex_add)
+    assert ra["old"] is None and ra["new"] == "Spreadsheet.plen", ra
+    assert docformat.inspect_document(ex_add)["expression_count"] == 1, ex_add
+    doc4 = App.openDocument(ex_add)
+    try:
+        doc4.getObject("Pad").touch()
+        doc4.recompute(None, True)
+        body4 = next(o for o in doc4.Objects
+                     if o.TypeId.startswith("PartDesign::Body"))
+        vol4 = body4.Shape.Volume
+    finally:
+        App.closeDocument(doc4.Name)
+    assert abs(vol4 - 40 * 30 * 5) < 1.0, vol4
+    print("docformat.set_expression: authored a binding from the file -> kernel "
+          "volume %.0f (no kernel used to wire it)" % vol4)
+
+    # guarded: a missing object, and removing an absent binding -- both refuse
+    # before writing anything.
+    _se = docformat.set_expression
+    for call, token in (
+            (lambda: _se(ex_add, "Nope", "Length", "Spreadsheet.plen"), "no object"),
+            (lambda: _se(ex_rm, "Pad", "Length", None), "to remove")):
+        try:
+            call()
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat.set_expression: malformed edits guided")
+
     print("DOCFORMAT SMOKE OK")
 
 
