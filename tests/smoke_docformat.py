@@ -294,6 +294,44 @@ def main():
     assert docformat.diff(dim_a, dim_a)["dimension_changes"] == {}, "self-diff"
     print("docformat.diff: re-dialled sketch dimension named in dimension_changes")
 
+    # ---- set_dimension: the act half for the constraint graph ------------- #
+    # re-dial the sketch's named driving 'width' from 40 to 70 purely by file
+    # surgery, then prove the kernel re-solves the sketch and rebuilds the pad:
+    # a file-authored constraint edit reshapes real geometry (70*30*5 = 10500).
+    sk_id = next(iter(docformat.inspect_document(dim_a)["sketches"]))
+    dim_set = os.path.join(OUT, "dim_set.FCStd")
+    sr = docformat.set_dimension(dim_a, sk_id, "width", 70, out=dim_set)
+    assert sr["old"] == 40 and sr["new"] == 70, sr
+    assert docformat.inspect_document(dim_set)["sketch_dimensions"][
+        "%s.width" % sk_id] == 70, dim_set
+    doc5 = App.openDocument(dim_set)
+    try:
+        for o in doc5.Objects:
+            o.touch()
+        doc5.recompute(None, True)
+        body5 = next(o for o in doc5.Objects
+                     if o.TypeId.startswith("PartDesign::Body"))
+        vol5 = body5.Shape.Volume
+    finally:
+        App.closeDocument(doc5.Name)
+    assert abs(vol5 - 70 * 30 * 5) < 1.0, vol5
+    print("docformat.set_dimension: file-authored width 40->70 -> kernel volume "
+          "%.0f (constraint edit reshapes geometry)" % vol5)
+
+    # guarded: a missing sketch, an absent/geometric dimension, a bad value.
+    _sd = docformat.set_dimension
+    for call, token in (
+            (lambda: _sd(dim_a, "Nope", "width", 1), "no object"),
+            (lambda: _sd(dim_a, sk_id, "depth", 1), "named driving dimension"),
+            (lambda: _sd(dim_a, sk_id, "width", "big"), "must be a number")):
+        try:
+            call()
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat.set_dimension: malformed edits guided")
+
     # ---- two-layer fusion: the live kernel agrees with the file ---------- #
     # ss.bindings reads the same ExpressionEngine wiring from the *running*
     # document; it must match what the file-level parser recovered -- the two

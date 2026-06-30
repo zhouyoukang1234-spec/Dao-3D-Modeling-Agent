@@ -674,3 +674,87 @@ def set_expression(path: str, obj: str, prop_path: str,
             zo.writestr(n, entries[n])
     return {"object": obj, "path": prop_path, "old": old, "new": formula,
             "out": out}
+
+
+def set_dimension(path: str, sketch: str, name: str, value: float,
+                  out: Optional[str] = None) -> Dict[str, Any]:
+    """Re-dial a named driving dimension of a sketch by file surgery -- the
+    *act* half for the constraint graph (the dual of ``inspect_document``'s
+    ``sketch_dimensions`` read, and the sibling of ``set_expression`` for the
+    other parametric layer).
+
+    A driving dimensional constraint (``DistanceX`` / ``Radius`` / ``Angle`` ...)
+    is the user-facing knob a sketch exposes; ``inspect_document`` surfaces the
+    named ones as ``sketch_dimensions``. This rewrites such a constraint's
+    ``Value`` straight in ``Document.xml`` -- the kernel re-solves the sketch to
+    the new dimension on reopen + (forced) recompute, reshaping every feature
+    built on it, with no kernel used to author the edit.
+
+    ``value`` is the new dimension (mm / degrees, as the constraint's type
+    dictates). Targets the constraint whose ``Name`` matches and that is driving;
+    a reference (non-driving) or geometric constraint is refused. Writes to
+    ``out`` (default: overwrite ``path``) and returns
+    ``{sketch, name, old, new, out}``. Raises ``ValueError`` for a missing file
+    / sketch / named driving dimension, or a non-numeric value.
+    """
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("set_dimension: path must be a non-empty string")
+    if not os.path.exists(path):
+        raise ValueError("set_dimension: no such file: %s" % path)
+    for label, v in (("sketch", sketch), ("name", name)):
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("set_dimension: %s must be a non-empty string" % label)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("set_dimension: value must be a number, got %r" % (value,))
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise ValueError(
+            "set_dimension: %s is not a .FCStd (zip) document" % path)
+    with z:
+        names = z.namelist()
+        if DOCUMENT_XML not in names:
+            raise ValueError(
+                "set_dimension: %s has no %s -- not a FreeCAD document"
+                % (path, DOCUMENT_XML))
+        entries = {n: z.read(n) for n in names}
+    try:
+        root = ET.fromstring(entries[DOCUMENT_XML])
+    except ET.ParseError as exc:
+        raise ValueError("set_dimension: corrupt %s (%s)" % (DOCUMENT_XML, exc))
+    data_el = root.find("ObjectData")
+    objects = [] if data_el is None else list(data_el.findall("Object"))
+    target = next((o for o in objects if o.get("name") == sketch), None)
+    if target is None:
+        avail = sorted(o.get("name") for o in objects if o.get("name"))
+        raise ValueError("set_dimension: no object %r in %s (have: %s)"
+                         % (sketch, path, ", ".join(avail[:20]) or "none"))
+    clist = None
+    for props_el in target.findall("Properties"):
+        for prop in props_el.findall("Property"):
+            if prop.get("type") == "Sketcher::PropertyConstraintList":
+                clist = prop.find("ConstraintList")
+                break
+        if clist is not None:
+            break
+    if clist is None:
+        raise ValueError(
+            "set_dimension: object %r is not a sketch with constraints" % sketch)
+    con = next((c for c in clist.findall("Constrain")
+                if c.get("Name") == name and c.get("IsDriving") != "0"), None)
+    if con is None:
+        dims = sorted(c.get("Name") for c in clist.findall("Constrain")
+                      if c.get("Name") and c.get("IsDriving") != "0")
+        raise ValueError(
+            "set_dimension: sketch %r has no named driving dimension %r "
+            "(have: %s)" % (sketch, name, ", ".join(dims) or "none"))
+    old = _maybe_float(con.get("Value"))
+    con.set("Value", "%.16f" % float(value))
+    entries[DOCUMENT_XML] = (b"<?xml version='1.0' encoding='utf-8'?>\n"
+                             + ET.tostring(root, encoding="utf-8"))
+    out = out or path
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
+        for n in names:
+            zo.writestr(n, entries[n])
+    return {"sketch": sketch, "name": name, "old": old,
+            "new": _maybe_float(con.get("Value")), "out": out}
