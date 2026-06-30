@@ -415,6 +415,45 @@ def register(state):
                 "points": m.CountPoints, "target": target,
                 "solid": bool(m.isSolid())}
 
+    _MESH_EXT = (".stl", ".obj", ".ply", ".off", ".ast", ".bms", ".smf")
+
+    def op_mesh_import(a):
+        """Load a mesh file (STL/OBJ/PLY/...) as a fusable mesh.
+
+        Closes the resource pipeline: ``resource.download`` pulls an STL, this
+        ingests it, then ``mesh.repair`` / ``mesh.to_shape`` sew it into a solid
+        to modify. The mesh is kept under ``out`` so every mesh.* op consumes it.
+        args: path (mesh file), out (mesh name).
+        """
+        import Mesh
+        path = a.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("mesh.import 'path' must be a non-empty file path")
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in _MESH_EXT:
+            raise ValueError(
+                "mesh.import: unsupported mesh format %r -- expected one of %s "
+                "(use solid.import_step for STEP/IGES/BREP)"
+                % (ext or "<none>", ", ".join(_MESH_EXT)))
+        if not os.path.exists(path):
+            raise ValueError("mesh.import: no such file: %s" % path)
+        if not os.path.isfile(path):
+            raise ValueError("mesh.import: not a file: %s" % path)
+        out = a.get("out", "Imported")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("mesh.import 'out' must be a non-empty string")
+        m = Mesh.Mesh()
+        try:
+            m.read(path)
+        except Exception as exc:
+            raise ValueError("mesh.import could not read %s (%s)" % (path, exc))
+        if m.CountFacets == 0:
+            raise ValueError("mesh.import: %s holds no facets" % path)
+        meshes[out] = m
+        return {"mesh": out, "facets": m.CountFacets, "points": m.CountPoints,
+                "format": ext.lstrip("."), "solid": bool(m.isSolid()),
+                "non_manifold": bool(m.hasNonManifolds())}
+
     # ---- TechDraw 2D drawing --------------------------------------------- #
     # standard orthographic / pictorial projection directions (first-angle)
     _DRAW_DIRS = {
@@ -610,5 +649,6 @@ def register(state):
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
         "mesh.boolean": op_mesh_boolean, "mesh.to_shape": op_mesh_to_shape,
         "mesh.repair": op_mesh_repair, "mesh.decimate": op_mesh_decimate,
+        "mesh.import": op_mesh_import,
         "draw.techdraw": op_techdraw, "draw.project": op_draw_project,
     }
