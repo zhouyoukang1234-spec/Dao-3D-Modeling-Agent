@@ -480,8 +480,39 @@ def main():
     print("docformat.synthesize: authored 90deg rotation -> kernel orients bar "
           "to bbox %s (file-first orientation)" % (ext,))
 
+    # ---- synthesize spreadsheet: a parametric control table from nothing -- #
+    # author a Spreadsheet of aliased cells (one literal, one formula off it),
+    # then bind two box dimensions to those aliases; the kernel resolves the
+    # table on recompute -- the master-model surface, written straight to file.
+    sht_p = os.path.join(OUT, "synth_sheet.FCStd")
+    docformat.synthesize(sht_p, [
+        {"type": "Spreadsheet::Sheet", "name": "Params",
+         "cells": {"width": 7, "height": "=width + 3"}},
+        {"type": "Part::Box", "name": "Panel",
+         "properties": {"Length": 1, "Width": 1, "Height": 1},
+         "expressions": {"Width": "Params.width", "Height": "Params.height"}},
+    ])
+    sht_ix = docformat.inspect_document(sht_p)
+    assert sht_ix["type_counts"].get("Spreadsheet::Sheet") == 1, sht_ix
+    # binding to the table is a dependency edge Panel -> Params.
+    assert "Params" in sht_ix["dependencies"]["Panel"], sht_ix["dependencies"]
+    shd = App.openDocument(sht_p)
+    try:
+        for o in shd.Objects:
+            o.touch()
+        shd.recompute(None, True)
+        panel = shd.getObject("Panel")
+        pw, ph, pvol = float(panel.Width), float(panel.Height), panel.Shape.Volume
+    finally:
+        App.closeDocument(shd.Name)
+    assert abs(pw - 7) < 1e-6 and abs(ph - 10) < 1e-6, (pw, ph)   # w=7, h=w+3
+    assert abs(pvol - 1 * 7 * 10) < 1e-6, pvol
+    print("docformat.synthesize: authored control table Params(w=7,h=w+3) -> "
+          "kernel drives Panel to %gx%g (file-first master model)" % (pw, ph))
+
     # guarded: empty spec, unknown primitive, duplicate name, undefined property,
-    # a boolean whose operand does not resolve, and a degenerate rotation axis.
+    # a boolean whose operand does not resolve, a degenerate rotation axis, and
+    # a spreadsheet with no cells.
     _sy = docformat.synthesize
     bad = os.path.join(OUT, "synth_bad.FCStd")
     for spec, token in (
@@ -495,7 +526,9 @@ def main():
              "not a defined object"),
             ([{"type": "Part::Box", "name": "R",
                "properties": {"Length": 1, "Width": 1, "Height": 1},
-               "placement": {"axis": [0, 0, 0], "angle": 45}}], "axis")):
+               "placement": {"axis": [0, 0, 0], "angle": 45}}], "axis"),
+            ([{"type": "Spreadsheet::Sheet", "name": "S", "cells": {}}],
+             "non-empty 'cells'")):
         try:
             _sy(bad, spec)
         except ValueError as exc:

@@ -844,6 +844,33 @@ _FLOAT_PROP_TYPES = {"App::PropertyLength", "App::PropertyAngle",
 # (an object-link DAG), the dual of the primitive leaves above.
 _BOOLEANS = {"Part::Cut", "Part::Fuse", "Part::Common"}
 
+# A spreadsheet is a parametric *control table*: named (aliased) cells holding
+# numbers or formulae, to which other objects bind their dimensions. Authoring
+# one from nothing yields the master-model surface humans drive a design from.
+_SHEET_TYPE = "Spreadsheet::Sheet"
+
+
+def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
+    """Append a ``Spreadsheet::PropertySheet`` ``cells`` property.
+
+    ``cells`` maps an *alias* to a value: a number (a literal) or a string (a
+    cell formula, which FreeCAD recognises by its leading ``=``). Aliases are
+    laid out down column A (``A1``, ``A2``, ...) in insertion order; binding an
+    object's dimension to ``Sheet.alias`` then reads the cell -- the parametric
+    control table other objects are driven from.
+    """
+    prop = ET.SubElement(parent, "Property",
+                         {"name": "cells", "type": "Spreadsheet::PropertySheet",
+                          "status": "67108864"})
+    cells_el = ET.SubElement(prop, "Cells",
+                             {"Count": str(len(cells)), "xlink": "1"})
+    ET.SubElement(cells_el, "XLinks", {"count": "0"})
+    for row, (alias, value) in enumerate(cells.items(), start=1):
+        content = value if isinstance(value, str) else repr(value)
+        ET.SubElement(cells_el, "Cell",
+                      {"address": "A%d" % row, "content": content,
+                       "alias": alias})
+
 
 def _placement_element(parent: ET.Element, position: "List[float]",
                        axis: "Optional[List[float]]" = None,
@@ -890,7 +917,9 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     ``axis``. ``expressions`` author an ``ExpressionEngine`` per object --
     so a *parametric* model can be written from nothing, e.g. one primitive's
     dimension bound to ``"Other.Radius * 2"``; the cross-object references are
-    resolved into dependency edges in ``ObjectDeps``.
+    resolved into dependency edges in ``ObjectDeps``. A ``Spreadsheet::Sheet``
+    entry instead carries ``"cells": {alias: value}`` -- a parametric control
+    table other objects bind their dimensions to via ``Sheet.alias``.
 
     A spec may instead be a boolean ``{"type": <Part boolean>, "name": str,
     "base": <name>, "tool": <name>, "expressions": ...?}`` (``Part::Cut`` /
@@ -921,17 +950,35 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         if not isinstance(spec, dict):
             raise ValueError("synthesize: object #%d must be a dict" % idx)
         otype = spec.get("type")
-        if otype not in _PRIMITIVES and otype not in _BOOLEANS:
+        if (otype not in _PRIMITIVES and otype not in _BOOLEANS
+                and otype != _SHEET_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
-                % (idx, otype, ", ".join(sorted(set(_PRIMITIVES) | _BOOLEANS))))
+                % (idx, otype, ", ".join(
+                    sorted(set(_PRIMITIVES) | _BOOLEANS | {_SHEET_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
         if name in seen:
             raise ValueError("synthesize: duplicate object name %r" % name)
         seen.add(name)
-        if otype in _BOOLEANS:
+        if otype == _SHEET_TYPE:
+            cells = spec.get("cells")
+            if not isinstance(cells, dict) or not cells:
+                raise ValueError(
+                    "synthesize: spreadsheet %s needs a non-empty 'cells' "
+                    "{alias: value} map" % name)
+            for alias, value in cells.items():
+                if not isinstance(alias, str) or not alias.strip():
+                    raise ValueError(
+                        "synthesize: spreadsheet %s cell alias %r must be a "
+                        "non-empty string" % (name, alias))
+                if isinstance(value, bool) or not isinstance(
+                        value, (int, float, str)):
+                    raise ValueError(
+                        "synthesize: spreadsheet %s cell %r must be a number or "
+                        "formula string (got %r)" % (name, alias, value))
+        elif otype in _BOOLEANS:
             for role in ("base", "tool"):
                 ref = spec.get(role)
                 if not isinstance(ref, str) or not ref.strip():
@@ -983,7 +1030,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     for idx, spec in enumerate(objects, start=1):
         name, otype = spec["name"], spec["type"]
         is_bool = otype in _BOOLEANS
-        props = {} if is_bool else (spec.get("properties") or {})
+        is_sheet = otype == _SHEET_TYPE
+        props = {} if (is_bool or is_sheet) else (spec.get("properties") or {})
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
         # referenced in a formula -- together the object's dependency edges.
@@ -1009,12 +1057,15 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         axis = placement.get("axis")
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
-        prop_items = ([] if is_bool
+        prop_items = ([] if (is_bool or is_sheet)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
-                      + (1 if exprs else 0) + (2 if is_bool else 0))
+                      + (1 if exprs else 0) + (2 if is_bool else 0)
+                      + (1 if is_sheet else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
+        if is_sheet:
+            _cells_element(props_el, spec["cells"])
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
