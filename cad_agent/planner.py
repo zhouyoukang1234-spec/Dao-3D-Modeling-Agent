@@ -125,6 +125,13 @@ class Planner:
         if re.search(r"\brender|screenshot|picture|image\b", t):
             return Plan(steps=[{"tool": "view.scene", "args": {}}], note="refresh view")
 
+        # search-before-model: an explicit retrieval intent reaches for the
+        # world's libraries instead of building from primitives -- the agent's
+        # orchestration policy made concrete (when to fetch vs when to model).
+        rp = self._resource(t, raw)
+        if rp:
+            return rp
+
         # delete
         m = re.search(r"\b(?:delete|remove|drop)\s+([A-Za-z_]\w*)", t)
         if m:
@@ -178,6 +185,78 @@ class Planner:
             "I couldn't parse that. Try e.g. 'box 20x10x5', 'cylinder r=5 h=20', "
             "'cut hole from plate', 'fillet it radius 2', 'polar pattern lug count 6', "
             "or a direct call like solid.box {\"name\":\"b\",\"length\":10,\"width\":10,\"height\":10}."))
+
+    # ------------------------------------------------------------------ #
+    # the searchable libraries the planner knows how to name-route to.
+    _PLATFORMS = {
+        "printables": "printables", "prusa": "printables",
+        "sketchfab": "sketchfab", "thingiverse": "thingiverse",
+        "grabcad": "grabcad", "nasa": "nasa", "github": "github",
+    }
+    # words that signal "this is a retrieval, not a modelling, request".
+    _FETCH_STRONG = (r"\b(?:search|download|fetch|browse)\b", r"搜索|下载|检索|查找模型")
+    _FETCH_WEAK = (r"\b(?:find|look\s+for|locate|grab|get\s+me)\b",
+                   r"查找|找一?个|来一?个|需要|想要|要一?个")
+    _RES_HINT = (r"\b(?:online|on\s+the\s+web|internet|librar(?:y|ies)|repositor(?:y|ies)|"
+                 r"catalog|printables|sketchfab|thingiverse|grabcad|nasa|github|"
+                 r"existing|ready[- ]made|off[- ]the[- ]shelf|standard\s+part)\b",
+                 r"网上|在线|资源库|模型库|现成|标准件")
+
+    def _resource(self, t: str, raw: str) -> Optional[Plan]:
+        strong = any(re.search(p, x) for p, x in zip(self._FETCH_STRONG, (t, raw)))
+        weak = any(re.search(p, x) for p, x in zip(self._FETCH_WEAK, (t, raw)))
+        hint = any(re.search(p, x) for p, x in zip(self._RES_HINT, (t, raw)))
+        # strong verbs (search/download) route on their own; ambiguous verbs
+        # (find/get) only route when a library hint confirms the intent, so
+        # "find the volume" keeps measuring rather than searching the web.
+        if not (strong or (weak and hint)):
+            return None
+
+        # which platform(s)? a named library narrows the search; else default.
+        # plain substring (no \b): \b never fires between a CJK char and Latin,
+        # so "在printables上" must still detect the platform.
+        platforms = sorted({self._PLATFORMS[k] for k in self._PLATFORMS if k in t})
+
+        # an explicit "download <platform> id <x>" pulls a concrete model.
+        dm = re.search(r"\b(?:download|fetch|get)\b.*?\bid\s*[=:]?\s*([\w./-]+)", t)
+        if dm and re.search(r"\b(?:download|fetch)\b", t):
+            plat = platforms[0] if platforms else "printables"
+            return Plan(steps=[{"tool": "resource.download",
+                                "args": {"platform": plat, "id": dm.group(1)}}],
+                        note="download %s/%s" % (plat, dm.group(1)))
+
+        # otherwise it is a search. Distil the query: drop the retrieval verbs,
+        # the library hints and filler so only the *thing wanted* remains.
+        query = raw
+        strip = [
+            # compound phrases first, before single-word filler eats their guts
+            # (e.g. the "the" inside "off-the-shelf").
+            r"\b(?:off[- ]the[- ]shelf|ready[- ]made|standard\s+part)\b",
+            r"\b(?:can\s+you|could\s+you|i\s+(?:want|need|would\s+like)\s+to)\b",
+            r"\bon\s+the\s+(?:web|internet)\b",
+            r"\b(?:on|from|in)\s+(?:printables|sketchfab|thingiverse|grabcad|nasa|github)\b",
+            r"\b(?:search|download|fetch|browse|find|look\s+for|locate|grab|get\s+me|get)\b",
+            r"\b(?:please|existing|online|internet|web)\b",
+            r"\b(?:librar(?:y|ies)|repositor(?:y|ies)|catalog)\b",
+            r"\b(?:for|me|a|an|the|some|any)\b",
+            r"\b(?:3d\s+)?(?:model|models|part|parts|stl|step|file|files)\b",
+            r"我|你|的|在|上|搜索|下载|检索|查找|找一?个|来一?个|需要|想要|要一?个|"
+            r"一个|一只|网上|在线|资源库|模型库|现成|标准件|模型|文件",
+            # platform names last & boundary-free: \b never fires inside CJK
+            # context like "在printables上", so strip them plainly.
+            r"(?i)printables|sketchfab|thingiverse|grabcad|nasa|github",
+        ]
+        for pat in strip:
+            query = re.sub(pat, " ", query, flags=re.I)
+        query = re.sub(r"\s+", " ", query).strip(" ,.;:")
+        if not query:
+            query = raw.strip()
+        args: Dict[str, Any] = {"query": query}
+        if platforms:
+            args["platforms"] = platforms
+        return Plan(steps=[{"tool": "resource.search", "args": args}],
+                    note="search libraries for %r%s"
+                    % (query, " on %s" % ", ".join(platforms) if platforms else ""))
 
     # ------------------------------------------------------------------ #
     def _primitives(self, t: str) -> Plan:

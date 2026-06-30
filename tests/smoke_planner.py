@@ -68,6 +68,37 @@ def main():
     assert all(st.get("skipped") for e in sk.data["transcript"] for st in e["steps"]), sk.data
     print("planner build: empty refused, garbage + unknown tools degrade gracefully")
 
+    # ---- orchestration policy: when to FETCH vs when to MODEL --------------- #
+    # The planner decides search-before-model on its own (pure text, no kernel,
+    # no network here -- we only assert the routing & distilled query/platform).
+    from cad_agent.planner import Planner  # noqa: E402
+
+    def _route(text):
+        p = Planner().plan(text)
+        assert p.steps, p.error
+        return p.steps[0]["tool"], p.steps[0]["args"]
+
+    tool, args = _route("find a gear bracket online")
+    assert tool == "resource.search" and args["query"] == "gear bracket", (tool, args)
+
+    tool, args = _route("search printables for a raspberry pi case")
+    assert tool == "resource.search", (tool, args)
+    assert args["query"] == "raspberry pi case", args
+    assert args.get("platforms") == ["printables"], args
+
+    tool, args = _route("我需要一个现成的齿轮模型")
+    assert tool == "resource.search" and args["query"] == "齿轮", (tool, args)
+
+    tool, args = _route("download printables id 12345")
+    assert tool == "resource.download", (tool, args)
+    assert args == {"platform": "printables", "id": "12345"}, args
+
+    # ambiguous verbs must NOT hijack a measure/model request into a web search.
+    tool, _ = _route("box 20x10x5")
+    assert tool == "solid.box", tool
+    assert Planner().plan("find the volume of it").error, "‘find volume’ mis-routed"
+    print("orchestration policy: fetch-vs-model routing holds (EN+中文, no false fetch)")
+
     print("PLANNER SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
     s2.registry.kernel.shutdown()
