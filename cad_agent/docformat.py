@@ -62,6 +62,8 @@ def _prop_value(prop: ET.Element) -> Any:
                               for c in k if (c.get("value") or c.get("obj"))]}
     if tag == "PropertyPlacement":
         return {"placement": {a: _maybe_float(v) for a, v in k.attrib.items()}}
+    if tag == "PropertyVector":
+        return {"vector": {a: _maybe_float(v) for a, v in k.attrib.items()}}
     if "value" in k.attrib:
         return _maybe_float(k.attrib["value"])
     if "file" in k.attrib:
@@ -551,6 +553,14 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             spec[key] = (list(ll_val["link_list"])
                          if isinstance(ll_val, dict)
                          and "link_list" in ll_val else [])
+        elif otype == _MIRROR_TYPE:
+            spec["source"] = _link_target(props.get("Source"))
+            base_vec = _vector_spec(props.get("Base"))
+            if base_vec and any(base_vec):
+                spec["base"] = base_vec
+            normal_vec = _vector_spec(props.get("Normal"))
+            if normal_vec and normal_vec != _MIRROR_DEFAULT_NORMAL:
+                spec["normal"] = normal_vec
         elif otype == _SHEET_TYPE:
             spec["cells"] = {alias: _content_to_value(content)
                              for alias, content
@@ -572,6 +582,19 @@ def _link_target(prop: "Optional[Dict[str, Any]]") -> "Optional[str]":
         return None
     val = prop.get("value")
     return val["link"] if isinstance(val, dict) and "link" in val else None
+
+
+def _vector_spec(prop: "Optional[Dict[str, Any]]") -> "Optional[List[float]]":
+    """The ``[x, y, z]`` of a persisted ``PropertyVector``-backed property
+    (``App::PropertyPosition`` / ``App::PropertyDirection``), or ``None``."""
+    if not isinstance(prop, dict):
+        return None
+    val = prop.get("value")
+    if not isinstance(val, dict) or "vector" not in val:
+        return None
+    v = val["vector"]
+    return [float(v.get("valueX", 0)), float(v.get("valueY", 0)),
+            float(v.get("valueZ", 0))]
 
 
 def _placement_spec(prop: "Optional[Dict[str, Any]]") -> "Optional[Dict[str, Any]]":
@@ -1023,6 +1046,13 @@ _LINKLIST_TYPES: "Dict[str, tuple]" = {
 # one from nothing yields the master-model surface humans drive a design from.
 _SHEET_TYPE = "Spreadsheet::Sheet"
 
+# A ``Part::Mirroring`` reflects its ``Source`` shape across a plane defined by a
+# point ``Base`` on it and a ``Normal`` direction. The reflection is rigid
+# (volume-preserving); authored from file it carries a ``Source`` link plus the
+# two vector properties -- the file building a mirror feature with no kernel.
+_MIRROR_TYPE = "Part::Mirroring"
+_MIRROR_DEFAULT_NORMAL = [0.0, 0.0, 1.0]
+
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
     """Append a ``Spreadsheet::PropertySheet`` ``cells`` property.
@@ -1131,12 +1161,13 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             raise ValueError("synthesize: object #%d must be a dict" % idx)
         otype = spec.get("type")
         if (otype not in _PRIMITIVES and otype not in _BOOLEANS
-                and otype not in _LINKLIST_TYPES and otype != _SHEET_TYPE):
+                and otype not in _LINKLIST_TYPES and otype != _SHEET_TYPE
+                and otype != _MIRROR_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
                     set(_PRIMITIVES) | _BOOLEANS | set(_LINKLIST_TYPES)
-                    | {_SHEET_TYPE}))))
+                    | {_SHEET_TYPE, _MIRROR_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -1191,6 +1222,30 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             if spec.get("properties"):
                 raise ValueError(
                     "synthesize: boolean %s takes base/tool, not properties" % name)
+        elif otype == _MIRROR_TYPE:
+            src = spec.get("source")
+            if not isinstance(src, str) or not src.strip():
+                raise ValueError(
+                    "synthesize: mirror %s needs a 'source' object name" % name)
+            if src == name:
+                raise ValueError(
+                    "synthesize: mirror %s cannot reference itself" % name)
+            for vkey in ("base", "normal"):
+                v = spec.get(vkey)
+                if v is not None and (
+                        not isinstance(v, (list, tuple)) or len(v) != 3
+                        or not all(isinstance(c, (int, float))
+                                   and not isinstance(c, bool) for c in v)):
+                    raise ValueError(
+                        "synthesize: mirror %s '%s' must be [x, y, z] numbers"
+                        % (name, vkey))
+            if spec.get("normal") is not None and not any(spec["normal"]):
+                raise ValueError(
+                    "synthesize: mirror %s 'normal' must be non-zero" % name)
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: mirror %s takes source/base/normal, not "
+                    "properties" % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -1217,6 +1272,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     raise ValueError(
                         "synthesize: boolean %s %s=%r is not a defined object"
                         % (spec["name"], role, spec[role]))
+        elif spec["type"] == _MIRROR_TYPE:
+            if spec["source"] not in all_names:
+                raise ValueError(
+                    "synthesize: mirror %s source=%r is not a defined object"
+                    % (spec["name"], spec["source"]))
         elif spec["type"] in _LINKLIST_TYPES:
             key, _prop = _LINKLIST_TYPES[spec["type"]]
             for ref in spec[key]:
@@ -1240,13 +1300,15 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_linklist = otype in _LINKLIST_TYPES
         ll_key = _LINKLIST_TYPES[otype][0] if is_linklist else None
         is_sheet = otype == _SHEET_TYPE
-        props = ({} if (is_bool or is_linklist or is_sheet)
+        is_mirror = otype == _MIRROR_TYPE
+        props = ({} if (is_bool or is_linklist or is_sheet or is_mirror)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
         # referenced in a formula -- together the object's dependency edges.
         links = ([spec["base"], spec["tool"]] if is_bool
-                 else list(spec[ll_key]) if is_linklist else [])
+                 else list(spec[ll_key]) if is_linklist
+                 else [spec["source"]] if is_mirror else [])
         dep_set = list(links)
         for other in all_names:
             if other != name and other not in dep_set and any(
@@ -1268,11 +1330,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         axis = placement.get("axis")
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
-        prop_items = ([] if (is_bool or is_linklist or is_sheet)
+        prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
-                      + (1 if is_linklist else 0) + (1 if is_sheet else 0))
+                      + (1 if is_linklist else 0) + (1 if is_sheet else 0)
+                      + (3 if is_mirror else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -1290,6 +1353,21 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             ll = ET.SubElement(lp, "LinkList", {"count": str(len(operands))})
             for ref in operands:
                 ET.SubElement(ll, "Link", {"value": ref})
+        if is_mirror:
+            sp = ET.SubElement(props_el, "Property",
+                               {"name": "Source", "type": "App::PropertyLink"})
+            ET.SubElement(sp, "Link", {"value": spec["source"]})
+            for pname, ptype, vec in (
+                    ("Base", "App::PropertyPosition",
+                     spec.get("base") or [0.0, 0.0, 0.0]),
+                    ("Normal", "App::PropertyDirection",
+                     spec.get("normal") or _MIRROR_DEFAULT_NORMAL)):
+                vp = ET.SubElement(props_el, "Property",
+                                   {"name": pname, "type": ptype})
+                ET.SubElement(vp, "PropertyVector",
+                              {"valueX": "%.16f" % float(vec[0]),
+                               "valueY": "%.16f" % float(vec[1]),
+                               "valueZ": "%.16f" % float(vec[2])})
         if exprs:
             ee = ET.SubElement(props_el, "Property",
                                {"name": "ExpressionEngine",
