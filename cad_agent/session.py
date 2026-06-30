@@ -72,6 +72,18 @@ class AgentSession:
                 continue
             for step in plan.steps:
                 tool = step["tool"]
+                if tool == "recipe":
+                    ra = step.get("args", {})
+                    rr = self.make(ra.get("name", ""), **(ra.get("params") or {}))
+                    entry["steps"].append({"tool": "recipe", "args": ra, "ok": rr.ok,
+                                           "error": rr.error,
+                                           "executed": rr.data.get("executed"),
+                                           "planned": rr.data.get("planned")})
+                    if rr.ok:
+                        executed += 1
+                    else:
+                        failed += 1
+                    continue
                 if tool.startswith("__") or tool not in known:
                     entry["steps"].append({"tool": tool, "skipped": True})
                     continue
