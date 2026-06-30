@@ -475,3 +475,102 @@ def edit_property(path: str, obj: str, prop: str, value: Any,
             zo.writestr(n, entries[n])
     return {"object": obj, "property": prop, "old": old,
             "new": child.get("value"), "out": out}
+
+
+def set_expression(path: str, obj: str, prop_path: str,
+                   formula: Optional[str], out: Optional[str] = None
+                   ) -> Dict[str, Any]:
+    """Author / re-point / remove an ExpressionEngine binding by file surgery --
+    the *act* half for parametric wiring (the dual of ``inspect_document``'s read).
+
+    ``edit_property`` rewrites a scalar *value*; this rewrites the *binding* that
+    drives it. ``formula`` is the expression to bind on ``prop_path`` (the
+    ``path`` an ``<Expression>`` carries, e.g. ``"Length"`` or
+    ``"Constraints.width"``); pass ``None`` to remove the binding. The kernel
+    honours the change on reopen + (forced) recompute, exactly as it does for
+    ``edit_property`` -- so a file-level edit rewires the parametric graph the
+    GUI would otherwise wire by hand.
+
+    FreeCAD serialises an ``App::PropertyExpressionEngine`` on every object (an
+    empty ``<ExpressionEngine count="0"/>`` when unbound), so authoring, re-
+    pointing and removing all work from the file alone -- no kernel needed to
+    create the binding. Writes to ``out`` (default: overwrite ``path``) and
+    returns ``{object, path, old, new, out}``. Raises ``ValueError`` for a
+    missing file / object, an object that (unusually) lacks the property, or a
+    remove of an absent binding.
+    """
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("set_expression: path must be a non-empty string")
+    if not os.path.exists(path):
+        raise ValueError("set_expression: no such file: %s" % path)
+    for label, v in (("obj", obj), ("prop_path", prop_path)):
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError(
+                "set_expression: %s must be a non-empty string" % label)
+    if formula is not None and (not isinstance(formula, str) or not formula.strip()):
+        raise ValueError(
+            "set_expression: formula must be a non-empty string or None "
+            "(None removes the binding)")
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise ValueError(
+            "set_expression: %s is not a .FCStd (zip) document" % path)
+    with z:
+        names = z.namelist()
+        if DOCUMENT_XML not in names:
+            raise ValueError(
+                "set_expression: %s has no %s -- not a FreeCAD document"
+                % (path, DOCUMENT_XML))
+        entries = {n: z.read(n) for n in names}
+    try:
+        root = ET.fromstring(entries[DOCUMENT_XML])
+    except ET.ParseError as exc:
+        raise ValueError("set_expression: corrupt %s (%s)" % (DOCUMENT_XML, exc))
+    data_el = root.find("ObjectData")
+    objects = [] if data_el is None else list(data_el.findall("Object"))
+    target = next((o for o in objects if o.get("name") == obj), None)
+    if target is None:
+        avail = sorted(o.get("name") for o in objects if o.get("name"))
+        raise ValueError("set_expression: no object %r in %s (have: %s)"
+                         % (obj, path, ", ".join(avail[:20]) or "none"))
+    engine = None
+    for props_el in target.findall("Properties"):
+        for pr in props_el.findall("Property"):
+            if pr.get("type") == "App::PropertyExpressionEngine":
+                engine = pr.find("ExpressionEngine")
+                break
+        if engine is not None:
+            break
+    if engine is None:
+        raise ValueError(
+            "set_expression: object %r carries no ExpressionEngine -- bind it "
+            "once via the kernel first (ss.bind / obj.setExpression); file "
+            "surgery can re-point or remove an existing binding, not create the "
+            "property from nothing" % obj)
+    existing = next((e for e in engine.findall("Expression")
+                     if e.get("path") == prop_path), None)
+    old = existing.get("expression") if existing is not None else None
+    if formula is None:
+        if existing is None:
+            raise ValueError(
+                "set_expression: object %r has no binding on %r to remove "
+                "(bound paths: %s)"
+                % (obj, prop_path, ", ".join(e.get("path")
+                                             for e in engine.findall("Expression"))
+                   or "none"))
+        engine.remove(existing)
+    elif existing is not None:
+        existing.set("expression", formula)
+    else:
+        ET.SubElement(engine, "Expression",
+                      {"path": prop_path, "expression": formula})
+    engine.set("count", str(len(engine.findall("Expression"))))
+    entries[DOCUMENT_XML] = (b"<?xml version='1.0' encoding='utf-8'?>\n"
+                             + ET.tostring(root, encoding="utf-8"))
+    out = out or path
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zo:
+        for n in names:
+            zo.writestr(n, entries[n])
+    return {"object": obj, "path": prop_path, "old": old, "new": formula,
+            "out": out}
