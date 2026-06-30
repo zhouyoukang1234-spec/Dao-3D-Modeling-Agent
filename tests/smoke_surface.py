@@ -65,6 +65,28 @@ def main():
     assert sec.ok, sec.error
     print("surface.offset +2mm -> shell area %.1f (fusable)" % off.data["area"])
 
+    # surface.extrude: sweep an OPEN L-profile along +Z into a wall shell, then
+    # perceive it (open surfaces are exactly what solid.extrude cannot make).
+    ex = s.act("surface.extrude", {"out": "Wall", "direction": [0, 0, 8],
+                                   "points": [[0, 0, 0], [10, 0, 0], [10, 5, 0]]})
+    assert ex.ok, ex.error
+    assert ex.data["area"] > 0 and ex.data["faces"] >= 2, ex.data
+    assert s.act("analyze.section", {"name": "Wall", "plane": "XY", "offset": 4}).ok
+    # surface.revolve: a profile swept 270deg about Z -> surface of revolution.
+    rv = s.act("surface.revolve", {"out": "Vase", "axis": [0, 0, 1], "angle": 270,
+                                   "points": [[2, 0, 0], [5, 0, 3], [2, 0, 6]]})
+    assert rv.ok, rv.error
+    assert rv.data["area"] > 0 and rv.data["angle"] == 270, rv.data
+    print("surface.extrude wall area %.1f, revolve 270deg area %.1f"
+          % (ex.data["area"], rv.data["area"]))
+    _guided(s.act("surface.extrude", {"points": [[0, 0, 0]]}), "at least")
+    _guided(s.act("surface.extrude", {"points": [[0, 0, 0], [1, 0, 0]],
+                                      "direction": [0, 0, 0]}), "non-zero")
+    _guided(s.act("surface.revolve", {"points": [[2, 0, 0], [5, 0, 3]],
+                                      "axis": [0, 0, 0]}), "non-zero")
+    _guided(s.act("surface.revolve", {"points": [[2, 0, 0], [5, 0, 3]],
+                                      "angle": 0}), "non-zero")
+
     # draft.ortho_array of a real solid, then proven fusable (it meshes).
     assert s.act("solid.box", {"name": "Cell", "length": 4, "width": 4,
                                "height": 4}).ok

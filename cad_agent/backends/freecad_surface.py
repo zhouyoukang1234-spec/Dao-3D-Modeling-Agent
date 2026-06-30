@@ -267,6 +267,63 @@ def register(state):
         return {"surface": out, "object": obj.Name, "area": _round(shell.Area),
                 "distance": _round(dist), "faces": len(shell.Faces)}
 
+    def op_extrude(a):
+        """Sweep a profile polyline along a direction into an open shell.
+
+        Unlike ``solid.extrude`` (which caps a closed profile into a solid) this
+        keeps the swept surface as a shell, so an *open* profile (a wall, a rib,
+        a draped strip) is valid. args: points [[x,y,z]...] (>=2), direction
+        [x,y,z] (!=0), out (name), closed (close the profile first, default
+        False).
+        """
+        pts = _points(a, "points", "surface.extrude 'points'", need=2)
+        out = a.get("out", "Extrusion")
+        direction = _vec(a.get("direction", [0, 0, 1]), "surface.extrude direction")
+        if direction.Length < 1e-9:
+            raise ValueError("surface.extrude direction must be non-zero")
+        vs = [V(*p) for p in pts]
+        if a.get("closed") and (vs[-1] - vs[0]).Length > 1e-9:
+            vs.append(vs[0])
+        wire = Part.makePolygon(vs)
+        try:
+            shell = wire.extrude(direction)
+        except Exception as exc:
+            raise ValueError("surface.extrude failed (%s)" % exc)
+        if shell is None or shell.isNull() or not shell.Faces:
+            raise ValueError("surface.extrude produced no surface")
+        obj = _register_shape(out, shell, "surface.extrude")
+        return {"surface": out, "object": obj.Name, "area": _round(shell.Area),
+                "faces": len(shell.Faces)}
+
+    def op_revolve(a):
+        """Revolve a profile polyline about an axis into a surface of revolution.
+
+        A shell (open surface), distinct from ``solid.revolve``'s capped solid;
+        partial angles give a curved strip. args: points [[x,y,z]...] (>=2),
+        axis [x,y,z] (direction, !=0), base [x,y,z] (axis point, default origin),
+        angle (deg, default 360), out (name).
+        """
+        pts = _points(a, "points", "surface.revolve 'points'", need=2)
+        out = a.get("out", "Revolution")
+        axis = _vec(a.get("axis", [0, 0, 1]), "surface.revolve axis")
+        if axis.Length < 1e-9:
+            raise ValueError("surface.revolve axis must be non-zero")
+        base = _vec(a["base"], "surface.revolve base") if a.get("base") \
+            is not None else V(0, 0, 0)
+        angle = _num(a, "angle", 360.0, "surface.revolve angle")
+        if abs(angle) < 1e-9:
+            raise ValueError("surface.revolve angle must be non-zero")
+        wire = Part.makePolygon([V(*p) for p in pts])
+        try:
+            shell = wire.revolve(base, axis, angle)
+        except Exception as exc:
+            raise ValueError("surface.revolve failed (%s)" % exc)
+        if shell is None or shell.isNull() or not shell.Faces:
+            raise ValueError("surface.revolve produced no surface")
+        obj = _register_shape(out, shell, "surface.revolve")
+        return {"surface": out, "object": obj.Name, "area": _round(shell.Area),
+                "faces": len(shell.Faces), "angle": _round(angle)}
+
     # ---- draft.* ---------------------------------------------------------- #
     def op_ortho_array(a):
         """Real Draft orthogonal array of an existing solid.
@@ -544,6 +601,8 @@ def register(state):
         "surface.ruled": op_ruled,
         "surface.interpolate": op_interpolate,
         "surface.offset": op_offset,
+        "surface.extrude": op_extrude,
+        "surface.revolve": op_revolve,
         "draft.ortho_array": op_ortho_array,
         "draft.polar_array": op_polar_array,
         "draft.path_array": op_path_array,
