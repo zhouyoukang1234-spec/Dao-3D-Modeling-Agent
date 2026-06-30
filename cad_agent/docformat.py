@@ -636,6 +636,21 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             solid = props.get("Solid", {}).get("value")
             if solid is False:
                 spec["solid"] = False
+        elif otype == _REVOLVE_TYPE:
+            spec["source"] = _link_target(props.get("Source"))
+            axis_vec = _vector_spec(props.get("Axis"))
+            if axis_vec and axis_vec != _REVOLVE_DEFAULT_AXIS:
+                spec["axis"] = axis_vec
+            base_vec = _vector_spec(props.get("Base"))
+            if base_vec and base_vec != _REVOLVE_DEFAULT_BASE:
+                spec["base"] = base_vec
+            angle = props.get("Angle", {}).get("value")
+            if (isinstance(angle, (int, float)) and not isinstance(angle, bool)
+                    and angle != _REVOLVE_DEFAULT_ANGLE):
+                spec["angle"] = angle
+            solid = props.get("Solid", {}).get("value")
+            if solid is False:
+                spec["solid"] = False
         else:
             raise ValueError(
                 "summarize: object %s has type %r that synthesize cannot author"
@@ -1158,7 +1173,18 @@ _SKETCH_TYPE = "Sketcher::SketchObject"
 # becomes a face.
 _EXTRUDE_TYPE = "Part::Extrusion"
 _EXTRUDE_DEFAULT_DIR = [0.0, 0.0, 1.0]
-_EXTRUDE_FACEMAKER = "Part::FaceMakerBullseye"
+_FACEMAKER = "Part::FaceMakerBullseye"
+_EXTRUDE_FACEMAKER = _FACEMAKER  # backwards-compatible alias
+
+# A ``Part::Revolution`` revolves a 2D profile (``Source``) about an axis
+# (``Base`` point + ``Axis`` direction) through ``Angle`` degrees, the lathe to
+# the extrusion's mill. Author the sketch + the revolution from file and the
+# kernel spins the loop into a solid of revolution on recompute (Pappus): the
+# file-first equivalent of the GUI's Revolve, no clicks.
+_REVOLVE_TYPE = "Part::Revolution"
+_REVOLVE_DEFAULT_AXIS = [0.0, 0.0, 1.0]
+_REVOLVE_DEFAULT_BASE = [0.0, 0.0, 0.0]
+_REVOLVE_DEFAULT_ANGLE = 360.0
 
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
@@ -1253,6 +1279,46 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     ET.SubElement(fp, "String", {"value": _EXTRUDE_FACEMAKER})
 
 
+def _revolution_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
+    """Append the ``Part::Revolution`` properties that spin a 2D ``source``
+    profile about an axis into a solid of revolution.
+
+    Six properties carry the feature: ``Source`` (link to the profile),
+    ``Axis`` + ``Base`` for the revolution axis (a direction through a point),
+    ``Angle`` (degrees) for the sweep, ``Solid`` to cap it, and a bullseye
+    ``FaceMakerClass`` so a closed wire becomes a fillable face. The kernel spins
+    it on recompute; the file just declares it.
+    """
+    sp = ET.SubElement(parent, "Property",
+                       {"name": "Source", "type": "App::PropertyLink"})
+    ET.SubElement(sp, "Link", {"value": spec["source"]})
+    axis = spec.get("axis") or _REVOLVE_DEFAULT_AXIS
+    ap = ET.SubElement(parent, "Property",
+                       {"name": "Axis", "type": "App::PropertyVector"})
+    ET.SubElement(ap, "PropertyVector",
+                  {"valueX": "%.16f" % float(axis[0]),
+                   "valueY": "%.16f" % float(axis[1]),
+                   "valueZ": "%.16f" % float(axis[2])})
+    base = spec.get("base") or _REVOLVE_DEFAULT_BASE
+    bp = ET.SubElement(parent, "Property",
+                       {"name": "Base", "type": "App::PropertyVector"})
+    ET.SubElement(bp, "PropertyVector",
+                  {"valueX": "%.16f" % float(base[0]),
+                   "valueY": "%.16f" % float(base[1]),
+                   "valueZ": "%.16f" % float(base[2])})
+    angle = spec.get("angle", _REVOLVE_DEFAULT_ANGLE)
+    gp = ET.SubElement(parent, "Property",
+                       {"name": "Angle", "type": "App::PropertyFloatConstraint"})
+    ET.SubElement(gp, "Float", {"value": "%.16f" % float(angle)})
+    solid = spec.get("solid", True)
+    op = ET.SubElement(parent, "Property",
+                       {"name": "Solid", "type": "App::PropertyBool"})
+    ET.SubElement(op, "Bool", {"value": "true" if solid else "false"})
+    fp = ET.SubElement(parent, "Property",
+                       {"name": "FaceMakerClass", "type": "App::PropertyString"})
+    ET.SubElement(fp, "String", {"value": _FACEMAKER})
+
+
 def _placement_element(parent: ET.Element, position: "List[float]",
                        axis: "Optional[List[float]]" = None,
                        angle: float = 0.0) -> None:
@@ -1340,13 +1406,13 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         if (otype not in _PRIMITIVES and otype not in _BOOLEANS
                 and otype not in _LINKLIST_TYPES and otype != _SHEET_TYPE
                 and otype != _MIRROR_TYPE and otype != _SKETCH_TYPE
-                and otype != _EXTRUDE_TYPE):
+                and otype != _EXTRUDE_TYPE and otype != _REVOLVE_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
                     set(_PRIMITIVES) | _BOOLEANS | set(_LINKLIST_TYPES)
                     | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
-                       _EXTRUDE_TYPE}))))
+                       _EXTRUDE_TYPE, _REVOLVE_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -1488,6 +1554,40 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: extrusion %s takes base/length/dir/solid, not "
                     "properties" % name)
+        elif otype == _REVOLVE_TYPE:
+            src = spec.get("source")
+            if not isinstance(src, str) or not src.strip():
+                raise ValueError(
+                    "synthesize: revolution %s needs a 'source' object name"
+                    % name)
+            if src == name:
+                raise ValueError(
+                    "synthesize: revolution %s cannot reference itself" % name)
+            for vkey in ("axis", "base"):
+                v = spec.get(vkey)
+                if v is not None and (
+                        not isinstance(v, (list, tuple)) or len(v) != 3
+                        or not all(isinstance(c, (int, float))
+                                   and not isinstance(c, bool) for c in v)):
+                    raise ValueError(
+                        "synthesize: revolution %s '%s' must be [x, y, z] numbers"
+                        % (name, vkey))
+            if spec.get("axis") is not None and not any(spec["axis"]):
+                raise ValueError(
+                    "synthesize: revolution %s 'axis' must be non-zero" % name)
+            angle = spec.get("angle", _REVOLVE_DEFAULT_ANGLE)
+            if (isinstance(angle, bool) or not isinstance(angle, (int, float))
+                    or not 0 < angle <= 360):
+                raise ValueError(
+                    "synthesize: revolution %s 'angle' must be in (0, 360]"
+                    % name)
+            if "solid" in spec and not isinstance(spec["solid"], bool):
+                raise ValueError(
+                    "synthesize: revolution %s 'solid' must be a bool" % name)
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: revolution %s takes source/axis/base/angle/"
+                    "solid, not properties" % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -1524,6 +1624,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: extrusion %s base=%r is not a defined object"
                     % (spec["name"], spec["base"]))
+        elif spec["type"] == _REVOLVE_TYPE:
+            if spec["source"] not in all_names:
+                raise ValueError(
+                    "synthesize: revolution %s source=%r is not a defined object"
+                    % (spec["name"], spec["source"]))
         elif spec["type"] in _LINKLIST_TYPES:
             key, _prop = _LINKLIST_TYPES[spec["type"]]
             for ref in spec[key]:
@@ -1550,8 +1655,9 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_mirror = otype == _MIRROR_TYPE
         is_sketch = otype == _SKETCH_TYPE
         is_extrude = otype == _EXTRUDE_TYPE
+        is_revolve = otype == _REVOLVE_TYPE
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
-                        or is_sketch or is_extrude)
+                        or is_sketch or is_extrude or is_revolve)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
@@ -1559,7 +1665,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         links = ([spec["base"], spec["tool"]] if is_bool
                  else list(spec[ll_key]) if is_linklist
                  else [spec["source"]] if is_mirror
-                 else [spec["base"]] if is_extrude else [])
+                 else [spec["base"]] if is_extrude
+                 else [spec["source"]] if is_revolve else [])
         dep_set = list(links)
         for other in all_names:
             if other != name and other not in dep_set and any(
@@ -1582,13 +1689,13 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
         prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
-                             or is_sketch or is_extrude)
+                             or is_sketch or is_extrude or is_revolve)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
                       + (1 if is_linklist else 0) + (1 if is_sheet else 0)
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
-                      + (6 if is_extrude else 0))
+                      + (6 if is_extrude else 0) + (6 if is_revolve else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -1597,6 +1704,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             _geometry_element(props_el, spec["geometry"])
         if is_extrude:
             _extrusion_properties(props_el, spec)
+        if is_revolve:
+            _revolution_properties(props_el, spec)
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",

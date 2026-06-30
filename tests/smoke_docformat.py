@@ -853,6 +853,56 @@ def main():
     print("docformat Part::Extrusion: sketch swept from file -> solid volume %g "
           "(50*7), depends on its profile, round-trips identically" % ex_vol)
 
+    # ---- Part::Revolution: spin a sketch profile into a solid ------------ #
+    # the lathe to the extrusion's mill: author a 3x4 rectangle offset from the
+    # y-axis (x in [2,5]) + a full revolution about that axis. By Pappus the
+    # kernel spins a solid of volume 2*pi*Rc*A = 2*pi*3.5*12 = 263.894 on
+    # recompute -- the file-first equivalent of the GUI's Revolve. summarize
+    # recovers the source/axis and the spec round-trips identically.
+    rv_p = os.path.join(OUT, "synth_revolve.FCStd")
+    docformat.synthesize(rv_p, [
+        {"type": "Sketcher::SketchObject", "name": "Sk", "geometry": [
+            {"start": [2, 0], "end": [5, 0]},
+            {"start": [5, 0], "end": [5, 4]},
+            {"start": [5, 4], "end": [2, 4]},
+            {"start": [2, 4], "end": [2, 0]},
+        ]},
+        {"type": "Part::Revolution", "name": "Rev", "source": "Sk",
+         "axis": [0, 1, 0]},
+    ])
+    rv_spec = next(s for s in docformat.summarize(rv_p) if s["name"] == "Rev")
+    assert rv_spec["source"] == "Sk" and rv_spec["axis"] == [0.0, 1.0, 0.0], \
+        rv_spec
+    rv_rt = os.path.join(OUT, "synth_revolve_rt.FCStd")
+    docformat.synthesize(rv_rt, docformat.summarize(rv_p))
+    assert docformat.fingerprint(rv_p) == docformat.fingerprint(rv_rt)
+    rv_file_deps = docformat.inspect_document(rv_p)["dependencies"].get("Rev", [])
+    assert "Sk" in rv_file_deps, rv_file_deps
+    rd = App.openDocument(rv_p)
+    try:
+        for o in rd.Objects:
+            o.touch()
+        rd.recompute(None, True)
+        rv_vol = rd.getObject("Rev").Shape.Volume
+    finally:
+        App.closeDocument(rd.Name)
+    assert abs(rv_vol - 263.8938) < 1e-2, rv_vol
+    for bad, token in (
+            ([{"type": "Sketcher::SketchObject", "name": "Sk", "geometry": [
+                {"start": [2, 0], "end": [5, 0]}]},
+              {"type": "Part::Revolution", "name": "R", "source": "Sk",
+               "angle": 0}], "(0, 360]"),
+            ([{"type": "Part::Revolution", "name": "R", "source": "Sk",
+               "axis": [0, 0, 0]}], "must be non-zero")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_rv.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat Part::Revolution: sketch spun from file -> solid volume %g "
+          "(Pappus 2*pi*3.5*12), round-trips identically" % round(rv_vol, 3))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
