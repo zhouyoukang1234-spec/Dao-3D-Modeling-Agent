@@ -283,6 +283,52 @@ def _sketch_constraints(data_el: Optional[ET.Element]
     return out
 
 
+def _sketch_geometry(data_el: Optional[ET.Element]
+                     ) -> "Dict[str, List[Dict[str, Any]]]":
+    """sketch name -> its edge geometry list, read kernel-free.
+
+    The ``Part::PropertyGeometryList`` holds the sketch's actual edges. Only the
+    ``Part::GeomLineSegment`` form is surfaced here (the shape the authoring
+    layer writes): each becomes ``{"line": True, "start": [x, y], "end": [x, y],
+    "construction": bool}``. Other geometry kinds are reported by their type so
+    the sketch's edge count is still visible without inventing coordinates.
+    """
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    if data_el is None:
+        return out
+    for obj in data_el.findall("Object"):
+        name = obj.get("name")
+        if name is None:
+            continue
+        glist = None
+        for props_el in obj.findall("Properties"):
+            for prop in props_el.findall("Property"):
+                if prop.get("type") == "Part::PropertyGeometryList":
+                    glist = prop.find("GeometryList")
+                    break
+            if glist is not None:
+                break
+        if glist is None:
+            continue
+        geoms: List[Dict[str, Any]] = []
+        for g in glist.findall("Geometry"):
+            gtype = g.get("type")
+            entry: Dict[str, Any] = {"type": gtype}
+            seg = g.find("LineSegment")
+            if gtype == "Part::GeomLineSegment" and seg is not None:
+                entry["line"] = True
+                entry["start"] = [float(seg.get("StartX", 0)),
+                                  float(seg.get("StartY", 0))]
+                entry["end"] = [float(seg.get("EndX", 0)),
+                                float(seg.get("EndY", 0))]
+                cons = g.find("Construction")
+                entry["construction"] = (cons is not None
+                                          and cons.get("value") == "1")
+            geoms.append(entry)
+        out[name] = geoms
+    return out
+
+
 def _sketch_dimensions(sketches: "Dict[str, Dict[str, Any]]") -> Dict[str, Any]:
     """Flatten every sketch's named driving dimensions to ``sketch.name ->
     value`` -- the document's user-facing dimensional knobs in one map."""
@@ -432,6 +478,7 @@ def inspect_document(path: str) -> Dict[str, Any]:
         expr_edges = _expression_edges(expressions, obj_names, _label_map(props))
         sketches = _sketch_constraints(data_el)
         sketch_dims = _sketch_dimensions(sketches)
+        sketch_geometry = _sketch_geometry(data_el)
         sheets = _sheet_cells(data_el)
         breps = []
         topo_totals = {name: 0 for name in _BREP_SHAPE_CODES.values()}
@@ -467,6 +514,7 @@ def inspect_document(path: str) -> Dict[str, Any]:
             "sketches": sketches,
             "sketch_constraint_count": sum(s["count"] for s in sketches.values()),
             "sketch_dimensions": sketch_dims,
+            "sketch_geometry": sketch_geometry,
             "spreadsheets": sheets,
             "spreadsheet_cell_count": sum(s["count"] for s in sheets.values()),
             "brep_files": breps,
@@ -528,6 +576,7 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
     props_all = info["properties"]
     exprs_all = info["expressions"]
     sheets = info["spreadsheets"]
+    geom_all = info["sketch_geometry"]
     specs: List[Dict[str, Any]] = []
     for obj in info["objects"]:
         name, otype = obj["name"], obj["type"]
@@ -565,6 +614,17 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             spec["cells"] = {alias: _content_to_value(content)
                              for alias, content
                              in sheets.get(name, {}).get("aliases", {}).items()}
+        elif otype == _SKETCH_TYPE:
+            segs: List[Dict[str, Any]] = []
+            for g in geom_all.get(name, []):
+                if not g.get("line"):
+                    continue
+                seg: Dict[str, Any] = {"start": list(g["start"]),
+                                       "end": list(g["end"])}
+                if g.get("construction"):
+                    seg["construction"] = True
+                segs.append(seg)
+            spec["geometry"] = segs
         else:
             raise ValueError(
                 "summarize: object %s has type %r that synthesize cannot author"
@@ -1071,6 +1131,13 @@ _SHEET_TYPE = "Spreadsheet::Sheet"
 _MIRROR_TYPE = "Part::Mirroring"
 _MIRROR_DEFAULT_NORMAL = [0.0, 0.0, 1.0]
 
+# A ``Sketcher::SketchObject`` is the 2D profile upstream of every pad / pocket /
+# extrusion -- the most fundamental authoring surface there is. Its edges live in
+# a ``Part::PropertyGeometryList``; the authoring layer writes line segments
+# (``Part::GeomLineSegment``) so a closed wire can be drawn straight from file
+# and the kernel turns it into a face on recompute. 逆流到最上游.
+_SKETCH_TYPE = "Sketcher::SketchObject"
+
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
     """Append a ``Spreadsheet::PropertySheet`` ``cells`` property.
@@ -1092,6 +1159,41 @@ def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
         ET.SubElement(cells_el, "Cell",
                       {"address": "A%d" % row, "content": content,
                        "alias": alias})
+
+
+def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> None:
+    """Append a ``Part::PropertyGeometryList`` of line segments -- a sketch's
+    edges authored from file.
+
+    Each segment is ``{"start": [x, y], "end": [x, y], "construction": bool}``
+    and is written as a ``Part::GeomLineSegment`` (with the
+    ``Sketcher::SketchGeometryExtension`` FreeCAD attaches to every sketch edge),
+    so the kernel rebuilds the wire on recompute. Drawing a closed loop yields a
+    face the upstream pad/extrusion consumes.
+    """
+    prop = ET.SubElement(parent, "Property",
+                         {"name": "Geometry",
+                          "type": "Part::PropertyGeometryList",
+                          "status": "8192"})
+    glist = ET.SubElement(prop, "GeometryList", {"count": str(len(segments))})
+    for i, seg in enumerate(segments, start=1):
+        g = ET.SubElement(glist, "Geometry",
+                          {"type": "Part::GeomLineSegment", "id": str(i),
+                           "migrated": "1"})
+        exts = ET.SubElement(g, "GeoExtensions", {"count": "1"})
+        ET.SubElement(exts, "GeoExtension",
+                      {"type": "Sketcher::SketchGeometryExtension", "id": str(i),
+                       "internalGeometryType": "0",
+                       "geometryModeFlags": "0" * 32, "geometryLayer": "0"})
+        sx, sy = seg["start"]
+        ex, ey = seg["end"]
+        ET.SubElement(g, "LineSegment",
+                      {"StartX": "%.16f" % float(sx),
+                       "StartY": "%.16f" % float(sy), "StartZ": "%.16f" % 0.0,
+                       "EndX": "%.16f" % float(ex),
+                       "EndY": "%.16f" % float(ey), "EndZ": "%.16f" % 0.0})
+        ET.SubElement(g, "Construction",
+                      {"value": "1" if seg.get("construction") else "0"})
 
 
 def _placement_element(parent: ET.Element, position: "List[float]",
@@ -1180,12 +1282,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         otype = spec.get("type")
         if (otype not in _PRIMITIVES and otype not in _BOOLEANS
                 and otype not in _LINKLIST_TYPES and otype != _SHEET_TYPE
-                and otype != _MIRROR_TYPE):
+                and otype != _MIRROR_TYPE and otype != _SKETCH_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
                     set(_PRIMITIVES) | _BOOLEANS | set(_LINKLIST_TYPES)
-                    | {_SHEET_TYPE, _MIRROR_TYPE}))))
+                    | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -1264,6 +1366,38 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: mirror %s takes source/base/normal, not "
                     "properties" % name)
+        elif otype == _SKETCH_TYPE:
+            segs = spec.get("geometry")
+            if not isinstance(segs, list) or not segs:
+                raise ValueError(
+                    "synthesize: sketch %s needs a non-empty 'geometry' list of "
+                    "line segments" % name)
+            for j, seg in enumerate(segs):
+                if not isinstance(seg, dict):
+                    raise ValueError(
+                        "synthesize: sketch %s segment #%d must be a dict"
+                        % (name, j))
+                for ekey in ("start", "end"):
+                    pt = seg.get(ekey)
+                    if (not isinstance(pt, (list, tuple)) or len(pt) != 2
+                            or not all(isinstance(c, (int, float))
+                                       and not isinstance(c, bool) for c in pt)):
+                        raise ValueError(
+                            "synthesize: sketch %s segment #%d '%s' must be "
+                            "[x, y] numbers" % (name, j, ekey))
+                if (list(seg["start"]) == list(seg["end"])):
+                    raise ValueError(
+                        "synthesize: sketch %s segment #%d is degenerate "
+                        "(start == end)" % (name, j))
+                if ("construction" in seg
+                        and not isinstance(seg["construction"], bool)):
+                    raise ValueError(
+                        "synthesize: sketch %s segment #%d 'construction' must "
+                        "be a bool" % (name, j))
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: sketch %s takes 'geometry', not properties"
+                    % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -1319,7 +1453,9 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         ll_key = _LINKLIST_TYPES[otype][0] if is_linklist else None
         is_sheet = otype == _SHEET_TYPE
         is_mirror = otype == _MIRROR_TYPE
-        props = ({} if (is_bool or is_linklist or is_sheet or is_mirror)
+        is_sketch = otype == _SKETCH_TYPE
+        props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
+                        or is_sketch)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
@@ -1348,16 +1484,19 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         axis = placement.get("axis")
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
-        prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror)
+        prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
+                             or is_sketch)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
                       + (1 if is_linklist else 0) + (1 if is_sheet else 0)
-                      + (3 if is_mirror else 0))
+                      + (3 if is_mirror else 0) + (1 if is_sketch else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
             _cells_element(props_el, spec["cells"])
+        if is_sketch:
+            _geometry_element(props_el, spec["geometry"])
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
