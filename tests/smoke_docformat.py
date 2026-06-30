@@ -554,6 +554,48 @@ def main():
     print("docformat.synthesize: authored Part::MultiFuse over 3 cubes -> kernel "
           "folds union vol %g in one recompute (N-ary CSG from file)" % uvol)
 
+    # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
+    # author a document spanning every type the authoring layer writes -- a
+    # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
+    # N-ary boolean, and a spreadsheet -- then read it straight back out as a
+    # spec and re-author it; the two files must fingerprint identically. The
+    # author->read loop closing on every type: 反者道之动.
+    rt_a = os.path.join(OUT, "roundtrip_a.FCStd")
+    docformat.synthesize(rt_a, [
+        {"type": "Spreadsheet::Sheet", "name": "P",
+         "cells": {"side": 8, "twice": "=side * 2"}},
+        {"type": "Part::Box", "name": "Base",
+         "properties": {"Length": 1, "Width": 4, "Height": 4},
+         "expressions": {"Length": "P.twice"}},
+        {"type": "Part::Cylinder", "name": "Rod",
+         "properties": {"Radius": 2, "Height": 20},
+         "placement": {"position": [2, 2, 0], "axis": [0, 1, 0], "angle": 30}},
+        {"type": "Part::Cut", "name": "Carved", "base": "Base", "tool": "Rod"},
+        {"type": "Part::Box", "name": "X",
+         "properties": {"Length": 5, "Width": 5, "Height": 5}},
+        {"type": "Part::MultiFuse", "name": "All", "shapes": ["Carved", "X"]},
+    ])
+    spec_back = docformat.summarize(rt_a)
+    # the decompiled spec recovers every object, and the spreadsheet formula
+    # survives as a formula (not flattened to its computed number).
+    assert [s["name"] for s in spec_back] == [
+        "P", "Base", "Rod", "Carved", "X", "All"], spec_back
+    p_cells = next(s for s in spec_back if s["name"] == "P")["cells"]
+    assert p_cells == {"side": 8, "twice": "=side * 2"}, p_cells
+    rod = next(s for s in spec_back if s["name"] == "Rod")
+    # angle recovered from the persisted radians, which the parser rounds to 6
+    # decimals -- so a coarse tolerance, not exact equality.
+    assert "placement" in rod and abs(rod["placement"]["angle"] - 30) < 1e-3, rod
+    base = next(s for s in spec_back if s["name"] == "Base")
+    assert base["expressions"] == {"Length": "P.twice"}, base
+    rt_b = os.path.join(OUT, "roundtrip_b.FCStd")
+    docformat.synthesize(rt_b, spec_back)
+    assert docformat.fingerprint(rt_a) == docformat.fingerprint(rt_b), (
+        docformat.fingerprint(rt_a), docformat.fingerprint(rt_b))
+    print("docformat.summarize: decompiled %d-object file -> re-synthesized to "
+          "identical fingerprint (author<->read round-trip closes)"
+          % len(spec_back))
+
     # guarded: empty spec, unknown primitive, duplicate name, undefined property,
     # a boolean whose operand does not resolve, a degenerate rotation axis, a
     # spreadsheet with no cells, and an N-ary boolean with too few operands.
