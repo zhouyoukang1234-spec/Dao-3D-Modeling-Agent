@@ -977,6 +977,52 @@ def main():
     print("docformat ellipse: 10x5 tilted 25deg from one description -> "
           "closed wire area %g (single curved edge)" % ell_area)
 
+    # ---- arc_ellipse: a partial ellipse, composes into a closed D-shape -- #
+    # half an ellipse (0..pi) closed by the major-axis chord -- the elliptic
+    # fillet / D-profile a human sweeps as an ellipse arc + a tangent line. The
+    # two edges close into a D whose area is pi*M*m/2 = pi*10*5/2 = 78.54.
+    dgeom = [{"center": [0, 0], "major_radius": 10, "minor_radius": 5,
+              "start_angle": 0.0, "end_angle": math.pi},
+             {"start": [-10, 0], "end": [10, 0]}]
+    dspec = {"type": docformat._SKETCH_TYPE, "name": "DEll", "geometry": dgeom}
+    aoe_p = os.path.join(OUT, "synth_arc_ellipse.FCStd")
+    docformat.synthesize(aoe_p, [dspec])
+    aoe_rt = os.path.join(OUT, "synth_arc_ellipse_rt.FCStd")
+    docformat.synthesize(aoe_rt, docformat.summarize(aoe_p))
+    assert docformat.fingerprint(aoe_p) == docformat.fingerprint(aoe_rt)
+    aod = App.openDocument(aoe_p)
+    try:
+        for o in aod.Objects:
+            o.touch()
+        aod.recompute(None, True)
+        aoe_w = Part.Wire(
+            Part.__sortEdges__(aod.getObject("DEll").Shape.Edges))
+        aoe_closed = aoe_w.isClosed()
+        aoe_area = Part.Face(aoe_w).Area
+    finally:
+        App.closeDocument(aod.Name)
+    assert aoe_closed, "arc_ellipse D-shape wire must close"
+    assert abs(aoe_area - (math.pi * 10 * 5 / 2)) < 1e-6, aoe_area
+    # an arc_ellipse inherits the ellipse guards (major >= minor > 0).
+    for bad, token in (
+            ({"center": [0, 0], "major_radius": 3, "minor_radius": 5,
+              "start_angle": 0.0, "end_angle": 1.0},
+             "'major_radius' must be >= 'minor_radius'"),
+            ({"center": [0, 0], "major_radius": 5, "minor_radius": 0,
+              "start_angle": 0.0, "end_angle": 1.0},
+             "'minor_radius' must be positive")):
+        try:
+            docformat.synthesize(
+                os.path.join(OUT, "bad_aoe.FCStd"),
+                [{"type": docformat._SKETCH_TYPE, "name": "B",
+                  "geometry": [bad]}])
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % bad)
+    print("docformat arc_ellipse: half-ellipse 10x5 + chord -> closed D-shape "
+          "area %g (partial elliptic edge, tilt+round-trip exact)" % aoe_area)
+
     # ---- Part::Extrusion: sweep a sketch profile into a solid ------------ #
     # the join between the sketch layer and the solid layer: author a 10x5
     # rectangle sketch + an extrusion that sweeps it 7 along +Z. The kernel

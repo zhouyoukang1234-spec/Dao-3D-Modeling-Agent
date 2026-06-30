@@ -318,6 +318,7 @@ def _sketch_geometry(data_el: Optional[ET.Element]
             circ = g.find("Circle")
             arc = g.find("ArcOfCircle")
             ell = g.find("Ellipse")
+            aoe = g.find("ArcOfEllipse")
             if gtype == "Part::GeomLineSegment" and seg is not None:
                 entry["line"] = True
                 entry["start"] = [float(seg.get("StartX", 0)),
@@ -343,6 +344,15 @@ def _sketch_geometry(data_el: Optional[ET.Element]
                 entry["major_radius"] = float(ell.get("MajorRadius", 0))
                 entry["minor_radius"] = float(ell.get("MinorRadius", 0))
                 entry["angle"] = float(ell.get("AngleXU", 0))
+            elif gtype == "Part::GeomArcOfEllipse" and aoe is not None:
+                entry["arc_ellipse"] = True
+                entry["center"] = [float(aoe.get("CenterX", 0)),
+                                   float(aoe.get("CenterY", 0))]
+                entry["major_radius"] = float(aoe.get("MajorRadius", 0))
+                entry["minor_radius"] = float(aoe.get("MinorRadius", 0))
+                entry["angle"] = float(aoe.get("AngleXU", 0))
+                entry["start_angle"] = float(aoe.get("StartAngle", 0))
+                entry["end_angle"] = float(aoe.get("EndAngle", 0))
             cons = g.find("Construction")
             entry["construction"] = (cons is not None
                                       and cons.get("value") == "1")
@@ -653,6 +663,14 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                     seg = {"center": list(g["center"]),
                            "major_radius": g["major_radius"],
                            "minor_radius": g["minor_radius"]}
+                    if g.get("angle"):
+                        seg["angle"] = g["angle"]
+                elif g.get("arc_ellipse"):
+                    seg = {"center": list(g["center"]),
+                           "major_radius": g["major_radius"],
+                           "minor_radius": g["minor_radius"],
+                           "start_angle": g["start_angle"],
+                           "end_angle": g["end_angle"]}
                     if g.get("angle"):
                         seg["angle"] = g["angle"]
                 else:
@@ -1250,15 +1268,21 @@ def _sketch_segment_kind(seg: "Dict[str, Any]") -> "Optional[str]":
 
     The form is discriminated by which keys are present: a ``line`` has
     ``start``/``end`` endpoints; an ``arc`` adds ``start_angle``/``end_angle`` to
-    a ``center``/``radius``; an ``ellipse`` carries ``major_radius`` /
-    ``minor_radius``; a ``circle`` is the bare ``center``/``radius``.
+    a ``center``/``radius``; an ``arc_ellipse`` carries ``major_radius`` /
+    ``minor_radius`` *and* ``start_angle``/``end_angle``; an ``ellipse`` carries
+    ``major_radius`` / ``minor_radius`` only; a ``circle`` is the bare
+    ``center``/``radius``.
     Returns ``None`` if no form matches so callers can raise a guided error.
     """
+    has_axes = "major_radius" in seg or "minor_radius" in seg
+    has_sweep = "start_angle" in seg or "end_angle" in seg
     if "start" in seg or "end" in seg:
         return "line"
-    if "start_angle" in seg or "end_angle" in seg:
+    if has_axes and has_sweep:
+        return "arc_ellipse"
+    if has_sweep:
         return "arc"
-    if "major_radius" in seg or "minor_radius" in seg:
+    if has_axes:
         return "ellipse"
     if "center" in seg or "radius" in seg:
         return "circle"
@@ -1282,6 +1306,8 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
     * ellipse -- ``{"center": [x, y], "major_radius": M, "minor_radius": m,
       "angle": t}`` (``angle`` is the major-axis tilt from +X in radians,
       default 0) -> ``Part::GeomEllipse``
+    * arc_ellipse -- an ``ellipse`` spec plus ``start_angle``/``end_angle``
+      (radians, swept on the ellipse's own parameter) -> ``Part::GeomArcOfEllipse``
     """
     prop = ET.SubElement(parent, "Property",
                          {"name": "Geometry",
@@ -1293,7 +1319,8 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
         gtype = {"line": "Part::GeomLineSegment",
                  "circle": "Part::GeomCircle",
                  "arc": "Part::GeomArcOfCircle",
-                 "ellipse": "Part::GeomEllipse"}[kind]
+                 "ellipse": "Part::GeomEllipse",
+                 "arc_ellipse": "Part::GeomArcOfEllipse"}[kind]
         g = ET.SubElement(glist, "Geometry",
                           {"type": gtype, "id": str(i), "migrated": "1"})
         exts = ET.SubElement(g, "GeoExtensions", {"count": "1"})
@@ -1309,16 +1336,21 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
                            "StartY": "%.16f" % float(sy), "StartZ": "%.16f" % 0.0,
                            "EndX": "%.16f" % float(ex),
                            "EndY": "%.16f" % float(ey), "EndZ": "%.16f" % 0.0})
-        elif kind == "ellipse":
+        elif kind in ("ellipse", "arc_ellipse"):
             cx, cy = seg["center"]
-            ET.SubElement(g, "Ellipse",
-                          {"CenterX": "%.16f" % float(cx),
-                           "CenterY": "%.16f" % float(cy), "CenterZ": "%.16f" % 0.0,
-                           "NormalX": "%.16f" % 0.0, "NormalY": "%.16f" % 0.0,
-                           "NormalZ": "%.16f" % 1.0,
-                           "MajorRadius": "%.16f" % float(seg["major_radius"]),
-                           "MinorRadius": "%.16f" % float(seg["minor_radius"]),
-                           "AngleXU": "%.16f" % float(seg.get("angle", 0.0))})
+            attrs = {"CenterX": "%.16f" % float(cx),
+                     "CenterY": "%.16f" % float(cy), "CenterZ": "%.16f" % 0.0,
+                     "NormalX": "%.16f" % 0.0, "NormalY": "%.16f" % 0.0,
+                     "NormalZ": "%.16f" % 1.0,
+                     "MajorRadius": "%.16f" % float(seg["major_radius"]),
+                     "MinorRadius": "%.16f" % float(seg["minor_radius"]),
+                     "AngleXU": "%.16f" % float(seg.get("angle", 0.0))}
+            if kind == "arc_ellipse":
+                attrs["StartAngle"] = "%.16f" % float(seg["start_angle"])
+                attrs["EndAngle"] = "%.16f" % float(seg["end_angle"])
+                ET.SubElement(g, "ArcOfEllipse", attrs)
+            else:
+                ET.SubElement(g, "Ellipse", attrs)
         else:
             cx, cy = seg["center"]
             attrs = {"CenterX": "%.16f" % float(cx),
@@ -1623,7 +1655,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                         raise ValueError(
                             "synthesize: sketch %s segment #%d is degenerate "
                             "(start == end)" % (name, j))
-                elif kind == "ellipse":
+                elif kind in ("ellipse", "arc_ellipse"):
                     _pt2(seg.get("center"), j, "center")
                     _num(seg.get("major_radius"), j, "major_radius")
                     _num(seg.get("minor_radius"), j, "minor_radius")
@@ -1637,6 +1669,9 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                             "must be >= 'minor_radius'" % (name, j))
                     if "angle" in seg:
                         _num(seg.get("angle"), j, "angle")
+                    if kind == "arc_ellipse":
+                        _num(seg.get("start_angle"), j, "start_angle")
+                        _num(seg.get("end_angle"), j, "end_angle")
                 else:
                     _pt2(seg.get("center"), j, "center")
                     _num(seg.get("radius"), j, "radius")
