@@ -83,11 +83,12 @@ def main():
     assert m.data["bbox_size"] == meta["bbox_size"], (m.data["bbox_size"], meta)
     assert m.data["inertia_axis"] > 0, m.data
 
-    # ---- a flanged bracket at fresh dimensions through the same path ------ #
+    # ---- a flanged bracket at fresh dimensions, self-verified ------------- #
     s2 = new_session("recipes2")
-    rb = s2.make("flanged_bracket", length=100, width=60, height=12,
+    rb = s2.make("flanged_bracket", verify=True, length=100, width=60, height=12,
                  boss_r=10, boss_h=16, bore_r=5, hole_r=4, hole_inset=12)
     assert rb.ok and rb.data["failed"] == 0, rb.data
+    assert rb.data["verified"] and not rb.data["mismatches"], rb.data
     part = rb.data["meta"]["part"]
     meas = s2.act("solid.measure", {"name": part})
     assert meas.ok and meas.data["valid"], meas
@@ -106,6 +107,13 @@ def main():
     bom3 = s3.act("asm.bom", {})
     assert bom3.data["component_count"] == 5, bom3.data        # 2 + base/bolt/nut
     s3.registry.kernel.shutdown()
+
+    # ---- assembly recipe self-verifies against its own closed-form meta --- #
+    s4 = new_session("recipes4")
+    rv = s4.make("bolted_stack", verify=True, n_spacers=2)
+    assert rv.ok and rv.data["verified"], rv.data
+    assert not rv.data["mismatches"] and rv.data["failed"] == 0, rv.data
+    s4.registry.kernel.shutdown()
 
     print("recipe library: bolted_stack(n=5,custom) vol %.2f bbox %s clash-free; "
           "flanged_bracket(100x60) vol %.2f -- recipes generalise" % (

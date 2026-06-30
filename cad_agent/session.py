@@ -99,7 +99,8 @@ class AgentSession:
                                   executed=executed, failed=failed)
 
     # -- recipes (parametric, reusable orchestration) --------------------- #
-    def make(self, recipe: str, **params: Any) -> ToolResult:
+    def make(self, recipe: str, verify: bool = False, tol: float = 1e-2,
+             **params: Any) -> ToolResult:
         """Expand a parametric recipe (:mod:`cad_agent.recipes`) into tool steps
         and run them on the live kernel -- the reusable counterpart to
         :meth:`build`, where the plan comes from a named, parameterised generator
@@ -107,6 +108,13 @@ class AgentSession:
         as skipped (orchestration degrades gracefully), and the recipe's
         closed-form ``meta`` is returned alongside the transcript so a caller can
         verify the result without re-deriving the expectations.
+
+        With ``verify=True`` the act loop is closed automatically: once every
+        step runs, the built result is *perceived* on the kernel and checked
+        against the recipe's own closed-form ``meta`` (volume, bounding box,
+        component count). The recipe thus becomes self-validating -- the same
+        check for any recipe at any parameters -- and ``failed`` is bumped on a
+        mismatch so a green ``make`` means "built AND physically correct".
         """
         from . import recipes
         try:
@@ -127,8 +135,57 @@ class AgentSession:
                 executed += 1
             else:
                 failed += 1
-        return ToolResult.success(recipe=rec.name, meta=rec.meta, steps=steps_out,
-                                  planned=len(rec.steps), executed=executed, failed=failed)
+        out: Dict[str, Any] = {"recipe": rec.name, "meta": rec.meta, "steps": steps_out,
+                               "planned": len(rec.steps), "executed": executed,
+                               "failed": failed}
+        if verify and failed == 0:
+            ver = self._verify_recipe(rec.meta, tol)
+            out["verified"] = ver["verified"]
+            out["mismatches"] = ver["mismatches"]
+            if not ver["verified"]:
+                out["failed"] = failed + len(ver["mismatches"])
+        return ToolResult.success(**out)
+
+    def _verify_recipe(self, meta: Dict[str, Any], tol: float) -> Dict[str, Any]:
+        """Perceive the just-built result and compare it to a recipe's closed-form
+        ``meta``. Assemblies are read through ``asm.*``; single parts through
+        ``solid.*`` / ``analyze.*`` -- the ``meta`` shape (an ``assembly`` vs a
+        ``part`` key) selects which, so one routine covers every recipe."""
+        mism: Dict[str, Any] = {}
+
+        def _close(have: Any, want: Any) -> bool:
+            if isinstance(want, list):
+                return (isinstance(have, list) and len(have) == len(want)
+                        and all(_close(h, w) for h, w in zip(have, want)))
+            if isinstance(want, (int, float)):
+                return have is not None and abs(float(have) - float(want)) <= \
+                    tol * max(1.0, abs(float(want)))
+            return have == want
+
+        def _check(label: str, have: Any, want: Any) -> None:
+            if not _close(have, want):
+                mism[label] = {"want": want, "got": have}
+
+        if "assembly" in meta:
+            m = self.act("asm.measure", {})
+            if m.ok:
+                _check("volume", m.data.get("volume"), meta.get("total_volume"))
+                _check("bbox_size", m.data.get("bbox_size"), meta.get("bbox_size"))
+                _check("components", m.data.get("components"), meta.get("component_count"))
+            else:
+                mism["measure"] = m.error
+        elif "part" in meta:
+            m = self.act("solid.measure", {"name": meta["part"]})
+            if m.ok:
+                _check("volume", m.data.get("volume"), meta.get("volume"))
+            else:
+                mism["measure"] = m.error
+            bb = self.act("analyze.bbox", {"name": meta["part"]})
+            if bb.ok:
+                _check("bbox_size", bb.data.get("size"), meta.get("bbox_size"))
+            else:
+                mism["bbox"] = bb.error
+        return {"verified": not mism, "mismatches": mism}
 
     # -- perception -------------------------------------------------------- #
     def perceive(self, name: str) -> ToolResult:
