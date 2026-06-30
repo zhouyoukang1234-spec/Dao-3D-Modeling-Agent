@@ -429,16 +429,47 @@ def main():
     print("docformat.synthesize: authored parametric edge Bx2.Height=Cyl.Radius*2"
           " -> kernel evaluates to %.0f (file-first parametric)" % bx2_h)
 
-    # guarded: empty spec, unknown primitive, duplicate name, undefined property.
+    # ---- synthesize boolean: a CSG tree authored from nothing ------------ #
+    # a box minus a centred cylinder, authored straight to file as a Part::Cut
+    # whose base/tool link two primitives; the object-link DAG is recovered from
+    # the file, and the kernel performs the boolean on recompute.
+    csg_p = os.path.join(OUT, "synth_csg.FCStd")
+    docformat.synthesize(csg_p, [
+        {"type": "Part::Box", "name": "Base",
+         "properties": {"Length": 10, "Width": 10, "Height": 10}},
+        {"type": "Part::Cylinder", "name": "Tool",
+         "properties": {"Radius": 3, "Height": 20},
+         "placement": {"position": [5, 5, -5]}},
+        {"type": "Part::Cut", "name": "Cut", "base": "Base", "tool": "Tool"},
+    ])
+    csg_ix = docformat.inspect_document(csg_p)
+    assert csg_ix["type_counts"].get("Part::Cut") == 1, csg_ix["type_counts"]
+    assert csg_ix["dependencies"]["Cut"] == ["Base", "Tool"], csg_ix["dependencies"]
+    cd = App.openDocument(csg_p)
+    try:
+        for o in cd.Objects:
+            o.touch()
+        cd.recompute(None, True)
+        cut_vol = cd.getObject("Cut").Shape.Volume
+    finally:
+        App.closeDocument(cd.Name)
+    assert abs(cut_vol - (1000 - math.pi * 9 * 10)) < 1e-3, cut_vol
+    print("docformat.synthesize: authored CSG Cut(Base-Tool) -> kernel carves "
+          "vol %.1f (file-first constructive solid geometry)" % cut_vol)
+
+    # guarded: empty spec, unknown primitive, duplicate name, undefined property,
+    # and a boolean whose operand does not resolve.
     _sy = docformat.synthesize
     bad = os.path.join(OUT, "synth_bad.FCStd")
     for spec, token in (
             ([], "non-empty list"),
-            ([{"type": "Part::Widget", "name": "X"}], "unknown primitive"),
+            ([{"type": "Part::Widget", "name": "X"}], "unknown type"),
             ([{"type": "Part::Box", "name": "D"},
               {"type": "Part::Box", "name": "D"}], "duplicate"),
             ([{"type": "Part::Box", "name": "B",
-               "properties": {"Radius": 3}}], "no propert")):
+               "properties": {"Radius": 3}}], "no propert"),
+            ([{"type": "Part::Cut", "name": "C", "base": "P", "tool": "Q"}],
+             "not a defined object")):
         try:
             _sy(bad, spec)
         except ValueError as exc:

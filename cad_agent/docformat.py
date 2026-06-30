@@ -837,6 +837,12 @@ _PRIMITIVES: "Dict[str, Dict[str, str]]" = {
 _FLOAT_PROP_TYPES = {"App::PropertyLength", "App::PropertyAngle",
                      "App::PropertyFloat", "App::PropertyDistance"}
 
+# The Part boolean operators -- each is a ``Part::Boolean`` taking a ``Base`` and
+# a ``Tool`` link to two other objects, and the kernel performs the CSG on
+# recompute. Authoring these from file builds a constructive-solid-geometry tree
+# (an object-link DAG), the dual of the primitive leaves above.
+_BOOLEANS = {"Part::Cut", "Part::Fuse", "Part::Common"}
+
 
 def _placement_element(parent: ET.Element, position: "List[float]") -> None:
     """Append a translation-only ``Placement`` property (identity rotation)."""
@@ -864,11 +870,19 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     formula}?}``. ``expressions`` author an ``ExpressionEngine`` per object --
     so a *parametric* model can be written from nothing, e.g. one primitive's
     dimension bound to ``"Other.Radius * 2"``; the cross-object references are
-    resolved into dependency edges in ``ObjectDeps``. Only the Part
-    primitives in ``_PRIMITIVES`` are accepted -- their ``execute()`` rebuilds
-    the Shape from these scalars, so the file needs no BREP: the kernel
-    generates the geometry on its first ``recompute(force=True)`` (after a
-    ``touch()``, since a freshly loaded object reports up-to-date).
+    resolved into dependency edges in ``ObjectDeps``.
+
+    A spec may instead be a boolean ``{"type": <Part boolean>, "name": str,
+    "base": <name>, "tool": <name>, "expressions": ...?}`` (``Part::Cut`` /
+    ``Part::Fuse`` / ``Part::Common``), whose ``base``/``tool`` link two other
+    objects -- so a whole constructive-solid-geometry tree can be authored from
+    nothing, the kernel performing the CSG on recompute.
+
+    Only the Part primitives in ``_PRIMITIVES`` and the booleans in
+    ``_BOOLEANS`` are accepted -- their ``execute()`` rebuilds the Shape from
+    these scalars/links, so the file needs no BREP: the kernel generates the
+    geometry on its first ``recompute(force=True)`` (after a ``touch()``, since
+    a freshly loaded object reports up-to-date).
 
     Writes a single ``Document.xml`` (no geometry files) and returns
     ``{out, objects: [names], object_count}``. Raises ``ValueError`` for an
@@ -886,26 +900,40 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     for idx, spec in enumerate(objects, start=1):
         if not isinstance(spec, dict):
             raise ValueError("synthesize: object #%d must be a dict" % idx)
-        if spec.get("type") not in _PRIMITIVES:
+        otype = spec.get("type")
+        if otype not in _PRIMITIVES and otype not in _BOOLEANS:
             raise ValueError(
-                "synthesize: object #%d has unknown primitive type %r "
-                "(supported: %s)"
-                % (idx, spec.get("type"), ", ".join(sorted(_PRIMITIVES))))
+                "synthesize: object #%d has unknown type %r (supported: %s)"
+                % (idx, otype, ", ".join(sorted(set(_PRIMITIVES) | _BOOLEANS))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
         if name in seen:
             raise ValueError("synthesize: duplicate object name %r" % name)
         seen.add(name)
-        props = spec.get("properties") or {}
-        if not isinstance(props, dict):
-            raise ValueError("synthesize: %r properties must be a dict" % name)
-        unknown = sorted(set(props) - set(_PRIMITIVES[spec["type"]]))
-        if unknown:
-            raise ValueError(
-                "synthesize: %s (%s) has no propert%s %s (defines: %s)"
-                % (name, spec["type"], "y" if len(unknown) == 1 else "ies",
-                   ", ".join(unknown), ", ".join(sorted(_PRIMITIVES[spec["type"]]))))
+        if otype in _BOOLEANS:
+            for role in ("base", "tool"):
+                ref = spec.get(role)
+                if not isinstance(ref, str) or not ref.strip():
+                    raise ValueError(
+                        "synthesize: boolean %s (%s) needs a %r object name"
+                        % (name, otype, role))
+                if ref == name:
+                    raise ValueError(
+                        "synthesize: boolean %s cannot reference itself" % name)
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: boolean %s takes base/tool, not properties" % name)
+        else:
+            props = spec.get("properties") or {}
+            if not isinstance(props, dict):
+                raise ValueError("synthesize: %r properties must be a dict" % name)
+            unknown = sorted(set(props) - set(_PRIMITIVES[otype]))
+            if unknown:
+                raise ValueError(
+                    "synthesize: %s (%s) has no propert%s %s (defines: %s)"
+                    % (name, otype, "y" if len(unknown) == 1 else "ies",
+                       ", ".join(unknown), ", ".join(sorted(_PRIMITIVES[otype]))))
         exprs = spec.get("expressions") or {}
         if not isinstance(exprs, dict) or not all(
                 isinstance(k, str) and isinstance(v, str) for k, v in exprs.items()):
@@ -914,6 +942,14 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 % name)
 
     all_names = [s["name"] for s in objects]
+    # boolean operands must resolve to real objects in the same document.
+    for spec in objects:
+        if spec["type"] in _BOOLEANS:
+            for role in ("base", "tool"):
+                if spec[role] not in all_names:
+                    raise ValueError(
+                        "synthesize: boolean %s %s=%r is not a defined object"
+                        % (spec["name"], role, spec[role]))
 
     root = ET.Element("Document", {"SchemaVersion": schema_version,
                                    "ProgramVersion": program_version,
@@ -926,15 +962,21 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
 
     for idx, spec in enumerate(objects, start=1):
         name, otype = spec["name"], spec["type"]
-        schema = _PRIMITIVES[otype]
-        props = spec.get("properties") or {}
+        is_bool = otype in _BOOLEANS
+        props = {} if is_bool else (spec.get("properties") or {})
         exprs = spec.get("expressions") or {}
-        # an object depends on every *other* object referenced in its formulae.
-        deps = [other for other in all_names if other != name and any(
-            re.search(r"\b%s\b" % re.escape(other), f) for f in exprs.values())]
+        # links: an explicit DAG (boolean operands) plus every *other* object
+        # referenced in a formula -- together the object's dependency edges.
+        links = [spec["base"], spec["tool"]] if is_bool else []
+        dep_set = list(links)
+        for other in all_names:
+            if other != name and other not in dep_set and any(
+                    re.search(r"\b%s\b" % re.escape(other), f)
+                    for f in exprs.values()):
+                dep_set.append(other)
         dep_el = ET.SubElement(objs_el, "ObjectDeps",
-                               {"Name": name, "Count": str(len(deps))})
-        for dep in deps:
+                               {"Name": name, "Count": str(len(dep_set))})
+        for dep in dep_set:
             ET.SubElement(dep_el, "Dep", {"Name": dep})
         ET.SubElement(objs_el, "Object",
                       {"type": otype, "name": name, "id": str(idx)})
@@ -942,10 +984,17 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         od = ET.SubElement(data_el, "Object", {"name": name})
         placement = spec.get("placement") or {}
         position = placement.get("position") if isinstance(placement, dict) else None
-        prop_items = [(p, schema[p], v) for p, v in props.items()]
-        prop_count = len(prop_items) + (1 if position else 0) + (1 if exprs else 0)
+        prop_items = ([] if is_bool
+                      else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
+        prop_count = (len(prop_items) + (1 if position else 0)
+                      + (1 if exprs else 0) + (2 if is_bool else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
+        if is_bool:
+            for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
+                lp = ET.SubElement(props_el, "Property",
+                                   {"name": role_name, "type": "App::PropertyLink"})
+                ET.SubElement(lp, "Link", {"value": ref})
         if exprs:
             ee = ET.SubElement(props_el, "Property",
                                {"name": "ExpressionEngine",
