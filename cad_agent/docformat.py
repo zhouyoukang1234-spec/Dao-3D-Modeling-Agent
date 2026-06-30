@@ -1984,6 +1984,56 @@ def regular_polygon(
     return {"type": _SKETCH_TYPE, "name": name, "geometry": geometry}
 
 
+def slot(
+    name: str,
+    length: float,
+    radius: float,
+    center: "Optional[List[float]]" = None,
+    construction: bool = False,
+) -> "Dict[str, Any]":
+    """Generate a closed slot (obround / stadium) as a sketch spec.
+
+    Two semicircle ends of ``radius`` centred ``length`` apart along X (centres
+    at ``center`` +/- ``length/2``) are joined by the two tangent straight
+    flanks, giving the rounded slot a human builds from two lines + two arcs +
+    tangency constraints. Here the four edges and their exact arc angles are
+    computed from one ``(length, radius)`` description -- author it directly or
+    sweep/extrude it. The enclosed area is ``2*length*radius + pi*radius**2``.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("slot: needs a non-empty name")
+    if (isinstance(length, bool) or not isinstance(length, (int, float))
+            or length <= 0):
+        raise ValueError("slot: 'length' must be a positive number")
+    if (isinstance(radius, bool) or not isinstance(radius, (int, float))
+            or radius <= 0):
+        raise ValueError("slot: 'radius' must be a positive number")
+    if center is None:
+        center = [0.0, 0.0]
+    if (not isinstance(center, (list, tuple)) or len(center) != 2
+            or not all(isinstance(c, (int, float)) and not isinstance(c, bool)
+                       for c in center)):
+        raise ValueError("slot: 'center' must be [x, y] numbers")
+    if not isinstance(construction, bool):
+        raise ValueError("slot: 'construction' must be a bool")
+    cx, cy = float(center[0]), float(center[1])
+    r = float(radius)
+    hl = float(length) / 2.0
+    lx, rx = cx - hl, cx + hl
+    geometry: List[Dict[str, Any]] = [
+        {"start": [lx, cy + r], "end": [rx, cy + r]},
+        {"center": [rx, cy], "radius": r,
+         "start_angle": -math.pi / 2, "end_angle": math.pi / 2},
+        {"start": [rx, cy - r], "end": [lx, cy - r]},
+        {"center": [lx, cy], "radius": r,
+         "start_angle": math.pi / 2, "end_angle": 3 * math.pi / 2},
+    ]
+    if construction:
+        for seg in geometry:
+            seg["construction"] = True
+    return {"type": _SKETCH_TYPE, "name": name, "geometry": geometry}
+
+
 def _rodrigues(v: "List[float]", axis: "List[float]", angle_deg: float) -> "List[float]":
     """Rotate vector ``v`` about ``axis`` by ``angle_deg`` degrees (right-hand
     rule), via Rodrigues' formula. ``axis`` need not be unit -- it is normalised

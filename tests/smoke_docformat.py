@@ -899,6 +899,43 @@ def main():
           "description -> area %g, extruded to prism volume %g (做人类靠重复才能做的)"
           % (hex_area, prism_vol))
 
+    # ---- slot: an obround from two lines + two arcs, one description ------ #
+    # a rounded slot the human builds from two flanks, two end arcs and tangency
+    # constraints -- here the four edges and exact arc angles come from one
+    # (length, radius) description, exercising mixed line+arc geometry. The
+    # enclosed area is 2*length*radius + pi*radius^2 = 2*20*5 + pi*25 = 278.54.
+    slotg = docformat.slot("Slot", 20, 5)
+    assert len(slotg["geometry"]) == 4, slotg
+    slot_p = os.path.join(OUT, "synth_slot.FCStd")
+    docformat.synthesize(slot_p, [slotg])
+    slot_rt = os.path.join(OUT, "synth_slot_rt.FCStd")
+    docformat.synthesize(slot_rt, docformat.summarize(slot_p))
+    assert docformat.fingerprint(slot_p) == docformat.fingerprint(slot_rt)
+    sld = App.openDocument(slot_p)
+    try:
+        for o in sld.Objects:
+            o.touch()
+        sld.recompute(None, True)
+        slot_w = Part.Wire(Part.__sortEdges__(sld.getObject("Slot").Shape.Edges))
+        slot_closed = slot_w.isClosed()
+        slot_area = Part.Face(slot_w).Area
+    finally:
+        App.closeDocument(sld.Name)
+    assert slot_closed, "slot wire must close"
+    assert abs(slot_area - (2 * 20 * 5 + math.pi * 25)) < 1e-6, slot_area
+    for kwargs, token in (
+            (dict(name="S", length=0, radius=5), "'length' must be a positive"),
+            (dict(name="S", length=20, radius=0), "'radius' must be a positive"),
+            (dict(name="", length=20, radius=5), "non-empty name")):
+        try:
+            docformat.slot(**kwargs)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % kwargs)
+    print("docformat slot: obround length 20 radius 5 from one description -> "
+          "closed wire area %g (line+arc mixed profile)" % slot_area)
+
     # ---- Part::Extrusion: sweep a sketch profile into a solid ------------ #
     # the join between the sketch layer and the solid layer: author a 10x5
     # rectangle sketch + an extrusion that sweeps it 7 along +Z. The kernel
@@ -1171,10 +1208,28 @@ def main():
         App.closeDocument(nd.Name)
     assert abs(pent_area - 0.5 * 5 * 64 * math.sin(2 * math.pi / 5)) < 1e-6, \
         pent_area
+    # the op also generates a slot (mixed line+arc obround) straight to a file.
+    op_slot = os.path.join(OUT, "op_slot.FCStd")
+    sf = s.act("doc.profile", {
+        "shape": "slot", "name": "Slot", "length": 30, "radius": 6,
+        "path": op_slot})
+    assert sf.ok and sf.data["out"] == op_slot, sf
+    assert len(sf.data["object"]["geometry"]) == 4, sf.data
+    sld2 = App.openDocument(op_slot)
+    try:
+        for o in sld2.Objects:
+            o.touch()
+        sld2.recompute(None, True)
+        slot2_w = Part.Wire(
+            Part.__sortEdges__(sld2.getObject("Slot").Shape.Edges))
+        slot2_area = Part.Face(slot2_w).Area
+    finally:
+        App.closeDocument(sld2.Name)
+    assert abs(slot2_area - (2 * 30 * 6 + math.pi * 36)) < 1e-6, slot2_area
     assert not s.act("doc.profile", {"shape": "blob", "name": "X"}).ok
-    print("doc.profile: pentagon radius 8 generated + synthesized from one "
-          "description -> closed wire area %g (profile generation as an agent op)"
-          % pent_area)
+    print("doc.profile: pentagon radius 8 (area %g) + slot 30x6 (area %g) "
+          "generated+synthesized from one description each (profile generation "
+          "as an agent op)" % (pent_area, slot2_area))
 
     # ---- two-layer fusion: the live kernel agrees with the file ---------- #
     # ss.bindings reads the same ExpressionEngine wiring from the *running*
