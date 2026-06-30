@@ -251,6 +251,20 @@ def main():
     print("docformat: %d expression(s), edges=%s -- parametric wiring from file"
           % (ix["expression_count"], ix["expression_edges"]))
 
+    # ---- two-layer fusion: the live kernel agrees with the file ---------- #
+    # ss.bindings reads the same ExpressionEngine wiring from the *running*
+    # document; it must match what the file-level parser recovered -- the two
+    # views of the parametric graph are one truth.
+    kb = x.act("ss.bindings", {})
+    assert kb.ok, kb
+    assert kb.data["count"] == ix["expression_count"], (kb.data, ix["expression_count"])
+    assert sorted(kb.data["edges"]) == sorted(ix["expression_edges"]), (
+        kb.data["edges"], ix["expression_edges"])
+    k_pad = {e["path"]: e["formula"] for e in kb.data["bindings"]["Pad"]}
+    assert k_pad == bound, (k_pad, bound)
+    print("ss.bindings: kernel expression graph == file-level parse (two layers, "
+          "one truth)")
+
     # re-point the binding to a different alias: a parametric-intent change that
     # the structured diff names explicitly (not just an opaque blob value flip).
     assert x.act("ss.bind", {"param": "Pad.length", "alias": "pwid"}).ok
