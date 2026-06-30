@@ -132,6 +132,14 @@ class Planner:
         if rp:
             return rp
 
+        # recipe-before-primitive: a named, parameterised assembly/part the
+        # system already knows how to build (the distilled wisdom) -- e.g.
+        # "a bolted stack with 5 spacers" -> the bolted_stack recipe, instead
+        # of asking the user to hand-script a dozen primitives.
+        rec = self._recipe(t, raw)
+        if rec:
+            return rec
+
         # delete
         m = re.search(r"\b(?:delete|remove|drop)\s+([A-Za-z_]\w*)", t)
         if m:
@@ -393,6 +401,34 @@ class Planner:
             return Plan(steps=[{"tool": "solid.pattern_linear",
                                 "args": {"name": name, "count": count, "step": vec}}],
                         note="linear pattern %s x%d" % (name, count))
+        return None
+
+    def _recipe(self, t: str, raw: str) -> Optional[Plan]:
+        """Route a named recipe (``cad_agent.recipes``) from natural language,
+        pulling out the few parameters a brief usually carries (a spacer count,
+        a plate size) and leaving the rest at the recipe's defaults. Emits a
+        ``recipe`` pseudo-step that :meth:`AgentSession.build` expands."""
+        if (re.search(r"\b(?:bolt(?:ed)?|spacer|washer)\s+stack\b", t)
+                or re.search(r"螺栓.{0,2}堆叠|垫片.{0,2}堆叠|螺栓垫片", raw)):
+            params: Dict[str, Any] = {}
+            m = (re.search(r"(\d+)\s*(?:spacers?|washers?)", t)
+                 or re.search(r"(\d+)\s*(?:个)?(?:垫片|华司)", raw))
+            if m:
+                params["n_spacers"] = int(m.group(1))
+            sz = _kv(t, "plate", "plate_size", "size")
+            if sz:
+                params["plate_size"] = sz
+            return Plan(steps=[{"tool": "recipe",
+                                "args": {"name": "bolted_stack", "params": params}}],
+                        note="recipe bolted_stack%s" % (
+                            " (n_spacers=%d)" % params["n_spacers"]
+                            if "n_spacers" in params else ""))
+        if (re.search(r"\b(?:flanged|mounting)\s+bracket\b", t)
+                or re.search(r"\bbracket\b", t)
+                or re.search(r"法兰支架|安装支架|支架", raw)):
+            return Plan(steps=[{"tool": "recipe",
+                                "args": {"name": "flanged_bracket", "params": {}}}],
+                        note="recipe flanged_bracket")
         return None
 
 

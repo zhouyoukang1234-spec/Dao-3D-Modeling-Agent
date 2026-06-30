@@ -9,6 +9,7 @@ component, not a one-off. Pure-text recipe-expansion (no kernel) is checked too,
 including the guided-error contract on bad parameters.
 """
 from cad_agent import new_session, recipes
+from cad_agent.planner import Planner
 
 
 def _approx(a, b, tol=1.0):
@@ -37,6 +38,22 @@ def main():
         raise AssertionError("expected unknown-recipe error")
     except ValueError as exc:
         assert "unknown recipe" in str(exc), exc
+
+    # ---- NL routes to a recipe (the wisdom reachable from plain text) ---- #
+    pl = Planner()
+    pn = pl.plan("build a bolted stack with 5 spacers")
+    assert pn.steps and pn.steps[0]["tool"] == "recipe", pn
+    assert pn.steps[0]["args"] == {"name": "bolted_stack",
+                                   "params": {"n_spacers": 5}}, pn.steps
+    pb = pl.plan("螺栓垫片堆叠 3 个垫片")
+    assert pb.steps[0]["args"]["name"] == "bolted_stack", pb.steps
+    assert pb.steps[0]["args"]["params"].get("n_spacers") == 3, pb.steps
+    pbr = pl.plan("make a mounting bracket")
+    assert pbr.steps[0]["args"]["name"] == "flanged_bracket", pbr.steps
+    # the recipe router must not poach ordinary modelling/measuring intents.
+    assert pl.plan("box 20x10x5").steps[0]["tool"] == "solid.box"
+    assert pl.plan("measure plate").steps[0]["tool"] == "solid.measure"
+    assert pl.plan("cylinder r=5 h=20").steps[0]["tool"] != "recipe"
 
     # ---- run a 5-spacer stack at non-default sizes on the live kernel ----- #
     s = new_session("recipes")
@@ -78,6 +95,17 @@ def main():
         (meas.data["volume"], rb.data["meta"]["volume"])
     bb = s2.act("analyze.bbox", {"name": part})
     assert bb.ok and bb.data["size"] == rb.data["meta"]["bbox_size"], bb.data
+
+    # ---- end-to-end: plain text -> build() -> recipe pseudo-step -> kernel  #
+    s3 = new_session("recipes3")
+    bt = s3.build("bolted stack with 2 spacers")
+    assert bt.ok, bt.error
+    rstep = bt.data["transcript"][0]["steps"][0]
+    assert rstep["tool"] == "recipe" and rstep["ok"], rstep
+    assert rstep["executed"] == rstep["planned"] and rstep["executed"] > 0, rstep
+    bom3 = s3.act("asm.bom", {})
+    assert bom3.data["component_count"] == 5, bom3.data        # 2 + base/bolt/nut
+    s3.registry.kernel.shutdown()
 
     print("recipe library: bolted_stack(n=5,custom) vol %.2f bbox %s clash-free; "
           "flanged_bracket(100x60) vol %.2f -- recipes generalise" % (
