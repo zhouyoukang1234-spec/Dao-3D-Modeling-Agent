@@ -441,10 +441,76 @@ def register(state):
                 out["export_error"] = str(exc)
         return out
 
+    def op_draw_project(a):
+        """Project a solid to 2D visible/hidden edges (page-free line drawing).
+
+        TechDraw.project gives a real hidden-line projection without building a
+        DrawPage; the visible-edge compound is registered as a first-class shape
+        so downstream 2D ops can consume it. args: name (solid), view
+        (front/top/right/iso/... OR omit and pass direction [x,y,z]),
+        out (visible-edge shape name), path (optional .dxf export).
+        """
+        import TechDraw
+        base = _named_shape(a.get("name", a.get("source")), "draw.project 'name'")
+        if base is None or base.isNull():
+            raise ValueError("draw.project: source has no shape")
+        if a.get("direction") is not None:
+            d = a["direction"]
+            if (isinstance(d, (str, bytes)) or not isinstance(d, (list, tuple))
+                    or len(d) != 3):
+                raise ValueError(
+                    "draw.project 'direction' must be [x, y, z] (got %r)" % (d,))
+            try:
+                direction = V(float(d[0]), float(d[1]), float(d[2]))
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "draw.project 'direction' components must be numbers (got "
+                    "%r)" % (d,))
+            if direction.Length < 1e-9:
+                raise ValueError("draw.project 'direction' must be non-zero")
+            vlabel = list(d)
+        else:
+            view = a.get("view", "top")
+            if not isinstance(view, str) or view.lower() not in _DRAW_DIRS:
+                raise ValueError(
+                    "draw.project 'view' must be one of %s (or pass an explicit "
+                    "direction [x,y,z]); got %r"
+                    % (sorted(_DRAW_DIRS), view))
+            direction = V(*_DRAW_DIRS[view.lower()])
+            vlabel = view.lower()
+        out = a.get("out", "Projection")
+        try:
+            res = TechDraw.project(base, direction)
+        except Exception as exc:
+            raise ValueError("draw.project failed (%s)" % exc)
+        visible, hidden = res[0], res[1]
+        if visible is None or visible.isNull() or not visible.Edges:
+            raise ValueError("draw.project produced no visible edges")
+        obj = _register_shape(out, visible, "draw.project")
+        result = {"shape": out, "object": obj.Name, "view": vlabel,
+                  "visible_edges": len(visible.Edges),
+                  "hidden_edges": len(hidden.Edges) if hidden else 0,
+                  "visible_length": _round(visible.Length)}
+        path = a.get("path")
+        if path is not None:
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError(
+                    "draw.project 'path' must be a non-empty .dxf path string "
+                    "(got %r)" % (path,))
+            try:
+                import importDXF
+                importDXF.export([obj], path)
+                result["path"] = path
+                result["bytes"] = (os.path.getsize(path)
+                                   if os.path.exists(path) else 0)
+            except Exception as exc:
+                result["export_error"] = str(exc)
+        return result
+
     return {
         "ss.create": op_ss_create, "ss.bind": op_ss_bind, "ss.set": op_ss_set, "ss.table": op_ss_table,
         "analyze.section": op_section, "analyze.distance": op_distance,
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
         "mesh.boolean": op_mesh_boolean, "mesh.to_shape": op_mesh_to_shape,
-        "draw.techdraw": op_techdraw,
+        "draw.techdraw": op_techdraw, "draw.project": op_draw_project,
     }

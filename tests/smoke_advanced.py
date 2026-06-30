@@ -140,6 +140,27 @@ def main():
     print("techdraw:", {k2: r.data.get(k2) for k2 in ("page", "views", "bytes", "export_error")})
     assert r.data.get("page")
 
+    # --- draw.project: page-free hidden-line projection to 2D edges ---
+    pj = s.act("draw.project", {"name": "Brk", "view": "top", "out": "TopProj",
+                                "path": os.path.join(OUT, "brk_top.dxf")})
+    assert pj.ok, pj.error
+    assert pj.data["visible_edges"] > 0 and pj.data["visible_length"] > 0, pj.data
+    assert pj.data.get("bytes", 0) > 0, pj.data
+    # the projected outline is a first-class shape (perceivable downstream).
+    assert s.act("solid.inspect", {"name": "TopProj"}).ok
+    print("draw.project top -> %d visible edges, dxf %d bytes"
+          % (pj.data["visible_edges"], pj.data.get("bytes", 0)))
+    pj2 = s.act("draw.project", {"name": "Brk", "direction": [1, -1, 1],
+                                 "out": "IsoProj"})
+    assert pj2.ok and pj2.data["visible_edges"] > 0, pj2.error or pj2.data
+    _guided(s.act("draw.project", {"name": "Nope"}), "no such solid")
+    _guided(s.act("draw.project", {"name": "Brk", "view": "sideways"}),
+            "must be one of")
+    _guided(s.act("draw.project", {"name": "Brk", "direction": [0, 0]}),
+            "[x, y, z]")
+    _guided(s.act("draw.project", {"name": "Brk", "direction": [0, 0, 0]}),
+            "non-zero")
+
     # --- STEP roundtrip: export a PARAMETRIC body, reimport, compare ---
     step = os.path.join(OUT, "brk.step")
     ex = s.act("solid.export", {"names": ["Brk"], "path": step})  # param body via solid.export
