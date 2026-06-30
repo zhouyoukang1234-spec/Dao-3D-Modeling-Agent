@@ -649,6 +649,57 @@ def main():
     print("docformat.polar_pattern: one spec -> 4-tooth ring revolved about Z, "
           "grouped to vol %g (file layer does the revolve math itself)" % rvol)
 
+    # ---- Part::Mirroring: reflect a shape across a plane, kernel-free ----- #
+    # author a box at x in [5,15] and a mirror across the x=0 plane (normal
+    # [1,0,0]); the reflection is rigid so volume is preserved (1000) and the
+    # copy's centroid lands at x=-10 (mirror of +10). The file builds a mirror
+    # feature with no kernel; the kernel only reflects geometry on recompute.
+    mir_p = os.path.join(OUT, "synth_mirror.FCStd")
+    docformat.synthesize(mir_p, [
+        {"type": "Part::Box", "name": "A",
+         "properties": {"Length": 10, "Width": 10, "Height": 10},
+         "placement": {"position": [5, 0, 0]}},
+        {"type": "Part::Mirroring", "name": "Mir", "source": "A",
+         "normal": [1, 0, 0]},
+    ])
+    # summarize recovers source + non-default normal (default base omitted).
+    mir_spec = next(s for s in docformat.summarize(mir_p) if s["name"] == "Mir")
+    assert mir_spec["source"] == "A", mir_spec
+    assert mir_spec["normal"] == [1.0, 0.0, 0.0], mir_spec
+    assert "base" not in mir_spec, mir_spec
+    mir_rt = os.path.join(OUT, "synth_mirror_rt.FCStd")
+    docformat.synthesize(mir_rt, docformat.summarize(mir_p))
+    assert docformat.fingerprint(mir_p) == docformat.fingerprint(mir_rt)
+    mird = App.openDocument(mir_p)
+    try:
+        for o in mird.Objects:
+            o.touch()
+        mird.recompute(None, True)
+        mo = mird.getObject("Mir")
+        mvol, mcx = mo.Shape.Volume, mo.Shape.CenterOfMass.x
+    finally:
+        App.closeDocument(mird.Name)
+    assert abs(mvol - 1000) < 1e-3, mvol
+    assert abs(mcx - (-10)) < 1e-6, mcx
+    # malformed mirror specs are guided, not leaked as TypeErrors.
+    for bad, token in (
+            ([{"type": "Part::Mirroring", "name": "M"}], "needs a 'source'"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 1, "Width": 1, "Height": 1}},
+              {"type": "Part::Mirroring", "name": "M", "source": "B",
+               "normal": [0, 0, 0]}], "non-zero"),
+            ([{"type": "Part::Mirroring", "name": "M", "source": "Ghost"}],
+             "not a defined object")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_mir.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat Part::Mirroring: box reflected across x=0 -> vol %g, "
+          "centroid x=%g, round-trips identically (file builds the mirror)"
+          % (mvol, mcx))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
