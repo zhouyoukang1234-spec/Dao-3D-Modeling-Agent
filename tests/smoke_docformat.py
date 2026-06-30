@@ -700,6 +700,53 @@ def main():
           "centroid x=%g, round-trips identically (file builds the mirror)"
           % (mvol, mcx))
 
+    # ---- more primitives: Ellipsoid / Wedge / Prism --------------------- #
+    # broaden the authorable solid vocabulary: an ellipsoid (3 radii), a wedge
+    # (10 distance bounds), and an N-gon prism (integer Polygon side count).
+    # Each recomputes to its analytic volume, and the integer-backed Polygon
+    # property exercises the <Integer> serialisation + round-trip.
+    np_p = os.path.join(OUT, "synth_newprims.FCStd")
+    docformat.synthesize(np_p, [
+        {"type": "Part::Ellipsoid", "name": "E",
+         "properties": {"Radius1": 3, "Radius2": 4, "Radius3": 5}},
+        {"type": "Part::Wedge", "name": "W",
+         "properties": {"Xmin": 0, "Xmax": 10, "Ymin": 0, "Ymax": 10,
+                        "Zmin": 0, "Zmax": 10, "X2min": 2, "X2max": 8,
+                        "Z2min": 2, "Z2max": 8}},
+        {"type": "Part::Prism", "name": "Pr",
+         "properties": {"Circumradius": 5, "Height": 10, "Polygon": 8}},
+    ])
+    np_specs = {s["name"]: s for s in docformat.summarize(np_p)}
+    assert np_specs["Pr"]["properties"]["Polygon"] == 8, np_specs["Pr"]
+    assert not isinstance(np_specs["Pr"]["properties"]["Polygon"], bool)
+    np_rt = os.path.join(OUT, "synth_newprims_rt.FCStd")
+    docformat.synthesize(np_rt, list(np_specs.values()))
+    assert docformat.fingerprint(np_p) == docformat.fingerprint(np_rt)
+    npd = App.openDocument(np_p)
+    try:
+        for o in npd.Objects:
+            o.touch()
+        npd.recompute(None, True)
+        vol = {n: npd.getObject(n).Shape.Volume for n in ("E", "W", "Pr")}
+    finally:
+        App.closeDocument(npd.Name)
+    assert abs(vol["E"] - (4.0 / 3.0) * math.pi * 3 * 4 * 5) < 1.0, vol["E"]
+    assert abs(vol["W"] - 653.333) < 1e-2, vol["W"]
+    # regular octagon (circumradius 5) area * height: 0.5*8*25*sin(45 deg)*10.
+    assert abs(vol["Pr"] - 0.5 * 8 * 25 * math.sin(math.pi / 4) * 10) < 1e-2, vol["Pr"]
+    # a non-integer Polygon is guided (integer-backed property).
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_prism.FCStd"), [
+            {"type": "Part::Prism", "name": "P",
+             "properties": {"Circumradius": 5, "Height": 10, "Polygon": 6.5}}])
+    except ValueError as exc:
+        assert "must be an integer" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for non-integer Polygon")
+    print("docformat primitives+: Ellipsoid/Wedge/Prism author to analytic vols "
+          "%.1f/%.1f/%.1f, integer Polygon round-trips (<Integer> serialisation)"
+          % (vol["E"], vol["W"], vol["Pr"]))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an

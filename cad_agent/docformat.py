@@ -1007,10 +1007,28 @@ _PRIMITIVES: "Dict[str, Dict[str, str]]" = {
                     "Radius2": "App::PropertyLength",
                     "Angle1": "App::PropertyAngle", "Angle2": "App::PropertyAngle",
                     "Angle3": "App::PropertyAngle"},
+    "Part::Ellipsoid": {"Radius1": "App::PropertyLength",
+                        "Radius2": "App::PropertyLength",
+                        "Radius3": "App::PropertyLength",
+                        "Angle1": "App::PropertyAngle",
+                        "Angle2": "App::PropertyAngle",
+                        "Angle3": "App::PropertyAngle"},
+    "Part::Wedge": {"Xmin": "App::PropertyDistance", "Xmax": "App::PropertyDistance",
+                    "Ymin": "App::PropertyDistance", "Ymax": "App::PropertyDistance",
+                    "Zmin": "App::PropertyDistance", "Zmax": "App::PropertyDistance",
+                    "X2min": "App::PropertyDistance", "X2max": "App::PropertyDistance",
+                    "Z2min": "App::PropertyDistance", "Z2max": "App::PropertyDistance"},
+    "Part::Prism": {"Circumradius": "App::PropertyLength",
+                    "Height": "App::PropertyLength",
+                    "Polygon": "App::PropertyIntegerConstraint",
+                    "FirstAngle": "App::PropertyAngle",
+                    "SecondAngle": "App::PropertyAngle"},
 }
 # Scalar FreeCAD property types serialise as a single ``<Float>`` child.
 _FLOAT_PROP_TYPES = {"App::PropertyLength", "App::PropertyAngle",
                      "App::PropertyFloat", "App::PropertyDistance"}
+# Integer-backed property types serialise as a single ``<Integer>`` child.
+_INT_PROP_TYPES = {"App::PropertyInteger", "App::PropertyIntegerConstraint"}
 
 # The Part boolean operators -- each is a ``Part::Boolean`` taking a ``Base`` and
 # a ``Tool`` link to two other objects, and the kernel performs the CSG on
@@ -1387,6 +1405,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                         "synthesize: %s.%s must be a number, got %r"
                         % (name, pname, value))
                 ET.SubElement(pe, "Float", {"value": "%.16f" % float(value)})
+            elif ptype in _INT_PROP_TYPES:
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise ValueError(
+                        "synthesize: %s.%s must be an integer, got %r"
+                        % (name, pname, value))
+                ET.SubElement(pe, "Integer", {"value": str(value)})
             else:
                 ET.SubElement(pe, "String", {"value": str(value)})
         if has_placement:
