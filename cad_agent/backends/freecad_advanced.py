@@ -15,11 +15,16 @@ These are the capabilities a human reaches for once the solid exists, now wired
 to the agent.
 """
 import os
+import re
 
 import FreeCAD as App
 import Part
 
 V = App.Vector
+
+# An identifier in a FreeCAD expression: a bare object/property name, or a
+# label reference wrapped in << >> (which may carry spaces / unicode).
+_IDENT_RE = re.compile(r"<<(?P<label>.+?)>>|(?P<name>[A-Za-z_][A-Za-z_0-9]*)")
 
 
 def _round(x, n=4):
@@ -182,6 +187,42 @@ def register(state):
             except Exception:
                 out[alias] = None
         return {"table": out}
+
+    def op_ss_bindings(a):
+        """The live ExpressionEngine wiring, read straight from the kernel.
+
+        The dual of ``docformat.inspect_document``'s expression view but from the
+        *running* document, not the ``.FCStd``: every object's bound
+        ``(path, formula)`` pairs plus the cross-object ``src->dst`` edges its
+        formulas imply (an object referenced by a formula with no
+        ``App::PropertyLink`` between them -- an edge the recompute DAG lacks).
+        Lets a caller verify parametric wiring without saving, and cross-check
+        the kernel against the file layer. No args.
+        """
+        names = {o.Name for o in doc.Objects}
+        label_to_name = {}
+        for o in doc.Objects:
+            lbl = getattr(o, "Label", None)
+            if isinstance(lbl, str) and lbl:
+                label_to_name.setdefault(lbl, o.Name)
+        bindings = {}
+        edges = set()
+        for o in doc.Objects:
+            ee = getattr(o, "ExpressionEngine", None) or []
+            pairs = [{"path": p, "formula": f} for (p, f) in ee]
+            if not pairs:
+                continue
+            bindings[o.Name] = pairs
+            for pr in pairs:
+                for m in _IDENT_RE.finditer(pr["formula"]):
+                    lab, tok = m.group("label"), m.group("name")
+                    dst = (label_to_name.get(lab) if lab
+                           else (tok if tok in names else None))
+                    if dst and dst != o.Name:
+                        edges.add("%s->%s" % (o.Name, dst))
+        return {"bindings": bindings,
+                "count": sum(len(v) for v in bindings.values()),
+                "edges": sorted(edges)}
 
     # ---- analysis -------------------------------------------------------- #
     def op_section(a):
@@ -714,6 +755,7 @@ def register(state):
 
     return {
         "ss.create": op_ss_create, "ss.bind": op_ss_bind, "ss.set": op_ss_set, "ss.table": op_ss_table,
+        "ss.bindings": op_ss_bindings,
         "analyze.section": op_section, "analyze.distance": op_distance,
         "analyze.bbox": op_bbox,
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
