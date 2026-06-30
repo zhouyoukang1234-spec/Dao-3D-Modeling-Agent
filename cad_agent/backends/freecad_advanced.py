@@ -50,6 +50,25 @@ def _num(a, key, default=_MISSING, label=None):
         raise ValueError("%s must be a number (got %r)" % (name, v))
 
 
+def _int(a, key, default=_MISSING, label=None):
+    """Coerce ``a[key]`` to int with a guided error (mirrors ``_num``)."""
+    name = label or key
+    if key not in a or a[key] is None:
+        if default is _MISSING:
+            raise ValueError("missing required integer argument %r" % name)
+        return int(default)
+    v = a[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError("%s must be an integer (got %r)" % (name, v))
+    if f != int(f):
+        raise ValueError("%s must be a whole number (got %r)" % (name, v))
+    return int(f)
+
+
 def register(state):
     doc = state.doc
 
@@ -318,6 +337,84 @@ def register(state):
         return {"shape": out, "object": obj.Name, "type": kind,
                 "faces": len(result.Faces), "volume": _round(result.Volume)}
 
+    def _resolve_mesh(a, op, tol_default=0.1):
+        """Resolve ``name`` to a Mesh.Mesh copy: a kept mesh.boolean result or a
+        registered solid's tessellation. Returns (mesh_copy, source_kind)."""
+        import Mesh
+        name = a.get("name", a.get("mesh"))
+        if name in meshes:
+            return meshes[name].copy(), "mesh"
+        tol = _num(a, "tolerance", tol_default, "%s tolerance" % op)
+        if tol <= 0:
+            raise ValueError("%s tolerance must be > 0 (got %r)" % (op, tol))
+        shp = _named_shape(name, "%s 'name'" % op)
+        return Mesh.Mesh(shp.tessellate(tol)), "solid"
+
+    def op_mesh_repair(a):
+        """Clean a mesh so it can be sewn back into a solid (scan/boolean repair).
+
+        Harmonizes normals and removes the defects that make ``mesh.to_shape``
+        fail or yield a mere shell: duplicated points/facets, degenerate slivers
+        and (optionally) non-manifold edges. args: name (mesh from mesh.boolean
+        OR a solid name), out (mesh name), tolerance (tessellation if name is a
+        solid, default 0.1), manifold (drop non-manifolds, default True).
+        """
+        m, _kind = _resolve_mesh(a, "mesh.repair")
+        out = a.get("out", "MeshRepaired")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("mesh.repair 'out' must be a non-empty string")
+        before = m.CountFacets
+        had_nm = bool(m.hasNonManifolds())
+        m.removeDuplicatedPoints()
+        m.removeDuplicatedFacets()
+        m.fixDegenerations()
+        if a.get("manifold", True):
+            m.removeNonManifolds()
+        m.harmonizeNormals()
+        if m.CountFacets == 0:
+            raise ValueError("mesh.repair produced an empty mesh")
+        meshes[out] = m
+        return {"mesh": out, "facets_before": before, "facets": m.CountFacets,
+                "points": m.CountPoints, "had_non_manifold": had_nm,
+                "non_manifold": bool(m.hasNonManifolds()),
+                "solid": bool(m.isSolid())}
+
+    def op_mesh_decimate(a):
+        """Reduce a mesh's facet count (scan/boolean simplification).
+
+        args: name (mesh from mesh.boolean OR a solid name), out (mesh name),
+        target (absolute facet count) OR reduction (0<f<1 fraction to remove),
+        tolerance (tessellation if name is a solid, default 0.1).
+        """
+        m, _kind = _resolve_mesh(a, "mesh.decimate")
+        out = a.get("out", "MeshDecimated")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("mesh.decimate 'out' must be a non-empty string")
+        before = m.CountFacets
+        if a.get("target") is not None:
+            target = _int(a, "target", label="mesh.decimate target")
+            if target < 4:
+                raise ValueError(
+                    "mesh.decimate target must be >= 4 facets (got %d)" % target)
+        else:
+            reduction = _num(a, "reduction", 0.5, "mesh.decimate reduction")
+            if not 0.0 < reduction < 1.0:
+                raise ValueError(
+                    "mesh.decimate reduction must be in (0, 1) (got %r)"
+                    % (reduction,))
+            target = max(4, int(before * (1.0 - reduction)))
+        if target >= before:
+            raise ValueError(
+                "mesh.decimate target (%d) must be below the current facet count "
+                "(%d) -- nothing to reduce" % (target, before))
+        m.decimate(target)
+        if m.CountFacets == 0:
+            raise ValueError("mesh.decimate produced an empty mesh")
+        meshes[out] = m
+        return {"mesh": out, "facets_before": before, "facets": m.CountFacets,
+                "points": m.CountPoints, "target": target,
+                "solid": bool(m.isSolid())}
+
     # ---- TechDraw 2D drawing --------------------------------------------- #
     # standard orthographic / pictorial projection directions (first-angle)
     _DRAW_DIRS = {
@@ -512,5 +609,6 @@ def register(state):
         "analyze.section": op_section, "analyze.distance": op_distance,
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
         "mesh.boolean": op_mesh_boolean, "mesh.to_shape": op_mesh_to_shape,
+        "mesh.repair": op_mesh_repair, "mesh.decimate": op_mesh_decimate,
         "draw.techdraw": op_techdraw, "draw.project": op_draw_project,
     }

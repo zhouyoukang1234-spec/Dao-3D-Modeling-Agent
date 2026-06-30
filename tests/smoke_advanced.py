@@ -90,6 +90,23 @@ def main():
     print("mesh.to_shape sewn %s, %d faces (fusable)"
           % (ts.data["type"], ts.data["faces"]))
 
+    # --- mesh.repair + mesh.decimate: clean/simplify a mesh, then sew to solid.
+    # Decimate the union mesh, then sew the lighter mesh back into a BRep.
+    dec = s.act("mesh.decimate", {"name": "MU", "out": "MUlite", "reduction": 0.5})
+    assert dec.ok, dec.error
+    assert dec.data["facets"] < dec.data["facets_before"], dec.data
+    rep = s.act("mesh.repair", {"name": "MUlite", "out": "MUclean"})
+    assert rep.ok, rep.error
+    assert rep.data["facets"] > 0 and rep.data["non_manifold"] is False, rep.data
+    sewn2 = s.act("mesh.to_shape", {"name": "MUclean", "out": "Sewn2"})
+    assert sewn2.ok and sewn2.data["faces"] > 0, sewn2.error or sewn2.data
+    # decimate a solid directly via tessellation, by absolute facet target.
+    dt = s.act("mesh.decimate", {"name": "mA", "out": "boxLite", "target": 8,
+                                 "tolerance": 1.0})
+    assert dt.ok and dt.data["facets"] <= dt.data["facets_before"], dt.error or dt.data
+    print("mesh.decimate %d->%d, repair->%d faces sewn"
+          % (dec.data["facets_before"], dec.data["facets"], sewn2.data["faces"]))
+
     # --- malformed-input guards (no_raw_leak): non-numeric tolerance/scale and
     #     a non-string export path used to leak raw 'could not convert string to
     #     float' / TypeError; they must be guided. -----------------------------
@@ -104,6 +121,13 @@ def main():
     _guided(s.act("mesh.export", {"name": "Brk", "path": 123}), "path")
     _guided(s.act("mesh.export", {"name": "Brk", "path": os.path.join(OUT, "b.stl"),
                                   "tolerance": "x"}), "must be a number")
+    _guided(s.act("mesh.decimate", {"name": "Nope"}), "no such solid")
+    _guided(s.act("mesh.decimate", {"name": "MU", "target": 2}), ">= 4")
+    _guided(s.act("mesh.decimate", {"name": "MU", "reduction": 1.5}), "(0, 1)")
+    _guided(s.act("mesh.decimate", {"name": "MU", "target": 999999999}),
+            "below the current")
+    _guided(s.act("mesh.repair", {"name": "Nope"}), "no such solid")
+    _guided(s.act("mesh.repair", {"name": "mA", "tolerance": 0}), "> 0")
     _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
     # a non-string view name used to leak 'int has no attribute lower' (or a
     # bare 'int not iterable' when views itself was a scalar).
