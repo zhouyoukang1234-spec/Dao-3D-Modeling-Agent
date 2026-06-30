@@ -482,6 +482,47 @@ def register(state):
                 "format": ext.lstrip("."), "solid": bool(m.isSolid()),
                 "non_manifold": bool(m.hasNonManifolds())}
 
+    def op_mesh_from_shape(a):
+        """Tessellate a solid with controlled fidelity (MeshPart workbench).
+
+        Unlike the single-tolerance ``shape.tessellate`` the other mesh.* ops
+        rely on, this drives ``MeshPart.meshFromShape`` with an independent
+        *angular* deflection, so curved faces (cylinders/spheres/fillets) get
+        the facet density they need without flooding flat faces. The result is
+        kept under ``out`` so every mesh.* op (repair / decimate / to_shape /
+        export) consumes it. args: name (registered solid), out (mesh name),
+        linear (LinearDeflection, default 0.1), angular (AngularDeflection in
+        radians, default 0.5).
+        """
+        import MeshPart
+        shape = _named_shape(a.get("name", a.get("source")), "mesh.from_shape 'name'")
+        out = a.get("out", "Tessellated")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("mesh.from_shape 'out' must be a non-empty string")
+        linear = _num(a, "linear", 0.1, "mesh.from_shape linear")
+        if linear <= 0:
+            raise ValueError(
+                "mesh.from_shape linear (deflection) must be > 0 (got %r)" % linear)
+        angular = _num(a, "angular", 0.5, "mesh.from_shape angular")
+        if angular <= 0:
+            raise ValueError(
+                "mesh.from_shape angular (deflection) must be > 0 (got %r)"
+                % angular)
+        try:
+            m = MeshPart.meshFromShape(Shape=shape, LinearDeflection=linear,
+                                       AngularDeflection=angular, Relative=False)
+        except Exception as exc:
+            raise ValueError(
+                "mesh.from_shape could not tessellate (%s); the shape may be "
+                "empty or the deflections too small" % exc)
+        if m is None or m.CountFacets == 0:
+            raise ValueError("mesh.from_shape produced an empty mesh")
+        meshes[out] = m
+        return {"mesh": out, "facets": m.CountFacets, "points": m.CountPoints,
+                "linear": linear, "angular": angular,
+                "solid": bool(m.isSolid()),
+                "non_manifold": bool(m.hasNonManifolds())}
+
     # ---- TechDraw 2D drawing --------------------------------------------- #
     # standard orthographic / pictorial projection directions (first-angle)
     _DRAW_DIRS = {
@@ -678,6 +719,6 @@ def register(state):
         "mesh.analyze": op_mesh_analyze, "mesh.export": op_mesh_export,
         "mesh.boolean": op_mesh_boolean, "mesh.to_shape": op_mesh_to_shape,
         "mesh.repair": op_mesh_repair, "mesh.decimate": op_mesh_decimate,
-        "mesh.import": op_mesh_import,
+        "mesh.import": op_mesh_import, "mesh.from_shape": op_mesh_from_shape,
         "draw.techdraw": op_techdraw, "draw.project": op_draw_project,
     }

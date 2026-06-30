@@ -131,6 +131,25 @@ def main():
     print("mesh.import %d facets -> repair -> sewn %d faces"
           % (imp.data["facets"], isew.data["faces"]))
 
+    # --- mesh.from_shape: controlled-fidelity tessellation (MeshPart). On a
+    #     curved solid, a finer angular deflection must yield a denser mesh than
+    #     a coarse one, and the result must feed the rest of the mesh.* chain.
+    s.act("solid.cylinder", {"name": "cyl", "radius": 5, "height": 20})
+    fine = s.act("mesh.from_shape", {"name": "cyl", "out": "CylFine",
+                                     "linear": 0.05, "angular": 0.1})
+    coarse = s.act("mesh.from_shape", {"name": "cyl", "out": "CylCoarse",
+                                       "linear": 1.0, "angular": 1.0})
+    assert fine.ok and coarse.ok, fine.error or coarse.error
+    assert fine.data["facets"] > coarse.data["facets"], (fine.data, coarse.data)
+    # the controlled mesh composes with the rest of the chain: repair it, then
+    # sew the kept mesh back into a BRep solid.
+    frep = s.act("mesh.repair", {"name": "CylFine", "out": "CylClean"})
+    assert frep.ok and frep.data["facets"] > 0, frep.error or frep.data
+    fsew = s.act("mesh.to_shape", {"name": "CylClean", "out": "CylSewn"})
+    assert fsew.ok and fsew.data["faces"] > 0, fsew.error or fsew.data
+    print("mesh.from_shape fine/coarse -> %d/%d facets, repair->sew %d faces"
+          % (fine.data["facets"], coarse.data["facets"], fsew.data["faces"]))
+
     # --- malformed-input guards (no_raw_leak): non-numeric tolerance/scale and
     #     a non-string export path used to leak raw 'could not convert string to
     #     float' / TypeError; they must be guided. -----------------------------
@@ -156,6 +175,10 @@ def main():
     _guided(s.act("mesh.import", {"path": os.path.join(OUT, "nope.stl")}),
             "no such file")
     _guided(s.act("mesh.import", {"path": stl + ".step"}), "unsupported mesh format")
+    _guided(s.act("mesh.from_shape", {"name": "Nope"}), "no such solid")
+    _guided(s.act("mesh.from_shape", {"name": "mA", "linear": 0}), "> 0")
+    _guided(s.act("mesh.from_shape", {"name": "mA", "angular": "x"}),
+            "must be a number")
     _guided(s.act("draw.techdraw", {"name": "Brk", "scale": "x"}), "must be a number")
     # a non-string view name used to leak 'int has no attribute lower' (or a
     # bare 'int not iterable' when views itself was a scalar).
