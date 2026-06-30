@@ -21,10 +21,15 @@ build on the map thereafter.
 """
 from __future__ import annotations
 
+import glob
 import importlib
 import inspect
+import io
 import json
 import os
+import re
+import token as _tok
+import tokenize
 from typing import Any, Dict, List, Optional
 
 # Modules probed for presence. Some are GUI-only (``*Gui``) or absent from a
@@ -47,13 +52,24 @@ SHAPE_CLASSES: List[str] = [
 ]
 
 # Operator-prefix -> the kernel module(s) that domain is built on. Used by
-# :func:`coverage` to map our registry onto the kernel surface. ``None`` marks a
-# domain with no direct kernel module (our own orchestration / app layer).
+# :func:`coverage` to roll the registry up by domain. ``None`` marks a domain
+# with no direct kernel module (our own orchestration / app layer).
 PREFIX_DOMAIN: Dict[str, Optional[str]] = {
     "solid": "Part", "analyze": "Part", "param": "PartDesign", "ss": "Sketcher",
     "mesh": "Mesh", "surface": "Surface", "points": "Points", "draft": "Draft",
     "draw": "TechDraw", "fem": "Fem", "path": "Path", "asm": None,
     "resource": None, "doc": None, "view": None, "out": None,
+}
+
+# A kernel module is rarely used under its own bare name: PartDesign is reached
+# through ``"PartDesign::Body"`` TypeId strings, Fem through ``ObjectsFem`` /
+# ``femtools`` / ``femmesh`` helpers, etc. Module -> the tokens whose presence in
+# source means "this domain is genuinely wired", so usage is attributed by what
+# the code *actually* calls rather than guessed from an operator's name.
+MODULE_ALIASES: Dict[str, List[str]] = {
+    "PartDesign": ["PartDesign"],
+    "Fem": ["Fem", "ObjectsFem", "femtools", "femmesh"],
+    "Path": ["Path"],
 }
 
 _MAP_PATH = os.path.join(os.path.dirname(__file__), "capability_map.json")
@@ -113,12 +129,80 @@ def scan() -> Dict[str, Any]:
     }
 
 
-def coverage(registry_names: List[str]) -> Dict[str, Any]:
-    """Cross-reference registered operators against the kernel module surface.
+_BACKENDS_DIR = os.path.join(os.path.dirname(__file__), "backends")
 
-    Returns, per kernel module, how many operators wrap that domain, plus the
-    modules that no operator touches yet (the honest gap) -- so "what is left to
-    integrate" is a computed fact, not a hunch."""
+
+_TYPEID_RE = re.compile(r"(?<![.\w])(\w+)::")
+
+
+def _file_refs(src: str) -> set:
+    """Names a single source file genuinely references as kernel modules.
+
+    Works on the token stream so prose can't masquerade as code: a name counts
+    when it is an ``import`` target or an attribute base ``Name.`` that is *not*
+    itself an attribute (so ``f.Surface`` -- the Face's surface attribute --
+    does not count as the ``Surface`` workbench), plus any ``Name::`` TypeId
+    prefix found inside string literals (``"PartDesign::Body"``)."""
+    refs: set = set()
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+    except (tokenize.TokenError, IndentationError):
+        return refs
+    sig = [t for t in toks if t.type not in (_tok.COMMENT, _tok.NL, _tok.NEWLINE,
+                                              _tok.INDENT, _tok.DEDENT)]
+    for i, t in enumerate(sig):
+        if t.type == _tok.STRING:
+            refs.update(_TYPEID_RE.findall(t.string))
+            continue
+        if t.type != _tok.NAME:
+            continue
+        prev = sig[i - 1] if i > 0 else None
+        nxt = sig[i + 1] if i + 1 < len(sig) else None
+        preceded_by_dot = prev is not None and prev.type == _tok.OP \
+            and prev.string == "."
+        if prev is not None and prev.type == _tok.NAME \
+                and prev.string in ("import", "from"):
+            refs.add(t.string)                       # import target
+        elif nxt is not None and nxt.type == _tok.OP and nxt.string == "." \
+                and not preceded_by_dot:
+            refs.add(t.string)                       # attribute base Name.
+    return refs
+
+
+def used_modules(source_root: str = _BACKENDS_DIR) -> Dict[str, List[str]]:
+    """Which kernel modules the backend source *actually* references, and where.
+
+    A module counts as used when one of its tokens (see :data:`MODULE_ALIASES`)
+    is imported, used as an attribute base in code, or appears as a ``Mod::``
+    TypeId literal -- never merely mentioned in prose. So usage reflects what the
+    code calls, not what an operator is named. Returns ``module -> sorted list of
+    files`` for every referenced module."""
+    files = sorted(glob.glob(os.path.join(source_root, "**", "*.py"),
+                             recursive=True))
+    per_file = {}
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            per_file[os.path.basename(f)] = _file_refs(fh.read())
+    out: Dict[str, List[str]] = {}
+    for mod in PROBE_MODULES:
+        tokens = set(MODULE_ALIASES.get(mod, [mod]))
+        hits = sorted(name for name, refs in per_file.items() if refs & tokens)
+        if hits:
+            out[mod] = hits
+    return out
+
+
+def coverage(registry_names: List[str],
+             source_root: str = _BACKENDS_DIR) -> Dict[str, Any]:
+    """Cross-reference registered operators *and* backend source against the
+    kernel module surface.
+
+    ``by_domain`` rolls the registry up by operator-name prefix (the operator
+    view). ``covered_modules`` / ``uncovered_modules`` are derived from what the
+    source genuinely references (see :func:`used_modules`) -- not from the name
+    prefix, which mis-attributes (e.g. ``points.reverse`` actually drives the
+    ``ReverseEngineering`` module). So "what is left to integrate" is a computed
+    fact about the code, not a hunch from naming."""
     by_domain: Dict[str, int] = {}
     unknown_prefix: List[str] = []
     for full in registry_names:
@@ -129,12 +213,13 @@ def coverage(registry_names: List[str]) -> Dict[str, Any]:
         dom = PREFIX_DOMAIN[prefix]
         key = dom if dom else "(app:%s)" % prefix
         by_domain[key] = by_domain.get(key, 0) + 1
-    covered_modules = {d for d in by_domain if not d.startswith("(app:")}
-    uncovered = sorted(m for m in PROBE_MODULES if m not in covered_modules)
+    used = used_modules(source_root)
+    uncovered = sorted(m for m in PROBE_MODULES if m not in used)
     return {
         "operators": len(registry_names),
         "by_domain": dict(sorted(by_domain.items())),
-        "covered_modules": sorted(covered_modules),
+        "covered_modules": sorted(used),
+        "module_usage": used,
         "uncovered_modules": uncovered,
         "unknown_prefix": sorted(unknown_prefix),
     }

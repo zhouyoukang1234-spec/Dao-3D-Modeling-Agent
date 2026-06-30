@@ -39,20 +39,34 @@ def main():
     assert frozen == live, "capability_map.json is stale; regenerate via " \
         "freecadcmd -c 'from cad_agent import capability; capability.snapshot()'"
 
-    # ---- coverage maps every operator onto a kernel domain ---------------- #
+    # ---- coverage: operator roll-up + source-derived module usage --------- #
     cov = capability.coverage(s.registry.names())
     assert cov["operators"] == len(s.registry.names())
     assert cov["unknown_prefix"] == [], cov["unknown_prefix"]
     for dom in ("Part", "PartDesign", "Mesh", "Surface", "Points", "Fem"):
         assert dom in cov["by_domain"] and cov["by_domain"][dom] > 0, cov
-    # the gap is reported as a fact (modules no operator touches yet).
-    assert "ReverseEngineering" in cov["uncovered_modules"], cov
-    assert isinstance(cov["uncovered_modules"], list)
+    # coverage is derived from what the SOURCE genuinely references, not from the
+    # operator name -- so points.reverse counts as driving ReverseEngineering...
+    usage = cov["module_usage"]
+    assert "ReverseEngineering" in usage, usage
+    assert usage["ReverseEngineering"] == ["freecad_surface.py"], usage
+    assert "ReverseEngineering" in cov["covered_modules"], cov
+    # ...PartDesign is reached through "PartDesign::" TypeId strings...
+    assert "PartDesign" in usage and "Fem" in usage, usage
+    # ...and a module we never call (we build surfaces via Part.BSplineSurface,
+    # not the Surface workbench) is honestly reported as uncovered.
+    assert "Surface" in cov["uncovered_modules"], cov
+    assert "Measure" in cov["uncovered_modules"], cov
+    # prose can't masquerade as use: f.Surface (a Face attribute) must NOT make
+    # the Surface module look covered.
+    assert "Surface" not in usage, usage
 
     print("capability map: %(modules)d modules, %(classes)d classes, "
           "%(functions)d functions, %(shape_methods)d shape methods" % t)
-    print("coverage: %d operators over %d kernel domains, %d modules uncovered" % (
-        cov["operators"], len(cov["covered_modules"]), len(cov["uncovered_modules"])))
+    print("coverage: %d operators; %d kernel modules genuinely used, %d "
+          "uncovered (%s)" % (
+              cov["operators"], len(cov["covered_modules"]),
+              len(cov["uncovered_modules"]), ", ".join(cov["uncovered_modules"])))
     print("CAPABILITY SMOKE OK", s.summary())
     s.registry.kernel.shutdown()
 
