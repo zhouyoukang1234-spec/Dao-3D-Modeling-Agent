@@ -747,6 +747,61 @@ def main():
           "%.1f/%.1f/%.1f, integer Polygon round-trips (<Integer> serialisation)"
           % (vol["E"], vol["W"], vol["Pr"]))
 
+    # ---- Sketcher::SketchObject: author a 2D profile from file ----------- #
+    # the most upstream authoring surface: draw a closed 10x5 rectangle as four
+    # line segments straight into the Part::PropertyGeometryList. The kernel
+    # rebuilds the wire on recompute -- a closed loop the upstream pad consumes,
+    # area 50. summarize recovers the segments and the spec round-trips. 逆流到最上游.
+    sk_p = os.path.join(OUT, "synth_sketch.FCStd")
+    docformat.synthesize(sk_p, [
+        {"type": "Sketcher::SketchObject", "name": "Sk", "geometry": [
+            {"start": [0, 0], "end": [10, 0]},
+            {"start": [10, 0], "end": [10, 5]},
+            {"start": [10, 5], "end": [0, 5]},
+            {"start": [0, 5], "end": [0, 0]},
+        ]},
+    ])
+    sk_spec = next(s for s in docformat.summarize(sk_p) if s["name"] == "Sk")
+    assert len(sk_spec["geometry"]) == 4, sk_spec
+    assert sk_spec["geometry"][0] == {"start": [0.0, 0.0], "end": [10.0, 0.0]}, \
+        sk_spec["geometry"][0]
+    sk_rt = os.path.join(OUT, "synth_sketch_rt.FCStd")
+    docformat.synthesize(sk_rt, docformat.summarize(sk_p))
+    assert docformat.fingerprint(sk_p) == docformat.fingerprint(sk_rt)
+    # inspect_document surfaces the edge geometry kernel-free.
+    skd = docformat.inspect_document(sk_p)["sketch_geometry"]["Sk"]
+    assert len(skd) == 4 and all(g["line"] for g in skd), skd
+    import Part
+    sd = App.openDocument(sk_p)
+    try:
+        sk = sd.getObject("Sk")
+        assert sk.GeometryCount == 4, sk.GeometryCount
+        for o in sd.Objects:
+            o.touch()
+        sd.recompute(None, True)
+        wire = Part.Wire(Part.__sortEdges__(sk.Shape.Edges))
+        sk_closed, sk_area = wire.isClosed(), Part.Face(wire).Area
+    finally:
+        App.closeDocument(sd.Name)
+    assert sk_closed and abs(sk_area - 50.0) < 1e-6, (sk_closed, sk_area)
+    # malformed sketches are guided, not leaked.
+    for bad, token in (
+            ([{"type": "Sketcher::SketchObject", "name": "S",
+               "geometry": []}], "non-empty 'geometry'"),
+            ([{"type": "Sketcher::SketchObject", "name": "S", "geometry": [
+                {"start": [0, 0], "end": [0, 0]}]}], "degenerate"),
+            ([{"type": "Sketcher::SketchObject", "name": "S", "geometry": [
+                {"start": [0, 0], "end": [1]}]}], "[x, y] numbers")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_sk.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    print("docformat Sketcher::SketchObject: 4-segment rectangle authored from "
+          "file -> closed wire area %g, round-trips identically (逆流到最上游)"
+          % sk_area)
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
