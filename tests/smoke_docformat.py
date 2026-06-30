@@ -523,9 +523,40 @@ def main():
           "(author==read, two layers one truth)"
           % (sorted(f_aliases), k_width, k_height, pw, ph))
 
+    # ---- synthesize N-ary boolean: one fold over many operands from file --- #
+    # three 10-cubes, offset so they overlap pairwise; a Part::MultiFuse folds
+    # the union of all three in a single recompute -- what a human assembles as
+    # repeated pairwise fuses, authored at once. Union volume = 3*1000 minus the
+    # two 5x5x5 pairwise overlaps (A&B, A&C) = 3000 - 2*125 = 2750.
+    mf_p = os.path.join(OUT, "synth_multifuse.FCStd")
+    cube = lambda nm, pos: {       # noqa: E731 - terse local box spec
+        "type": "Part::Box", "name": nm,
+        "properties": {"Length": 10, "Width": 10, "Height": 10},
+        "placement": {"position": pos}}
+    docformat.synthesize(mf_p, [
+        cube("A", [0, 0, 0]), cube("B", [5, 5, 5]), cube("C", [-5, -5, 5]),
+        {"type": "Part::MultiFuse", "name": "Union",
+         "shapes": ["A", "B", "C"]},
+    ])
+    mf_ix = docformat.inspect_document(mf_p)
+    # the link-list authors three dependency edges Union -> {A, B, C}.
+    assert set(mf_ix["dependencies"]["Union"]) == {"A", "B", "C"}, mf_ix[
+        "dependencies"]["Union"]
+    mfd = App.openDocument(mf_p)
+    try:
+        for o in mfd.Objects:
+            o.touch()
+        mfd.recompute(None, True)
+        uvol = mfd.getObject("Union").Shape.Volume
+    finally:
+        App.closeDocument(mfd.Name)
+    assert abs(uvol - 2750) < 1e-3, uvol
+    print("docformat.synthesize: authored Part::MultiFuse over 3 cubes -> kernel "
+          "folds union vol %g in one recompute (N-ary CSG from file)" % uvol)
+
     # guarded: empty spec, unknown primitive, duplicate name, undefined property,
-    # a boolean whose operand does not resolve, a degenerate rotation axis, and
-    # a spreadsheet with no cells.
+    # a boolean whose operand does not resolve, a degenerate rotation axis, a
+    # spreadsheet with no cells, and an N-ary boolean with too few operands.
     _sy = docformat.synthesize
     bad = os.path.join(OUT, "synth_bad.FCStd")
     for spec, token in (
@@ -541,7 +572,11 @@ def main():
                "properties": {"Length": 1, "Width": 1, "Height": 1},
                "placement": {"axis": [0, 0, 0], "angle": 45}}], "axis"),
             ([{"type": "Spreadsheet::Sheet", "name": "S", "cells": {}}],
-             "non-empty 'cells'")):
+             "non-empty 'cells'"),
+            ([{"type": "Part::Box", "name": "A",
+               "properties": {"Length": 1, "Width": 1, "Height": 1}},
+              {"type": "Part::MultiFuse", "name": "F", "shapes": ["A"]}],
+             "list of >=2 object names")):
         try:
             _sy(bad, spec)
         except ValueError as exc:

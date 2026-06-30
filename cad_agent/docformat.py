@@ -892,6 +892,13 @@ _FLOAT_PROP_TYPES = {"App::PropertyLength", "App::PropertyAngle",
 # (an object-link DAG), the dual of the primitive leaves above.
 _BOOLEANS = {"Part::Cut", "Part::Fuse", "Part::Common"}
 
+# N-ary boolean operators -- each takes a ``Shapes`` link-list of *two or more*
+# operands and folds the CSG across all of them in one recompute. A human drives
+# these as repeated pairwise GUI operations; authored from file the whole
+# multi-operand fold is written at once -- the file layer's leverage over the
+# step-by-step tool flow.
+_MULTI_BOOLEANS = {"Part::MultiFuse", "Part::MultiCommon"}
+
 # A spreadsheet is a parametric *control table*: named (aliased) cells holding
 # numbers or formulae, to which other objects bind their dimensions. Authoring
 # one from nothing yields the master-model surface humans drive a design from.
@@ -973,7 +980,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     "base": <name>, "tool": <name>, "expressions": ...?}`` (``Part::Cut`` /
     ``Part::Fuse`` / ``Part::Common``), whose ``base``/``tool`` link two other
     objects -- so a whole constructive-solid-geometry tree can be authored from
-    nothing, the kernel performing the CSG on recompute.
+    nothing, the kernel performing the CSG on recompute. An N-ary boolean
+    ``{"type": <Part multi-boolean>, "name": str, "shapes": [<name>, ...]}``
+    (``Part::MultiFuse`` / ``Part::MultiCommon``) folds the CSG across *two or
+    more* operands in one recompute -- the file authors in a single step what
+    the GUI builds as repeated pairwise operations.
 
     Only the Part primitives in ``_PRIMITIVES`` and the booleans in
     ``_BOOLEANS`` are accepted -- their ``execute()`` rebuilds the Shape from
@@ -999,11 +1010,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             raise ValueError("synthesize: object #%d must be a dict" % idx)
         otype = spec.get("type")
         if (otype not in _PRIMITIVES and otype not in _BOOLEANS
-                and otype != _SHEET_TYPE):
+                and otype not in _MULTI_BOOLEANS and otype != _SHEET_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
-                % (idx, otype, ", ".join(
-                    sorted(set(_PRIMITIVES) | _BOOLEANS | {_SHEET_TYPE}))))
+                % (idx, otype, ", ".join(sorted(
+                    set(_PRIMITIVES) | _BOOLEANS | _MULTI_BOOLEANS
+                    | {_SHEET_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -1026,6 +1038,23 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     raise ValueError(
                         "synthesize: spreadsheet %s cell %r must be a number or "
                         "formula string (got %r)" % (name, alias, value))
+        elif otype in _MULTI_BOOLEANS:
+            shapes = spec.get("shapes")
+            if (not isinstance(shapes, list) or len(shapes) < 2
+                    or not all(isinstance(r, str) and r.strip()
+                               for r in shapes)):
+                raise ValueError(
+                    "synthesize: %s (%s) needs 'shapes': a list of >=2 object "
+                    "names" % (name, otype))
+            if name in shapes:
+                raise ValueError(
+                    "synthesize: %s cannot reference itself" % name)
+            if len(set(shapes)) != len(shapes):
+                raise ValueError(
+                    "synthesize: %s has duplicate operands in 'shapes'" % name)
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: %s takes shapes, not properties" % name)
         elif otype in _BOOLEANS:
             for role in ("base", "tool"):
                 ref = spec.get(role)
@@ -1065,6 +1094,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     raise ValueError(
                         "synthesize: boolean %s %s=%r is not a defined object"
                         % (spec["name"], role, spec[role]))
+        elif spec["type"] in _MULTI_BOOLEANS:
+            for ref in spec["shapes"]:
+                if ref not in all_names:
+                    raise ValueError(
+                        "synthesize: %s shape %r is not a defined object"
+                        % (spec["name"], ref))
 
     root = ET.Element("Document", {"SchemaVersion": schema_version,
                                    "ProgramVersion": program_version,
@@ -1078,12 +1113,15 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
     for idx, spec in enumerate(objects, start=1):
         name, otype = spec["name"], spec["type"]
         is_bool = otype in _BOOLEANS
+        is_multi = otype in _MULTI_BOOLEANS
         is_sheet = otype == _SHEET_TYPE
-        props = {} if (is_bool or is_sheet) else (spec.get("properties") or {})
+        props = ({} if (is_bool or is_multi or is_sheet)
+                 else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
         # referenced in a formula -- together the object's dependency edges.
-        links = [spec["base"], spec["tool"]] if is_bool else []
+        links = ([spec["base"], spec["tool"]] if is_bool
+                 else list(spec["shapes"]) if is_multi else [])
         dep_set = list(links)
         for other in all_names:
             if other != name and other not in dep_set and any(
@@ -1105,11 +1143,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         axis = placement.get("axis")
         angle = placement.get("angle", 0.0)
         has_placement = bool(position or axis or angle)
-        prop_items = ([] if (is_bool or is_sheet)
+        prop_items = ([] if (is_bool or is_multi or is_sheet)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
-                      + (1 if is_sheet else 0))
+                      + (1 if is_multi else 0) + (1 if is_sheet else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -1119,6 +1157,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 lp = ET.SubElement(props_el, "Property",
                                    {"name": role_name, "type": "App::PropertyLink"})
                 ET.SubElement(lp, "Link", {"value": ref})
+        if is_multi:
+            lp = ET.SubElement(props_el, "Property",
+                               {"name": "Shapes", "type": "App::PropertyLinkList"})
+            ll = ET.SubElement(lp, "LinkList", {"count": str(len(spec["shapes"]))})
+            for ref in spec["shapes"]:
+                ET.SubElement(ll, "Link", {"value": ref})
         if exprs:
             ee = ET.SubElement(props_el, "Property",
                                {"name": "ExpressionEngine",
