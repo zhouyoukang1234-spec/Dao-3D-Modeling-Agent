@@ -77,7 +77,48 @@ def _doc_handlers(state):
         return {"name": state.doc.Name, "objects": [
             {"name": o.Name, "label": o.Label, "type": o.TypeId} for o in state.doc.Objects]}
 
-    return {"doc.save": save, "doc.info": info}
+    def _docformat():
+        # docformat is pure-stdlib (no FreeCAD dep). Load it by explicit path
+        # from this package's own directory -- importing it by the bare package
+        # name is ambiguous (the repo carries a second cad_agent copy that lacks
+        # this module), so resolve the sibling file directly.
+        cached = getattr(_docformat, "_mod", None)
+        if cached is not None:
+            return cached
+        import importlib.util
+        src = os.path.join(os.path.dirname(_HERE), "docformat.py")
+        spec = importlib.util.spec_from_file_location("dao_docformat", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _docformat._mod = mod
+        return mod
+
+    def inspect(a):
+        path = a.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "doc.inspect 'path' must be a non-empty .FCStd file path (got %r)"
+                % (path,))
+        return _docformat().inspect_document(path)
+
+    def diff(a):
+        x, y = a.get("a"), a.get("b")
+        if not (isinstance(x, str) and x and isinstance(y, str) and y):
+            raise ValueError(
+                "doc.diff needs 'a' and 'b': two .FCStd file paths (got %r, %r)"
+                % (x, y))
+        return _docformat().diff(x, y)
+
+    def edit(a):
+        if "value" not in a:
+            raise ValueError(
+                "doc.edit needs 'value' (the new scalar value to write)")
+        return _docformat().edit_property(
+            a.get("path"), a.get("object"), a.get("property"),
+            a["value"], out=a.get("out"))
+
+    return {"doc.save": save, "doc.info": info, "doc.inspect": inspect,
+            "doc.diff": diff, "doc.edit": edit}
 
 
 def _build_handlers(state):

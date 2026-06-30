@@ -126,6 +126,24 @@ def _build_handlers(state):
                             for o in state.doc.Objects]}
     handlers["doc.save"] = _save
     handlers["doc.info"] = _info
+
+    def _docformat():
+        from cad_agent import docformat
+        return docformat
+
+    def _inspect(a):
+        return _docformat().inspect_document(a["path"])
+
+    def _diff(a):
+        return _docformat().diff(a["a"], a["b"])
+
+    def _edit(a):
+        return _docformat().edit_property(
+            a.get("path"), a.get("object"), a.get("property"),
+            a["value"], out=a.get("out"))
+    handlers["doc.inspect"] = _inspect
+    handlers["doc.diff"] = _diff
+    handlers["doc.edit"] = _edit
     return handlers
 
 

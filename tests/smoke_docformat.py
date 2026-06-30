@@ -194,6 +194,30 @@ def main():
     _guided(lambda: docformat.inspect_document(notzip), "not a .FCStd")
     print("docformat: malformed inputs guided (no raw zip/XML leak)")
 
+    # ---- the meta-tool as first-class ops: doc.inspect / diff / edit ----- #
+    # the persistence layer is now usable through the same s.act(...) loop as
+    # every kernel op -- file-level perceive / verify / act, fused in.
+    o = new_session("ops")
+    assert o.act("param.body", {"name": "Body"}).ok
+    assert o.act("param.pad", {"body": "Body", "feature": "Pad",
+                               "profile": {"rect": [20, 20]}, "length": 4}).ok
+    op_a = os.path.join(OUT, "ops_a.FCStd")
+    assert o.act("doc.save", {"path": op_a}).ok
+    ins = o.act("doc.inspect", {"path": op_a})
+    assert ins.ok and ins.data["properties"]["Pad"]["Length"]["value"] == 4, ins
+    op_b = os.path.join(OUT, "ops_b.FCStd")
+    ed = o.act("doc.edit", {"path": op_a, "object": "Pad",
+                            "property": "Length", "value": 9, "out": op_b})
+    assert ed.ok and float(ed.data["new"]) == 9.0, ed
+    df = o.act("doc.diff", {"a": op_a, "b": op_b})
+    assert df.ok and df.data["property_changes"]["Pad"]["Length"] == {
+        "from": 4, "to": 9}, df
+    # guided through the op layer too (no raw exception leak).
+    assert not o.act("doc.inspect", {"path": ""}).ok
+    assert not o.act("doc.edit", {"path": op_a, "object": "Nope",
+                                  "property": "Length", "value": 1}).ok
+    print("doc.inspect/diff/edit: persistence meta-tool fused into the op loop")
+
     print("DOCFORMAT SMOKE OK")
 
 
