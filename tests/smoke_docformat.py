@@ -218,6 +218,52 @@ def main():
                                   "property": "Length", "value": 1}).ok
     print("doc.inspect/diff/edit: persistence meta-tool fused into the op loop")
 
+    # ---- expression wiring: the parametric graph read from the file alone -- #
+    # bind a pad's Length to a spreadsheet alias via the ExpressionEngine, then
+    # recover that wiring from the .FCStd with no kernel: the formula, and the
+    # cross-object edge (Pad -> Spreadsheet) that no App::PropertyLink carries.
+    x = new_session("expr")
+    assert x.act("param.body", {"name": "Body"}).ok
+    assert x.act("param.pad", {"body": "Body", "feature": "Pad",
+                               "profile": {"rect": [40, 30]}, "length": 5}).ok
+    assert x.act("ss.create", {"cells": {"plen": 5, "pwid": 9}}).ok
+    assert x.act("ss.bind", {"param": "Pad.length", "alias": "plen"}).ok
+    ex_a = os.path.join(OUT, "expr_a.FCStd")
+    assert x.act("doc.save", {"path": ex_a}).ok
+
+    ix = docformat.inspect_document(ex_a)
+    assert ix["expression_count"] >= 1, ix["expressions"]
+    assert "Pad" in ix["expressions"], ix["expressions"]
+    bound = {e["path"]: e["formula"] for e in ix["expressions"]["Pad"]}
+    assert bound.get("Length") == "Spreadsheet.plen", ix["expressions"]
+    # the formula references Spreadsheet, an edge the recompute link DAG lacks:
+    assert "Pad->Spreadsheet" in ix["expression_edges"], ix["expression_edges"]
+    sheet = next(o["name"] for o in ix["objects"]
+                 if (o["type"] or "").startswith("Spreadsheet"))
+    assert ("Pad->%s" % sheet) in ix["expression_edges"], ix["expression_edges"]
+    # every expression edge target is a real object (no dangling refs).
+    file_names = {o["name"] for o in ix["objects"]}
+    for edge in ix["expression_edges"]:
+        src, dst = edge.split("->")
+        assert src in file_names and dst in file_names, (edge, file_names)
+    # a document with no expressions reports zero, not noise.
+    assert docformat.inspect_document(path)["expression_count"] == 0, path
+    print("docformat: %d expression(s), edges=%s -- parametric wiring from file"
+          % (ix["expression_count"], ix["expression_edges"]))
+
+    # re-point the binding to a different alias: a parametric-intent change that
+    # the structured diff names explicitly (not just an opaque blob value flip).
+    assert x.act("ss.bind", {"param": "Pad.length", "alias": "pwid"}).ok
+    ex_b = os.path.join(OUT, "expr_b.FCStd")
+    assert x.act("doc.save", {"path": ex_b}).ok
+    xd = docformat.diff(ex_a, ex_b)
+    assert not xd["identical"], xd
+    assert xd["expression_changes"].get("Pad.Length") == {
+        "from": "Spreadsheet.plen", "to": "Spreadsheet.pwid"}, xd["expression_changes"]
+    # and a document diffs to no expression change against itself.
+    assert docformat.diff(ex_a, ex_a)["expression_changes"] == {}, "self-diff"
+    print("docformat.diff: expression re-binding named in expression_changes")
+
     print("DOCFORMAT SMOKE OK")
 
 
