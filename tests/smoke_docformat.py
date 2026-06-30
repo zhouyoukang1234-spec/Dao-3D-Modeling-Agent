@@ -652,10 +652,22 @@ def main():
     assert abs(vols["AB"] - (6 * 6 * 6 - math.pi * 4 * 6)) < 1e-3, vols
     # after realise: the kernel-baked file carries BREP the file layer reads.
     assert docformat.inspect_document(op_out)["brep_files"], "realised -> BREP"
-    # doc.synthesize guards a missing object list rather than leaking a TypeError.
+    # doc.summarize: the inverse op decompiles the authored file back to a spec,
+    # which re-authors to an identical fingerprint -- author<->read as agent ops.
+    sm = s.act("doc.summarize", {"path": op_p})
+    assert sm.ok and sm.data["object_count"] == 3, sm
+    assert [o["name"] for o in sm.data["objects"]] == ["A", "B", "AB"], sm.data
+    op_rt = os.path.join(OUT, "op_roundtrip.FCStd")
+    assert s.act("doc.synthesize",
+                 {"path": op_rt, "objects": sm.data["objects"]}).ok
+    assert docformat.fingerprint(op_p) == docformat.fingerprint(op_rt)
+    # doc.synthesize guards a missing object list rather than leaking a TypeError;
+    # doc.summarize guards a missing path the same way.
     assert not s.act("doc.synthesize", {"path": op_p}).ok
-    print("doc.synthesize+doc.realize: authored CSG -> kernel baked vol %.1f "
-          "(file-first authoring as agent ops)" % vols["AB"])
+    assert not s.act("doc.summarize", {}).ok
+    print("doc.synthesize+realize+summarize: authored CSG -> kernel baked vol "
+          "%.1f, decompiled+re-authored to identical fingerprint (file-first "
+          "authoring as agent ops, author<->read closes)" % vols["AB"])
 
     # ---- two-layer fusion: the live kernel agrees with the file ---------- #
     # ss.bindings reads the same ExpressionEngine wiring from the *running*

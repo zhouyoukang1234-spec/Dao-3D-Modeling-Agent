@@ -126,6 +126,19 @@ def _doc_handlers(state):
                 "doc.synthesize needs 'objects': a list of object specs")
         return _docformat().synthesize(a.get("path"), objs)
 
+    def summarize(a):
+        # decompile a .FCStd back into a synthesize spec, kernel-free -- the
+        # inverse of doc.synthesize, so a file can be read out, edited as a spec,
+        # and re-authored. 反者道之动.
+        path = a.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "doc.summarize 'path' must be a non-empty .FCStd file path "
+                "(got %r)" % (path,))
+        objects = _docformat().summarize(path)
+        return {"path": path, "objects": objects,
+                "object_count": len(objects)}
+
     def realize(a):
         # bake a synthesized (BREP-less) file: the kernel builds geometry from
         # the authored scalars/links and writes it back, so downstream consumers
@@ -155,7 +168,8 @@ def _doc_handlers(state):
 
     return {"doc.save": save, "doc.info": info, "doc.inspect": inspect,
             "doc.diff": diff, "doc.edit": edit,
-            "doc.synthesize": synthesize, "doc.realize": realize}
+            "doc.synthesize": synthesize, "doc.summarize": summarize,
+            "doc.realize": realize}
 
 
 def _build_handlers(state):
