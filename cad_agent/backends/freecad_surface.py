@@ -468,6 +468,77 @@ def register(state):
         return {"surface": out, "object": obj.Name, "area": _round(face.Area),
                 "fit_points": len(pts), "control_net": [nu, nv]}
 
+    def op_from_shape(a):
+        """Sample an existing solid's surface into a point cloud (simulated scan).
+
+        Closes the loop with points.reverse: shape -> cloud -> refit surface.
+        args: source/name (registered solid), out (cloud name),
+              tolerance (tessellation, default 0.5).
+        """
+        import Points
+        name = a.get("source", a.get("body", a.get("name")))
+        try:
+            src = _shape(name)
+        except KeyError:
+            raise ValueError(
+                "points.from_shape: no such solid %r -- create it (solid.*) or "
+                "import it first" % (name,))
+        out = a.get("out", "ScanCloud")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("points.from_shape 'out' must be a non-empty string")
+        tol = _num(a, "tolerance", 0.5, "points.from_shape tolerance")
+        if tol <= 0:
+            raise ValueError("points.from_shape tolerance must be > 0 (got %r)" % tol)
+        base = getattr(src, "Shape", None)
+        if base is None or base.isNull():
+            raise ValueError("points.from_shape: %r has no shape" % (name,))
+        verts, _facets = base.tessellate(tol)
+        if not verts:
+            raise ValueError("points.from_shape produced no points")
+        po = doc.addObject("Points::Feature", out)
+        pk = Points.Points()
+        pk.addPoints([V(*v) for v in verts])
+        po.Points = pk
+        doc.recompute()
+        clouds[out] = [(float(v[0]), float(v[1]), float(v[2])) for v in verts]
+        return {"cloud": out, "object": po.Name, "points": len(verts),
+                "source": name}
+
+    def op_downsample(a):
+        """Thin a dense point cloud by keeping every Nth point (scan decimation).
+
+        args: cloud (name from points.cloud/from_shape) OR points [[x,y,z]...],
+              out (new cloud name), stride (keep every Nth, default 2).
+        """
+        import Points
+        if a.get("cloud") is not None:
+            cname = a["cloud"]
+            if cname not in clouds:
+                raise ValueError(
+                    "points.downsample: no cloud named %r -- create it with "
+                    "points.cloud/from_shape first" % cname)
+            pts = clouds[cname]
+        else:
+            pts = _points(a, "points", "points.downsample 'points'", need=1)
+        out = a.get("out", "Downsampled")
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError("points.downsample 'out' must be a non-empty string")
+        stride = _int(a, "stride", 2, "points.downsample stride")
+        if stride < 2:
+            raise ValueError(
+                "points.downsample stride must be >= 2 (got %d)" % stride)
+        kept = [tuple(p) for p in pts[::stride]]
+        if len(kept) < 1:
+            raise ValueError("points.downsample produced an empty cloud")
+        po = doc.addObject("Points::Feature", out)
+        pk = Points.Points()
+        pk.addPoints([V(*p) for p in kept])
+        po.Points = pk
+        doc.recompute()
+        clouds[out] = kept
+        return {"cloud": out, "object": po.Name, "points": len(kept),
+                "from": len(pts), "stride": stride}
+
     return {
         "surface.fill": op_fill,
         "surface.ruled": op_ruled,
@@ -479,4 +550,6 @@ def register(state):
         "draft.offset": op_draft_offset,
         "points.cloud": op_cloud,
         "points.reverse": op_reverse,
+        "points.from_shape": op_from_shape,
+        "points.downsample": op_downsample,
     }

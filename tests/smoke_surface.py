@@ -118,6 +118,21 @@ def main():
     assert insp.ok, insp.error
     print("points.reverse 64-pt cloud -> BSpline area %.1f (fusable)" % rev.data["area"])
 
+    # points.from_shape: scan an existing solid into a cloud, then downsample it
+    # and refit a BSpline through the thinned cloud (shape -> cloud -> surface).
+    assert s.act("solid.sphere", {"name": "Ball", "radius": 12}).ok
+    fs = s.act("points.from_shape", {"source": "Ball", "out": "BallScan",
+                                     "tolerance": 1.0})
+    assert fs.ok, fs.error
+    assert fs.data["points"] > 200, fs.data
+    ds = s.act("points.downsample", {"cloud": "BallScan", "out": "Thin",
+                                     "stride": 4})
+    assert ds.ok, ds.error
+    assert ds.data["points"] < fs.data["points"], ds.data
+    assert ds.data["points"] == (fs.data["points"] + 3) // 4, ds.data
+    print("points.from_shape %d -> downsample/4 %d pts"
+          % (fs.data["points"], ds.data["points"]))
+
     # ---- malformed input stays guided ------------------------------------ #
     _guided(s.act("surface.fill", {"points": "x"}), "list of")
     _guided(s.act("surface.fill", {"points": [[0, 0, 0], [1, 1, 1]]}), "at least 3")
@@ -152,6 +167,11 @@ def main():
     _guided(s.act("points.cloud", {"name": "C", "points": 5}), "list of")
     _guided(s.act("points.reverse", {"cloud": "Ghost"}), "no cloud named")
     _guided(s.act("points.reverse", {"points": [[0, 0, 0]] * 3}), "at least 9")
+    _guided(s.act("points.from_shape", {"source": "Nope"}), "no such solid")
+    _guided(s.act("points.from_shape", {"source": "Core", "tolerance": 0}), "> 0")
+    _guided(s.act("points.downsample", {"cloud": "Ghost"}), "no cloud named")
+    _guided(s.act("points.downsample", {"cloud": "Scan", "stride": 1}), ">= 2")
+    _guided(s.act("points.downsample", {"points": "x"}), "list of")
     _guided(s.act("points.reverse", {"points": pts, "u_poles": 2, "u_degree": 3}),
             "exceed degree")
     print("malformed surface/draft/points input all guided (no raw leaks)")
