@@ -86,6 +86,38 @@ class AgentSession:
         return ToolResult.success(transcript=transcript, lines=len(lines),
                                   executed=executed, failed=failed)
 
+    # -- recipes (parametric, reusable orchestration) --------------------- #
+    def make(self, recipe: str, **params: Any) -> ToolResult:
+        """Expand a parametric recipe (:mod:`cad_agent.recipes`) into tool steps
+        and run them on the live kernel -- the reusable counterpart to
+        :meth:`build`, where the plan comes from a named, parameterised generator
+        instead of free text. Steps whose tool the registry lacks are recorded
+        as skipped (orchestration degrades gracefully), and the recipe's
+        closed-form ``meta`` is returned alongside the transcript so a caller can
+        verify the result without re-deriving the expectations.
+        """
+        from . import recipes
+        try:
+            rec = recipes.generate(recipe, **params)
+        except (ValueError, TypeError) as exc:
+            return ToolResult.failure("recipe %r: %s" % (recipe, exc))
+        known = set(self.registry.names())
+        steps_out, executed, failed = [], 0, 0
+        for step in rec.steps:
+            tool = step["tool"]
+            if tool not in known:
+                steps_out.append({"tool": tool, "skipped": True})
+                continue
+            r = self.act(tool, step.get("args", {}))
+            steps_out.append({"tool": tool, "args": step.get("args", {}),
+                              "ok": r.ok, "error": r.error})
+            if r.ok:
+                executed += 1
+            else:
+                failed += 1
+        return ToolResult.success(recipe=rec.name, meta=rec.meta, steps=steps_out,
+                                  planned=len(rec.steps), executed=executed, failed=failed)
+
     # -- perception -------------------------------------------------------- #
     def perceive(self, name: str) -> ToolResult:
         """Inspect a model's current geometric state (metrics)."""
