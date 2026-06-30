@@ -25,9 +25,14 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from typing import Any, Dict, List, Optional
+
+# An identifier in a FreeCAD expression: a bare object/property name, or a
+# label reference wrapped in << >> (which may contain spaces / unicode).
+_IDENT_RE = re.compile(r"<<(?P<label>.+?)>>|(?P<name>[A-Za-z_][A-Za-z_0-9]*)")
 
 DOCUMENT_XML = "Document.xml"
 GUI_XML = "GuiDocument.xml"
@@ -130,6 +135,86 @@ def _object_properties(data_el: Optional[ET.Element]) -> "Dict[str, Dict[str, An
     return out
 
 
+def _object_expressions(data_el: Optional[ET.Element]) -> "Dict[str, List[Dict[str, str]]]":
+    """name -> bound expressions read from each object's ``ExpressionEngine``.
+
+    ``App::PropertyExpressionEngine`` is where FreeCAD persists the parametric
+    *wiring* the GUI's expression editor authors: each ``<Expression>`` binds a
+    property ``path`` (e.g. ``Length``, ``Constraints.width``) to a ``formula``
+    that may reference other objects (``Spreadsheet.L``, ``<<Base>>.Height``).
+    Surfaced structurally here it stops being an opaque XML blob and becomes a
+    first-class view of how the document computes itself.
+    """
+    out: Dict[str, List[Dict[str, str]]] = {}
+    if data_el is None:
+        return out
+    for obj in data_el.findall("Object"):
+        name = obj.get("name")
+        if name is None:
+            continue
+        exprs: List[Dict[str, str]] = []
+        for props_el in obj.findall("Properties"):
+            for prop in props_el.findall("Property"):
+                ee = prop.find("ExpressionEngine")
+                if ee is None:
+                    continue
+                for e in ee.findall("Expression"):
+                    epath = e.get("path")
+                    formula = e.get("expression")
+                    if epath is not None and formula is not None:
+                        exprs.append({"path": epath, "formula": formula})
+        if exprs:
+            out[name] = exprs
+    return out
+
+
+def _expression_refs(formula: str, names: set, label_to_name: Dict[str, str]) -> set:
+    """The object names a formula references -- ``<<Label>>`` mapped to its name,
+    plus any bare identifier that is itself an object name (``Spreadsheet.L`` ->
+    ``Spreadsheet``). Best-effort, but only ever yields names that exist in the
+    document, so the resulting graph has no dangling targets.
+    """
+    refs: set = set()
+    for m in _IDENT_RE.finditer(formula):
+        label, tok = m.group("label"), m.group("name")
+        if label is not None and label in label_to_name:
+            refs.add(label_to_name[label])
+        elif tok is not None and tok in names:
+            refs.add(tok)
+    return refs
+
+
+def _expression_edges(
+    expressions: Dict[str, List[Dict[str, str]]],
+    names: set,
+    label_to_name: Dict[str, str],
+) -> "List[str]":
+    """The parametric dependency graph carried by expressions: ``src->dst`` for
+    every object whose formula references another object (self-refs dropped).
+
+    Distinct from ``dependencies`` (the recompute link DAG): two objects can be
+    coupled purely through an expression with no ``App::PropertyLink`` between
+    them, an edge only this layer sees.
+    """
+    edges: set = set()
+    for src, exprs in expressions.items():
+        for e in exprs:
+            for dst in _expression_refs(e["formula"], names, label_to_name):
+                if dst != src:
+                    edges.add("%s->%s" % (src, dst))
+    return sorted(edges)
+
+
+def _label_map(props: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    """User-facing Label -> object name, for resolving ``<<Label>>`` refs."""
+    out: Dict[str, str] = {}
+    for name, p in props.items():
+        lbl = p.get("Label", {}).get("value")
+        if isinstance(lbl, str) and lbl:
+            out.setdefault(lbl, name)
+    return out
+
+
 def inspect_document(path: str) -> Dict[str, Any]:
     """Parse a ``.FCStd`` into a structured, kernel-free view of its contents.
 
@@ -166,6 +251,9 @@ def inspect_document(path: str) -> Dict[str, Any]:
         objects = _object_types(objects_el)
         deps = _object_deps(objects_el)
         props = _object_properties(data_el)
+        expressions = _object_expressions(data_el)
+        obj_names = {o["name"] for o in objects if o["name"]}
+        expr_edges = _expression_edges(expressions, obj_names, _label_map(props))
         breps = []
         for n in names:
             if not n.lower().endswith(_BREP_EXT):
@@ -187,6 +275,9 @@ def inspect_document(path: str) -> Dict[str, Any]:
             "dependencies": deps,
             "dependency_edges": sum(len(v) for v in deps.values()),
             "properties": props,
+            "expressions": expressions,
+            "expression_count": sum(len(v) for v in expressions.values()),
+            "expression_edges": expr_edges,
             "brep_files": breps,
             "brep_bytes": sum(b["bytes"] for b in breps),
             "has_gui": GUI_XML in names,
@@ -265,8 +356,23 @@ def diff(path_a: str, path_b: str) -> Dict[str, Any]:
     brep_changes = sorted(f for f in (set(a_brep) & set(b_brep))
                           if a_brep[f] != b_brep[f])
 
+    # expression wiring: a binding added / removed / re-pointed is real
+    # parametric intent that a plain property diff (the collapsed ExpressionEngine
+    # blob) only reports as an opaque value change. Surface it per object.path.
+    def _expr_map(info: Dict[str, Any]) -> Dict[str, str]:
+        return {"%s.%s" % (name, e["path"]): e["formula"]
+                for name, exprs in info["expressions"].items() for e in exprs}
+
+    a_expr, b_expr = _expr_map(a), _expr_map(b)
+    expr_changes: Dict[str, Dict[str, Any]] = {}
+    for key in sorted(set(a_expr) | set(b_expr)):
+        fa, fb = a_expr.get(key), b_expr.get(key)
+        if fa != fb:
+            expr_changes[key] = {"from": fa, "to": fb}
+
     identical = not (added or removed or retyped or edges_added
-                     or edges_removed or prop_changes or brep_changes)
+                     or edges_removed or prop_changes or brep_changes
+                     or expr_changes)
     return {
         "identical": identical,
         "objects_added": added,
@@ -275,6 +381,7 @@ def diff(path_a: str, path_b: str) -> Dict[str, Any]:
         "edges_added": edges_added,
         "edges_removed": edges_removed,
         "property_changes": prop_changes,
+        "expression_changes": expr_changes,
         "brep_changes": brep_changes,
     }
 
