@@ -478,6 +478,36 @@ def main():
             raise AssertionError("expected ValueError for %r" % token)
     print("docformat.synthesize: malformed specs guided")
 
+    # ---- doc.synthesize / doc.realize: file-first authoring as agent ops -- #
+    # the agent authors a BREP-less file via the kernel-free op, then *realises*
+    # it: the kernel builds the geometry from the authored scalars and writes it
+    # back. The realised file now carries BREP the file layer can read -- the
+    # full create->bake loop, write-like-code then let FreeCAD solve.
+    op_p = os.path.join(OUT, "op_synth.FCStd")
+    sr = s.act("doc.synthesize", {"path": op_p, "objects": [
+        {"type": "Part::Box", "name": "A",
+         "properties": {"Length": 6, "Width": 6, "Height": 6}},
+        {"type": "Part::Cylinder", "name": "B",
+         "properties": {"Radius": 2, "Height": 8},
+         "placement": {"position": [3, 3, -1]}},
+        {"type": "Part::Cut", "name": "AB", "base": "A", "tool": "B"},
+    ]})
+    assert sr.ok, sr
+    assert sr.data["object_count"] == 3, sr.data
+    # before realise: authored file is geometry-free.
+    assert docformat.inspect_document(op_p)["brep_files"] == [], "no BREP yet"
+    op_out = os.path.join(OUT, "op_realized.FCStd")
+    rr = s.act("doc.realize", {"path": op_p, "out": op_out})
+    assert rr.ok, rr
+    vols = {o["name"]: o["volume"] for o in rr.data["objects"]}
+    assert abs(vols["AB"] - (6 * 6 * 6 - math.pi * 4 * 6)) < 1e-3, vols
+    # after realise: the kernel-baked file carries BREP the file layer reads.
+    assert docformat.inspect_document(op_out)["brep_files"], "realised -> BREP"
+    # doc.synthesize guards a missing object list rather than leaking a TypeError.
+    assert not s.act("doc.synthesize", {"path": op_p}).ok
+    print("doc.synthesize+doc.realize: authored CSG -> kernel baked vol %.1f "
+          "(file-first authoring as agent ops)" % vols["AB"])
+
     # ---- two-layer fusion: the live kernel agrees with the file ---------- #
     # ss.bindings reads the same ExpressionEngine wiring from the *running*
     # document; it must match what the file-level parser recovered -- the two

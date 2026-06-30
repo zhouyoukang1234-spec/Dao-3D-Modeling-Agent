@@ -117,8 +117,45 @@ def _doc_handlers(state):
             a.get("path"), a.get("object"), a.get("property"),
             a["value"], out=a.get("out"))
 
+    def synthesize(a):
+        # author a whole .FCStd from a spec, kernel-free -- file-first modelling
+        # exposed as a first-class agent op (the dual of doc.inspect).
+        objs = a.get("objects")
+        if not isinstance(objs, list):
+            raise ValueError(
+                "doc.synthesize needs 'objects': a list of object specs")
+        return _docformat().synthesize(a.get("path"), objs)
+
+    def realize(a):
+        # bake a synthesized (BREP-less) file: the kernel builds geometry from
+        # the authored scalars/links and writes it back, so downstream consumers
+        # get a fully-realised document. This is the bridge where file-first
+        # authoring meets the kernel -- write like code, then let FreeCAD solve.
+        path = a.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "doc.realize 'path' must be a non-empty .FCStd file path "
+                "(got %r)" % (path,))
+        out = a.get("out") or path
+        doc = App.openDocument(path)
+        try:
+            for o in doc.Objects:
+                o.touch()
+            doc.recompute(None, True)
+            realized = []
+            for o in doc.Objects:
+                vol = o.Shape.Volume if hasattr(o, "Shape") else None
+                realized.append({"name": o.Name, "type": o.TypeId,
+                                 "volume": vol})
+            doc.saveAs(out)
+        finally:
+            App.closeDocument(doc.Name)
+        return {"out": out, "objects": realized,
+                "object_count": len(realized)}
+
     return {"doc.save": save, "doc.info": info, "doc.inspect": inspect,
-            "doc.diff": diff, "doc.edit": edit}
+            "doc.diff": diff, "doc.edit": edit,
+            "doc.synthesize": synthesize, "doc.realize": realize}
 
 
 def _build_handlers(state):
