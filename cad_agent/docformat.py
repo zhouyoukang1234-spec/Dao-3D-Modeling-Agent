@@ -1365,6 +1365,13 @@ _PRIMITIVES: "Dict[str, Dict[str, str]]" = {
                     "Polygon": "App::PropertyIntegerConstraint",
                     "FirstAngle": "App::PropertyAngle",
                     "SecondAngle": "App::PropertyAngle"},
+    # ``Part::RegularPolygon`` is the parametric N-gon *wire*: a closed loop of
+    # ``Polygon`` equal edges inscribed in ``Circumradius``, its execute()
+    # rebuilding the wire from the two scalars so (like the circle/line edges)
+    # its placement survives a reload. A ready planar section to extrude/loft --
+    # the straight-edged sibling of ``Part::Circle``. 圆出于方.
+    "Part::RegularPolygon": {"Polygon": "App::PropertyIntegerConstraint",
+                             "Circumradius": "App::PropertyLength"},
     # ``Part::Circle`` is the odd one out: a parametric *edge*, not a solid --
     # a circular arc of ``Radius`` from ``Angle1`` to ``Angle2`` degrees (a full
     # circle at 0..360). It carries a placement like any primitive, but unlike a

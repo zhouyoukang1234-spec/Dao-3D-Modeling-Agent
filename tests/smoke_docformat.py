@@ -824,6 +824,49 @@ def main():
     print("docformat Part::Ellipse: 8x5 ellipse -> one valid edge (length %g); "
           "half-ellipse arc round-trips (angles persist), no BREP" % round(el_len, 3))
 
+    # ---- Part::RegularPolygon: the straight-edged parametric wire ---------- #
+    # an N-gon wire rebuilt from (Polygon, Circumradius) on execute() (no BREP),
+    # the straight-edged sibling of Part::Circle -- a ready section to extrude/
+    # loft. A hexagon of circumradius 10 closes into a face of area
+    # 0.5*N*R^2*sin(2*pi/N) = 0.5*6*100*sin(60 deg) = 259.808. The integer-backed
+    # Polygon exercises the <Integer> round-trip and its non-integer guard. 圆出于方.
+    rp_p = os.path.join(OUT, "synth_regpoly.FCStd")
+    docformat.synthesize(rp_p, [
+        {"type": "Part::RegularPolygon", "name": "Hex",
+         "properties": {"Polygon": 6, "Circumradius": 10}}])
+    assert zipfile.ZipFile(rp_p).namelist() == ["Document.xml"]
+    rp_spec = next(s for s in docformat.summarize(rp_p) if s["name"] == "Hex")
+    assert rp_spec["properties"]["Polygon"] == 6, rp_spec
+    assert not isinstance(rp_spec["properties"]["Polygon"], bool)
+    rp_rt = os.path.join(OUT, "synth_regpoly_rt.FCStd")
+    docformat.synthesize(rp_rt, docformat.summarize(rp_p))
+    assert docformat.fingerprint(rp_p) == docformat.fingerprint(rp_rt)
+    import Part
+    rpd = App.openDocument(rp_p)
+    try:
+        for o in rpd.Objects:
+            o.touch()
+        rpd.recompute(None, True)
+        rp_sh = rpd.getObject("Hex").Shape
+        rp_edges = len(rp_sh.Edges)
+        rp_wire = Part.Wire(rp_sh.Edges)
+        rp_closed = rp_wire.isClosed()
+        rp_area = Part.Face(rp_wire).Area
+    finally:
+        App.closeDocument(rpd.Name)
+    assert rp_edges == 6 and rp_closed, (rp_edges, rp_closed)
+    assert abs(rp_area - 0.5 * 6 * 100 * math.sin(math.pi / 3)) < 1e-3, rp_area
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_regpoly.FCStd"), [
+            {"type": "Part::RegularPolygon", "name": "B",
+             "properties": {"Polygon": 6.5, "Circumradius": 10}}])
+    except ValueError as exc:
+        assert "must be an integer" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for non-integer Polygon")
+    print("docformat Part::RegularPolygon: hexagon (R=10) -> 6-edge closed wire, "
+          "face area %.3f, integer Polygon round-trips, no BREP" % rp_area)
+
     # ---- Part::Refine: the one-link shape-cleanup feature ------------------- #
     # fuse two abutting 10-cubes -> the shared seam splits faces (10 faces); a
     # Part::Refine wrapping the fusion merges the coplanar faces back to the 6 of
