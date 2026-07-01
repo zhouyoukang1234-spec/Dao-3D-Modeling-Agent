@@ -1207,6 +1207,71 @@ def main():
     print("docformat parabola: focal-5 arc (-3..3) + chord -> parabolic segment "
           "area %g (open conic edge, focal-discriminated, round-trips)" % par_area)
 
+    # ---- hyperbola: the other axes+angles conic, key-shape twin of arc_ellipse #
+    # a Part::GeomArcOfHyperbola about centre (0,0), transverse/conjugate
+    # semi-axes 6/3, parameter 0.2..1.0 -- the open branch a human sweeps as a
+    # hyperbola arc. It carries the *same* keys as an arc_ellipse (center /
+    # major_radius / minor_radius / start_angle / end_angle), so it is
+    # disambiguated purely by an explicit 'hyperbola' marker; without it the
+    # spec would classify as arc_ellipse. Length 4.342249 confirms the kernel
+    # rebuilds an actual Hyperbola. 反者道之动.
+    hgeom = [{"hyperbola": True, "center": [0, 0],
+              "major_radius": 6.0, "minor_radius": 3.0,
+              "start_angle": 0.2, "end_angle": 1.0}]
+    hspec = {"type": docformat._SKETCH_TYPE, "name": "Hyp", "geometry": hgeom}
+    hyp_p = os.path.join(OUT, "synth_hyperbola.FCStd")
+    docformat.synthesize(hyp_p, [hspec])
+    hyp_seg = next(s for s in docformat.summarize(hyp_p)
+                   if s["name"] == "Hyp")["geometry"][0]
+    assert hyp_seg.get("hyperbola") and hyp_seg["major_radius"] == 6.0, hyp_seg
+    hyp_rt = os.path.join(OUT, "synth_hyperbola_rt.FCStd")
+    docformat.synthesize(hyp_rt, docformat.summarize(hyp_p))
+    assert docformat.fingerprint(hyp_p) == docformat.fingerprint(hyp_rt)
+    hypd = App.openDocument(hyp_p)
+    try:
+        for o in hypd.Objects:
+            o.touch()
+        hypd.recompute(None, True)
+        hedges = hypd.getObject("Hyp").Shape.Edges
+        hyp_kind = hedges[0].Curve.__class__.__name__
+        hyp_len = hedges[0].Length
+    finally:
+        App.closeDocument(hypd.Name)
+    assert len(hedges) == 1 and hyp_kind == "Hyperbola", (len(hedges), hyp_kind)
+    assert abs(hyp_len - 4.342249) < 1e-5, hyp_len
+    # the disambiguator must matter: the same keys without the marker are an
+    # arc_ellipse (an Ellipse curve), a genuinely different edge.
+    ae_p = os.path.join(OUT, "synth_hyp_as_ell.FCStd")
+    docformat.synthesize(ae_p, [{
+        "type": docformat._SKETCH_TYPE, "name": "AE",
+        "geometry": [{"center": [0, 0], "major_radius": 6.0,
+                      "minor_radius": 3.0, "start_angle": 0.2,
+                      "end_angle": 1.0}]}])
+    ae_seg = next(s for s in docformat.summarize(ae_p)
+                  if s["name"] == "AE")["geometry"][0]
+    assert "hyperbola" not in ae_seg, ae_seg
+    assert docformat._sketch_segment_kind(ae_seg) == "arc_ellipse", ae_seg
+    assert docformat._sketch_segment_kind(hyp_seg) == "hyperbola", hyp_seg
+    # a hyperbola needs positive semi-axes and a non-degenerate range.
+    for bad, token in (
+            ({"hyperbola": True, "center": [0, 0], "major_radius": 0,
+              "minor_radius": 3.0, "start_angle": 0.2, "end_angle": 1.0},
+             "must be positive"),
+            ({"hyperbola": True, "center": [0, 0], "major_radius": 6.0,
+              "minor_radius": 3.0, "start_angle": 1.0, "end_angle": 1.0},
+             "hyperbola is degenerate")):
+        try:
+            docformat.synthesize(
+                os.path.join(OUT, "bad_hyperbola.FCStd"),
+                [{"type": docformat._SKETCH_TYPE, "name": "B",
+                  "geometry": [bad]}])
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % bad)
+    print("docformat hyperbola: 6/3 arc (0.2..1.0) -> Hyperbola edge len %g "
+          "(marker-discriminated twin of arc_ellipse, round-trips)" % hyp_len)
+
     # ---- bspline: the general freeform curve, one edge from control poles - #
     # a degree-3 open B-spline through six control poles -- the freeform spline
     # a human pushes/pulls point by point. The generator writes the exact

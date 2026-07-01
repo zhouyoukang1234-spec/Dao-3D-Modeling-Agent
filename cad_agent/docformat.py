@@ -335,6 +335,7 @@ def _sketch_geometry(data_el: Optional[ET.Element]
             ell = g.find("Ellipse")
             aoe = g.find("ArcOfEllipse")
             aop = g.find("ArcOfParabola")
+            aoh = g.find("ArcOfHyperbola")
             bsp = g.find("BSplineCurve")
             pt = g.find("GeomPoint")
             if gtype == "Part::GeomLineSegment" and seg is not None:
@@ -379,6 +380,15 @@ def _sketch_geometry(data_el: Optional[ET.Element]
                 entry["angle"] = float(aop.get("AngleXU", 0))
                 entry["start_angle"] = float(aop.get("StartAngle", 0))
                 entry["end_angle"] = float(aop.get("EndAngle", 0))
+            elif gtype == "Part::GeomArcOfHyperbola" and aoh is not None:
+                entry["hyperbola"] = True
+                entry["center"] = [float(aoh.get("CenterX", 0)),
+                                   float(aoh.get("CenterY", 0))]
+                entry["major_radius"] = float(aoh.get("MajorRadius", 0))
+                entry["minor_radius"] = float(aoh.get("MinorRadius", 0))
+                entry["angle"] = float(aoh.get("AngleXU", 0))
+                entry["start_angle"] = float(aoh.get("StartAngle", 0))
+                entry["end_angle"] = float(aoh.get("EndAngle", 0))
             elif gtype == "Part::GeomBSplineCurve" and bsp is not None:
                 poles = [[float(p.get("X", 0)), float(p.get("Y", 0))]
                          for p in bsp.findall("Pole")]
@@ -744,6 +754,14 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                         seg["angle"] = g["angle"]
                 elif g.get("parabola"):
                     seg = {"center": list(g["center"]), "focal": g["focal"],
+                           "start_angle": g["start_angle"],
+                           "end_angle": g["end_angle"]}
+                    if g.get("angle"):
+                        seg["angle"] = g["angle"]
+                elif g.get("hyperbola"):
+                    seg = {"hyperbola": True, "center": list(g["center"]),
+                           "major_radius": g["major_radius"],
+                           "minor_radius": g["minor_radius"],
                            "start_angle": g["start_angle"],
                            "end_angle": g["end_angle"]}
                     if g.get("angle"):
@@ -2031,6 +2049,8 @@ def _sketch_segment_kind(seg: "Dict[str, Any]") -> "Optional[str]":
         return "point"
     if "start" in seg or "end" in seg:
         return "line"
+    if "hyperbola" in seg:
+        return "hyperbola"
     if "focal" in seg:
         return "parabola"
     if has_axes and has_sweep:
@@ -2067,6 +2087,14 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
       "end_angle": b, "angle": t}`` (``center`` is the vertex, ``focal`` the
       focal length, ``angle`` the axis tilt from +X in radians default 0, the two
       angles the parameter range) -> ``Part::GeomArcOfParabola``
+    * hyperbola -- ``{"hyperbola": True, "center": [x, y], "major_radius": M,
+      "minor_radius": m, "start_angle": a, "end_angle": b, "angle": t}``
+      (``center`` is the hyperbola centre, ``major_radius``/``minor_radius`` the
+      transverse/conjugate semi-axes with no ordering constraint, ``angle`` the
+      transverse-axis tilt from +X in radians default 0, the two angles the
+      parameter range) -> ``Part::GeomArcOfHyperbola``. The explicit
+      ``hyperbola`` marker disambiguates it from ``arc_ellipse``, which shares
+      the same key shape.
     * bspline -- ``{"bspline": {"poles": [[x, y], ...], "knots": [...],
       "mults": [...], "degree": d, "periodic": bool, "weights": [...]}}`` ->
       ``Part::GeomBSplineCurve`` (the general freeform curve; ``weights``
@@ -2087,6 +2115,7 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
                  "ellipse": "Part::GeomEllipse",
                  "arc_ellipse": "Part::GeomArcOfEllipse",
                  "parabola": "Part::GeomArcOfParabola",
+                 "hyperbola": "Part::GeomArcOfHyperbola",
                  "bspline": "Part::GeomBSplineCurve",
                  "point": "Part::GeomPoint"}[kind]
         g = ET.SubElement(glist, "Geometry",
@@ -2127,6 +2156,18 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
                            "NormalX": "%.16f" % 0.0, "NormalY": "%.16f" % 0.0,
                            "NormalZ": "%.16f" % 1.0,
                            "Focal": "%.16f" % float(seg["focal"]),
+                           "AngleXU": "%.16f" % float(seg.get("angle", 0.0)),
+                           "StartAngle": "%.16f" % float(seg["start_angle"]),
+                           "EndAngle": "%.16f" % float(seg["end_angle"])})
+        elif kind == "hyperbola":
+            cx, cy = seg["center"]
+            ET.SubElement(g, "ArcOfHyperbola",
+                          {"CenterX": "%.16f" % float(cx),
+                           "CenterY": "%.16f" % float(cy), "CenterZ": "%.16f" % 0.0,
+                           "NormalX": "%.16f" % 0.0, "NormalY": "%.16f" % 0.0,
+                           "NormalZ": "%.16f" % 1.0,
+                           "MajorRadius": "%.16f" % float(seg["major_radius"]),
+                           "MinorRadius": "%.16f" % float(seg["minor_radius"]),
                            "AngleXU": "%.16f" % float(seg.get("angle", 0.0)),
                            "StartAngle": "%.16f" % float(seg["start_angle"]),
                            "EndAngle": "%.16f" % float(seg["end_angle"])})
@@ -2652,6 +2693,23 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     if seg["start_angle"] == seg["end_angle"]:
                         raise ValueError(
                             "synthesize: sketch %s segment #%d parabola is "
+                            "degenerate (start_angle == end_angle)" % (name, j))
+                elif kind == "hyperbola":
+                    _pt2(seg.get("center"), j, "center")
+                    _num(seg.get("major_radius"), j, "major_radius")
+                    _num(seg.get("minor_radius"), j, "minor_radius")
+                    if seg["major_radius"] <= 0 or seg["minor_radius"] <= 0:
+                        raise ValueError(
+                            "synthesize: sketch %s segment #%d hyperbola "
+                            "'major_radius'/'minor_radius' must be positive"
+                            % (name, j))
+                    if "angle" in seg:
+                        _num(seg.get("angle"), j, "angle")
+                    _num(seg.get("start_angle"), j, "start_angle")
+                    _num(seg.get("end_angle"), j, "end_angle")
+                    if seg["start_angle"] == seg["end_angle"]:
+                        raise ValueError(
+                            "synthesize: sketch %s segment #%d hyperbola is "
                             "degenerate (start_angle == end_angle)" % (name, j))
                 else:
                     _pt2(seg.get("center"), j, "center")
