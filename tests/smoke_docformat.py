@@ -1821,6 +1821,71 @@ def main():
           "mass z %g (vs +%g forward), round-trips, guarded"
           % (round(er_rev_vol, 2), round(er_rev_z, 2), round(er_fwd_z, 2)))
 
+    # ---- Part::Extrusion dir_edge: sweep along a linked edge's direction --- #
+    # the same square, but instead of a fixed Dir the extrusion tracks the
+    # direction of a linked Part::Line tilted into +Y/+Z ((0,0,0)->(0,5,10)).
+    # DirMode flips to Edge and a DirLink names the line: the profile leans along
+    # that unit direction, so the solid tilts (center-of-mass gains +Y and its
+    # through-plane height is LengthFwd's projection -> less volume than a plain
+    # +Z pad). summarize recovers dir_edge, it round-trips, and it lists the line
+    # as a dependency; guarded against dir+dir_edge and a bad sub. 曲則全.
+    def _diredge(edge):
+        p = os.path.join(OUT, "synth_extrude_de%d.FCStd" % edge)
+        spec = {"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+                "length": 10}
+        objs = [{"type": "Part::RegularPolygon", "name": "Sq",
+                 "properties": {"Polygon": 4, "Circumradius": 10}}]
+        if edge:
+            spec["dir_edge"] = "Ln"
+            objs.append({"type": "Part::Line", "name": "Ln",
+                         "properties": {"X1": 0, "Y1": 0, "Z1": 0,
+                                        "X2": 0, "Y2": 5, "Z2": 10}})
+        objs.append(spec)
+        docformat.synthesize(p, objs)
+        d = App.openDocument(p)
+        try:
+            for o in d.Objects:
+                o.touch()
+            d.recompute(None, True)
+            sh = d.getObject("Ext").Shape
+            return p, sh.isValid(), sh.Volume, sh.CenterOfMass.y
+        finally:
+            App.closeDocument(d.Name)
+    de_plain_p, de_plain_ok, de_plain_v, de_plain_y = _diredge(0)
+    de_p, de_ok, de_v, de_y = _diredge(1)
+    de_spec = next(s for s in docformat.summarize(de_p) if s["name"] == "Ext")
+    assert de_spec.get("dir_edge") == "Ln", de_spec
+    assert "dir_edge" not in next(s for s in docformat.summarize(de_plain_p)
+                                  if s["name"] == "Ext")
+    assert "Ln" in docformat.inspect_document(de_p)["dependencies"]["Ext"]
+    de_rt = os.path.join(OUT, "synth_extrude_de_rt.FCStd")
+    docformat.synthesize(de_rt, docformat.summarize(de_p))
+    assert docformat.fingerprint(de_p) == docformat.fingerprint(de_rt)
+    assert de_plain_ok and de_ok, (de_plain_ok, de_ok)
+    assert de_v < de_plain_v - 1e-6, (de_v, de_plain_v)
+    assert de_y > 1.0 and abs(de_plain_y) < 1e-6, (de_y, de_plain_y)
+    for bad, needle in (
+            ({"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+              "length": 5, "dir_edge": "Ln", "dir": [0, 0, 1]},
+             "mutually exclusive"),
+            ({"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+              "length": 5, "dir_edge": "Ln", "dir_edge_sub": [1]},
+             "'dir_edge_sub' must be a list of edge names")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_de.FCStd"), [
+                {"type": "Part::RegularPolygon", "name": "Sq",
+                 "properties": {"Polygon": 4, "Circumradius": 5}},
+                {"type": "Part::Line", "name": "Ln",
+                 "properties": {"X1": 0, "Y1": 0, "Z1": 0,
+                                "X2": 0, "Y2": 1, "Z2": 1}}, bad])
+        except ValueError as exc:
+            assert needle in str(exc), (needle, str(exc))
+        else:
+            raise AssertionError("expected ValueError for %s" % needle)
+    print("docformat Part::Extrusion dir_edge: leans along linked line -> vol %g "
+          "(< %g plain), center-of-mass y %g, dep on line, round-trips, guarded"
+          % (round(de_v, 2), round(de_plain_v, 2), round(de_y, 2)))
+
     # ---- Part::Revolution: spin a sketch profile into a solid ------------ #
     # the lathe to the extrusion's mill: author a 3x4 rectangle offset from the
     # y-axis (x in [2,5]) + a full revolution about that axis. By Pappus the

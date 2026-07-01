@@ -798,9 +798,17 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             length = props.get("LengthFwd", {}).get("value")
             if isinstance(length, (int, float)) and not isinstance(length, bool):
                 spec["length"] = length
-            dir_vec = _vector_spec(props.get("Dir"))
-            if dir_vec and dir_vec != _EXTRUDE_DEFAULT_DIR:
-                spec["dir"] = dir_vec
+            dl_val = props.get("DirLink", {}).get("value")
+            if (props.get("DirMode", {}).get("value") == 1
+                    and isinstance(dl_val, dict) and dl_val.get("link")):
+                spec["dir_edge"] = dl_val["link"]
+                subs = dl_val.get("subs") or []
+                if subs and list(subs) != ["Edge1"]:
+                    spec["dir_edge_sub"] = list(subs)
+            else:
+                dir_vec = _vector_spec(props.get("Dir"))
+                if dir_vec and dir_vec != _EXTRUDE_DEFAULT_DIR:
+                    spec["dir"] = dir_vec
             lrev = props.get("LengthRev", {}).get("value")
             if (isinstance(lrev, (int, float)) and not isinstance(lrev, bool)
                     and lrev):
@@ -2254,7 +2262,14 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     Six properties carry the feature: ``Base`` (link to the profile), ``Dir`` +
     ``DirMode`` = Custom (enum 0) for an explicit sweep direction, ``LengthFwd``
     for the distance, ``Solid`` to cap the ends, and a bullseye ``FaceMakerClass``
-    so a closed wire becomes a face the sweep can fill. An optional ``taper``
+    so a closed wire becomes a face the sweep can fill. An optional ``dir_edge``
+    (an object name, plus ``dir_edge_sub`` for its sub-edge, default ``Edge1``)
+    instead flips ``DirMode`` to Edge (enum 1) and authors a ``DirLink`` so the
+    sweep runs along *another object's edge* direction -- an oblique pad that
+    tracks a linked line; the profile is swept along that edge's unit direction
+    (so the solid leans, its through-plane height the projection of ``LengthFwd``
+    onto the profile normal). Mutually exclusive with an explicit ``dir``. An
+    optional ``taper``
     (draft angle in degrees) authors a ``TaperAngle`` so the swept walls splay
     out (positive) or draw in (negative) along ``Dir`` -- the drafted extrusion
     of a mould/cast; it is written only when non-zero so a plain extrude stays
@@ -2282,9 +2297,18 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
                   {"valueX": "%.16f" % float(dvec[0]),
                    "valueY": "%.16f" % float(dvec[1]),
                    "valueZ": "%.16f" % float(dvec[2])})
+    dir_edge = spec.get("dir_edge")
     dm = ET.SubElement(parent, "Property",
                        {"name": "DirMode", "type": "App::PropertyEnumeration"})
-    ET.SubElement(dm, "Integer", {"value": "0"})
+    ET.SubElement(dm, "Integer", {"value": "1" if dir_edge else "0"})
+    if dir_edge:
+        subs = spec.get("dir_edge_sub") or ["Edge1"]
+        dlp = ET.SubElement(parent, "Property",
+                            {"name": "DirLink", "type": "App::PropertyLinkSub"})
+        lsub = ET.SubElement(dlp, "LinkSub",
+                             {"value": dir_edge, "count": str(len(subs))})
+        for s in subs:
+            ET.SubElement(lsub, "Sub", {"value": s})
     lp = ET.SubElement(parent, "Property",
                        {"name": "LengthFwd", "type": "App::PropertyDistance"})
     ET.SubElement(lp, "Float", {"value": "%.16f" % float(spec["length"])})
@@ -2889,11 +2913,28 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             if "reversed" in spec and not isinstance(spec["reversed"], bool):
                 raise ValueError(
                     "synthesize: extrusion %s 'reversed' must be a bool" % name)
+            de = spec.get("dir_edge")
+            if de is not None:
+                if not isinstance(de, str) or not de.strip():
+                    raise ValueError(
+                        "synthesize: extrusion %s 'dir_edge' must be an object "
+                        "name" % name)
+                if spec.get("dir"):
+                    raise ValueError(
+                        "synthesize: extrusion %s 'dir_edge' and 'dir' are "
+                        "mutually exclusive" % name)
+                sub = spec.get("dir_edge_sub")
+                if sub is not None and (not isinstance(sub, list)
+                                        or not all(isinstance(x, str)
+                                                   for x in sub)):
+                    raise ValueError(
+                        "synthesize: extrusion %s 'dir_edge_sub' must be a list "
+                        "of edge names" % name)
             if spec.get("properties"):
                 raise ValueError(
-                    "synthesize: extrusion %s takes base/length/dir/solid/taper/"
-                    "taper_rev/symmetric/length_rev/reversed, not properties"
-                    % name)
+                    "synthesize: extrusion %s takes base/length/dir/dir_edge/"
+                    "solid/taper/taper_rev/symmetric/length_rev/reversed, not "
+                    "properties" % name)
         elif otype == _REVOLVE_TYPE:
             src = spec.get("source")
             if not isinstance(src, str) or not src.strip():
@@ -3182,7 +3223,9 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         links = ([spec["base"], spec["tool"]] if (is_bool or is_section)
                  else list(spec[ll_key]) if is_linklist
                  else [spec["source"]] if is_mirror
-                 else [spec["base"]] if is_extrude
+                 else ([spec["base"]]
+                       + ([spec["dir_edge"]] if spec.get("dir_edge") else [])
+                       ) if is_extrude
                  else [spec["source"]] if is_revolve
                  else list(spec["sections"]) if is_loft
                  else [spec["spine"]] + list(spec["sections"]) if is_sweep
@@ -3233,6 +3276,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (1 if is_extrude and spec.get("symmetric") else 0)
                       + (1 if is_extrude and spec.get("length_rev") else 0)
                       + (1 if is_extrude and spec.get("reversed") else 0)
+                      + (1 if is_extrude and spec.get("dir_edge") else 0)
                       + (6 if is_revolve else 0)
                       + (1 if is_revolve and spec.get("symmetric") else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
