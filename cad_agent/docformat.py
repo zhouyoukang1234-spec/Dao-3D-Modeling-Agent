@@ -234,6 +234,9 @@ _CONSTRAINT_TYPES = {
     14: "Symmetric", 15: "InternalAlignment", 16: "SnellsLaw", 17: "Block",
     18: "Diameter", 19: "Weight",
 }
+# The reverse map (name -> integer) so a constraint can be *authored* from its
+# GUI name -- the writer's dual of the reader's ``_CONSTRAINT_TYPES`` lookup.
+_CONSTRAINT_TYPE_IDS = {v: k for k, v in _CONSTRAINT_TYPES.items()}
 # The subset that carries a driving dimension (a length / angle / radius the
 # user dials): a value change here re-shapes geometry, unlike a geometric
 # constraint (coincident / horizontal) which only removes a degree of freedom.
@@ -295,6 +298,89 @@ def _sketch_constraints(data_el: Optional[ET.Element]
                     and not isinstance(value, bool)):
                 dims[cname] = value
         out[name] = {"constraints": cons, "count": len(cons), "dimensions": dims}
+    return out
+
+
+def _sketch_constraint_specs(data_el: Optional[ET.Element]
+                            ) -> "Dict[str, List[Dict[str, Any]]]":
+    """sketch name -> its constraint list in ``synthesize`` spec form, read
+    kernel-free at full precision (the authoring dual of ``_sketch_constraints``,
+    which rounds ``value`` for the human summary).
+
+    Each entry names its ``type`` (the GUI name, e.g. ``"DistanceX"``) and keeps
+    only the *non-default* addressing so the spec stays terse yet re-authors the
+    identical ``<Constrain>``: ``first`` / ``first_pos`` / ``second`` /
+    ``second_pos`` / ``third`` / ``third_pos`` (geometry ``GeoId`` + point
+    position, unused = ``-2000`` / ``0``), the driving ``value``, the ``name``,
+    and the ``driving`` / ``active`` / ``virtual_space`` flags (each emitted only
+    when it departs from the kernel default). ``InternalAlignment`` carries its
+    ``internal_type`` / ``internal_index``. Feeding the list back through
+    :func:`synthesize` reproduces the constraint graph byte-for-byte -- the
+    solver's second parametric graph, read straight back out of the file.
+    """
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    if data_el is None:
+        return out
+    for obj in data_el.findall("Object"):
+        name = obj.get("name")
+        if name is None:
+            continue
+        clist = None
+        for props_el in obj.findall("Properties"):
+            for prop in props_el.findall("Property"):
+                if prop.get("type") == "Sketcher::PropertyConstraintList":
+                    clist = prop.find("ConstraintList")
+                    break
+            if clist is not None:
+                break
+        if clist is None:
+            continue
+        specs: List[Dict[str, Any]] = []
+        for c in clist.findall("Constrain"):
+            try:
+                ctype = int(c.get("Type"))
+            except (TypeError, ValueError):
+                continue
+            spec: Dict[str, Any] = {
+                "type": _CONSTRAINT_TYPES.get(ctype, ctype)}
+            for key, attr, default in (
+                    ("first", "First", -2000), ("first_pos", "FirstPos", 0),
+                    ("second", "Second", -2000), ("second_pos", "SecondPos", 0),
+                    ("third", "Third", -2000), ("third_pos", "ThirdPos", 0)):
+                try:
+                    v = int(c.get(attr))
+                except (TypeError, ValueError):
+                    v = default
+                if v != default:
+                    spec[key] = v
+            try:
+                val = float(c.get("Value"))
+            except (TypeError, ValueError):
+                val = 0.0
+            if val != 0.0:
+                spec["value"] = val
+            cname = c.get("Name") or ""
+            if cname:
+                spec["name"] = cname
+            if c.get("IsDriving") == "0":
+                spec["driving"] = False
+            if c.get("IsActive") == "0":
+                spec["active"] = False
+            if c.get("IsInVirtualSpace") == "1":
+                spec["virtual_space"] = True
+            if ctype == 15:
+                try:
+                    spec["internal_type"] = int(c.get("InternalAlignmentType"))
+                except (TypeError, ValueError):
+                    spec["internal_type"] = 0
+                try:
+                    spec["internal_index"] = int(
+                        c.get("InternalAlignmentIndex"))
+                except (TypeError, ValueError):
+                    spec["internal_index"] = -1
+            specs.append(spec)
+        if specs:
+            out[name] = specs
     return out
 
 
@@ -562,6 +648,7 @@ def inspect_document(path: str) -> Dict[str, Any]:
         expr_edges = _expression_edges(expressions, obj_names, _label_map(props))
         sketches = _sketch_constraints(data_el)
         sketch_dims = _sketch_dimensions(sketches)
+        sketch_constraint_specs = _sketch_constraint_specs(data_el)
         sketch_geometry = _sketch_geometry(data_el)
         sheets = _sheet_cells(data_el)
         breps = []
@@ -598,6 +685,7 @@ def inspect_document(path: str) -> Dict[str, Any]:
             "sketches": sketches,
             "sketch_constraint_count": sum(s["count"] for s in sketches.values()),
             "sketch_dimensions": sketch_dims,
+            "sketch_constraint_specs": sketch_constraint_specs,
             "sketch_geometry": sketch_geometry,
             "spreadsheets": sheets,
             "spreadsheet_cell_count": sum(s["count"] for s in sheets.values()),
@@ -790,6 +878,9 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                     seg["construction"] = True
                 segs.append(seg)
             spec["geometry"] = segs
+            cons = info["sketch_constraint_specs"].get(name)
+            if cons:
+                spec["constraints"] = cons
             placement = _placement_spec(props.get("Placement"))
             if placement:
                 spec["placement"] = placement
@@ -2262,6 +2353,53 @@ def _geometry_element(parent: ET.Element, segments: "List[Dict[str, Any]]") -> N
                       {"value": "1" if seg.get("construction") else "0"})
 
 
+def _constraint_element(parent: ET.Element,
+                        constraints: "List[Dict[str, Any]]") -> None:
+    """Append a ``Sketcher::PropertyConstraintList`` -- a sketch's solver
+    constraints authored from file, the second parametric graph a sketch holds
+    (alongside its geometry).
+
+    Each entry names a ``type`` (GUI name, e.g. ``"DistanceX"``, or the raw
+    integer) and addresses the geometry it pins by ``GeoId`` + point position:
+    ``first`` / ``first_pos``, ``second`` / ``second_pos``, ``third`` /
+    ``third_pos`` (an unused slot is ``-2000`` / ``0``; ``pos`` is 0 edge, 1
+    start, 2 end, 3 centre). A *dimensional* type (``Distance`` / ``DistanceX`` /
+    ``DistanceY`` / ``Angle`` / ``Radius`` / ``Diameter`` ...) carries a driving
+    ``value``; an optional ``name`` turns it into a user-facing knob
+    ``set_dimension`` can re-dial. ``driving`` / ``active`` default true,
+    ``virtual_space`` false. ``InternalAlignment`` adds ``internal_type`` /
+    ``internal_index``. The kernel re-solves the sketch to these on recompute,
+    so a closed rectangle authored with four coincidences + horizontals /
+    verticals + a width / height dimension reloads fully pinned (DoF 0).
+    """
+    prop = ET.SubElement(parent, "Property",
+                         {"name": "Constraints",
+                          "type": "Sketcher::PropertyConstraintList"})
+    clist = ET.SubElement(prop, "ConstraintList",
+                          {"count": str(len(constraints))})
+    for c in constraints:
+        t = c["type"]
+        tid = t if isinstance(t, int) else _CONSTRAINT_TYPE_IDS[t]
+        attrs = {"Name": c.get("name", ""), "Type": str(tid)}
+        if tid == 15:
+            attrs["InternalAlignmentType"] = str(int(c.get("internal_type", 0)))
+            attrs["InternalAlignmentIndex"] = str(
+                int(c.get("internal_index", -1)))
+        attrs["Value"] = "%.16f" % float(c.get("value", 0.0))
+        attrs["First"] = str(int(c.get("first", -2000)))
+        attrs["FirstPos"] = str(int(c.get("first_pos", 0)))
+        attrs["Second"] = str(int(c.get("second", -2000)))
+        attrs["SecondPos"] = str(int(c.get("second_pos", 0)))
+        attrs["Third"] = str(int(c.get("third", -2000)))
+        attrs["ThirdPos"] = str(int(c.get("third_pos", 0)))
+        attrs["LabelDistance"] = "10.0000000000000000"
+        attrs["LabelPosition"] = "0.0000000000000000"
+        attrs["IsDriving"] = "1" if c.get("driving", True) else "0"
+        attrs["IsInVirtualSpace"] = "1" if c.get("virtual_space", False) else "0"
+        attrs["IsActive"] = "1" if c.get("active", True) else "0"
+        ET.SubElement(clist, "Constrain", attrs)
+
+
 def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     """Append the ``Part::Extrusion`` properties that turn a 2D ``base`` profile
     into a swept (optionally solid) body.
@@ -2868,6 +3006,63 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     raise ValueError(
                         "synthesize: sketch %s segment #%d 'construction' must "
                         "be a bool" % (name, j))
+            cons = spec.get("constraints")
+            if cons is not None:
+                if not isinstance(cons, list):
+                    raise ValueError(
+                        "synthesize: sketch %s 'constraints' must be a list"
+                        % name)
+                ngeom = len(segs)
+                for k, c in enumerate(cons):
+                    if not isinstance(c, dict):
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d must be a dict"
+                            % (name, k))
+                    t = c.get("type")
+                    if isinstance(t, bool) or not isinstance(t, (int, str)):
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d needs a 'type' "
+                            "(name or integer)" % (name, k))
+                    if isinstance(t, str) and t not in _CONSTRAINT_TYPE_IDS:
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d unknown type "
+                            "%r" % (name, k, t))
+                    if isinstance(t, int) and t not in _CONSTRAINT_TYPES:
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d unknown type "
+                            "id %d" % (name, k, t))
+                    for key in ("first", "first_pos", "second", "second_pos",
+                                "third", "third_pos", "internal_type",
+                                "internal_index"):
+                        v = c.get(key)
+                        if v is not None and (isinstance(v, bool)
+                                              or not isinstance(v, int)):
+                            raise ValueError(
+                                "synthesize: sketch %s constraint #%d '%s' must "
+                                "be an integer" % (name, k, key))
+                    for key in ("first", "second", "third"):
+                        gi = c.get(key)
+                        if isinstance(gi, int) and 0 <= gi and gi >= ngeom:
+                            raise ValueError(
+                                "synthesize: sketch %s constraint #%d '%s'=%d "
+                                "references geometry out of range (0..%d)"
+                                % (name, k, key, gi, ngeom - 1))
+                    val = c.get("value")
+                    if val is not None and (isinstance(val, bool)
+                                            or not isinstance(val, (int, float))):
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d 'value' must "
+                            "be a number" % (name, k))
+                    nm = c.get("name")
+                    if nm is not None and not isinstance(nm, str):
+                        raise ValueError(
+                            "synthesize: sketch %s constraint #%d 'name' must be "
+                            "a string" % (name, k))
+                    for key in ("driving", "active", "virtual_space"):
+                        if key in c and not isinstance(c[key], bool):
+                            raise ValueError(
+                                "synthesize: sketch %s constraint #%d '%s' must "
+                                "be a bool" % (name, k, key))
             if spec.get("properties"):
                 raise ValueError(
                     "synthesize: sketch %s takes 'geometry', not properties"
@@ -3311,6 +3506,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                          else 0)
                       + (1 if is_sheet else 0)
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
+                      + (1 if is_sketch and spec.get("constraints") else 0)
                       + (6 if is_extrude else 0)
                       + (1 if is_extrude and spec.get("taper") else 0)
                       + (1 if is_extrude and spec.get("taper_rev") else 0)
@@ -3332,6 +3528,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             _cells_element(props_el, spec["cells"])
         if is_sketch:
             _geometry_element(props_el, spec["geometry"])
+            if spec.get("constraints"):
+                _constraint_element(props_el, spec["constraints"])
         if is_extrude:
             _extrusion_properties(props_el, spec)
         if is_revolve:

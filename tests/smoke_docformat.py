@@ -1215,6 +1215,120 @@ def main():
     print("docformat slot: obround length 20 radius 5 from one description -> "
           "closed wire area %g (line+arc mixed profile)" % slot_area)
 
+    # ---- constraints: authoring the solver graph, not just reading it ----- #
+    # a closed rectangle whose four corners, edge orientations and origin anchor
+    # are pinned by coincidences / horizontals / verticals, then dimensioned by
+    # two named driving knobs (width / height). Before, synthesize could only
+    # write the four edges; the solver graph the GUI clicks was read-only. Here
+    # it is *authored from file*: 11 constraints drive the sketch to DoF 0, and
+    # the named dimensions become knobs set_dimension can re-dial.
+    W, H = 40.0, 25.0
+    con_spec = {
+        "name": "Rc", "type": "Sketcher::SketchObject",
+        "geometry": [
+            {"start": [0, 0], "end": [W, 0]},
+            {"start": [W, 0], "end": [W, H]},
+            {"start": [W, H], "end": [0, H]},
+            {"start": [0, H], "end": [0, 0]},
+        ],
+        "constraints": [
+            {"type": "Coincident", "first": 0, "first_pos": 2,
+             "second": 1, "second_pos": 1},
+            {"type": "Coincident", "first": 1, "first_pos": 2,
+             "second": 2, "second_pos": 1},
+            {"type": "Coincident", "first": 2, "first_pos": 2,
+             "second": 3, "second_pos": 1},
+            {"type": "Coincident", "first": 3, "first_pos": 2,
+             "second": 0, "second_pos": 1},
+            {"type": "Horizontal", "first": 0},
+            {"type": "Horizontal", "first": 2},
+            {"type": "Vertical", "first": 1},
+            {"type": "Vertical", "first": 3},
+            {"type": "Coincident", "first": 0, "first_pos": 1,
+             "second": -1, "second_pos": 1},
+            {"type": "DistanceX", "first": 0, "first_pos": 1, "second": 0,
+             "second_pos": 2, "value": W, "name": "width"},
+            {"type": "DistanceY", "first": 1, "first_pos": 1, "second": 1,
+             "second_pos": 2, "value": H, "name": "height"},
+        ],
+    }
+    con_p = os.path.join(OUT, "synth_constraints.FCStd")
+    docformat.synthesize(con_p, [con_spec])
+    con_sum = next(s for s in docformat.summarize(con_p) if s["name"] == "Rc")
+    assert len(con_sum["constraints"]) == 11, con_sum["constraints"]
+    con_types = [c["type"] for c in con_sum["constraints"]]
+    assert con_types.count("Coincident") == 5, con_types
+    assert "DistanceX" in con_types and "DistanceY" in con_types, con_types
+    wdim = next(c for c in con_sum["constraints"] if c.get("name") == "width")
+    assert wdim["value"] == W and wdim["type"] == "DistanceX", wdim
+    # round-trip: the authored solver graph reloads byte-for-byte.
+    con_rt = os.path.join(OUT, "synth_constraints_rt.FCStd")
+    docformat.synthesize(con_rt, docformat.summarize(con_p))
+    assert docformat.fingerprint(con_p) == docformat.fingerprint(con_rt)
+    assert zipfile.ZipFile(con_p).namelist() == ["Document.xml"]
+    assert (zipfile.ZipFile(con_p).read("Document.xml")
+            == zipfile.ZipFile(con_rt).read("Document.xml")), "constraint rt bytes"
+    # inspect surfaces the named driving dimensions as user knobs.
+    con_ix = docformat.inspect_document(con_p)
+    assert con_ix["sketch_constraint_count"] == 11, con_ix
+    assert con_ix["sketch_dimensions"]["Rc.width"] == 40, con_ix
+    assert con_ix["sketch_dimensions"]["Rc.height"] == 25, con_ix
+    # kernel cross-check: the file-authored graph solves to a fully pinned sketch.
+    cdoc = App.openDocument(con_p)
+    try:
+        crc = cdoc.getObject("Rc")
+        for o in cdoc.Objects:
+            o.touch()
+        cdoc.recompute(None, True)
+        assert crc.ConstraintCount == 11, crc.ConstraintCount
+        con_dof = crc.solve()
+        con_edges = len(crc.Shape.Edges)
+    finally:
+        App.closeDocument(cdoc.Name)
+    assert con_dof == 0, "file-authored constraints must fully pin sketch (DoF %d)" \
+        % con_dof
+    assert con_edges == 4, con_edges
+    # set_dimension re-dials a file-authored knob and the kernel re-solves.
+    con_set = os.path.join(OUT, "synth_constraints_set.FCStd")
+    csr = docformat.set_dimension(con_p, "Rc", "width", 60, out=con_set)
+    assert csr["old"] == 40 and csr["new"] == 60, csr
+    sdoc = App.openDocument(con_set)
+    try:
+        src = sdoc.getObject("Rc")
+        for o in sdoc.Objects:
+            o.touch()
+        sdoc.recompute(None, True)
+        set_bb = src.Shape.BoundBox
+    finally:
+        App.closeDocument(sdoc.Name)
+    assert abs(set_bb.XLength - 60) < 1e-6, set_bb.XLength
+    # guards: bad list, non-dict entry, unknown type, non-int address, out-of-range
+    # geometry ref, bad value / name / flag types are all refused.
+    def _con(cons):
+        g = [{"start": [0, 0], "end": [W, 0]}]
+        return [{"name": "G", "type": "Sketcher::SketchObject",
+                 "geometry": g, "constraints": cons}]
+    con_bad = os.path.join(OUT, "synth_constraints_bad.FCStd")
+    for cons, token in (
+            ("nope", "'constraints' must be a list"),
+            ([42], "must be a dict"),
+            ([{"first": 0}], "needs a 'type'"),
+            ([{"type": "Nope"}], "unknown type"),
+            ([{"type": 999}], "unknown type id"),
+            ([{"type": "Horizontal", "first": "x"}], "'first' must be an integer"),
+            ([{"type": "Horizontal", "first": 5}], "out of range"),
+            ([{"type": "DistanceX", "value": "big"}], "'value' must be a number"),
+            ([{"type": "Horizontal", "name": 7}], "'name' must be a string"),
+            ([{"type": "Horizontal", "driving": "yes"}], "'driving' must be a bool")):
+        try:
+            docformat.synthesize(con_bad, _con(cons))
+        except (ValueError, KeyError, TypeError) as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected error for %r" % (cons,))
+    print("docformat constraints: 11-constraint rectangle authored from file -> "
+          "DoF 0, width/height knobs, byte round-trip, set_dimension 40->60")
+
     # ---- ellipse: a single curved edge closing a loop, one description --- #
     # a tilted ellipse the human places by centre + two dragged axes under
     # tangency constraints -- here both radii and the tilt come from one
