@@ -2276,16 +2276,22 @@ def bspline(
     degree: int = 3,
     weights: "Optional[List[float]]" = None,
     construction: bool = False,
+    closed: bool = False,
 ) -> "Dict[str, Any]":
     """Generate a freeform B-spline curve as a single-edge sketch spec.
 
-    The most general curve: an open, clamped (endpoint-interpolating) B-spline
-    of ``degree`` through control ``poles`` ``[[x, y], ...]`` with an automatic
-    uniform knot vector. A human pushes/pulls control points by hand; here the
-    poles, the degree and the exact clamped knot/multiplicity vector come from
-    one description, written byte-exact. Optional rational ``weights`` (one per
-    pole) bend it toward heavy poles. The result is a ``Part::GeomBSplineCurve``
-    that extrudes / sweeps straight from file. 道法自然.
+    The most general curve: a B-spline of ``degree`` through control ``poles``
+    ``[[x, y], ...]`` with an automatic uniform knot vector. When ``closed`` is
+    false (default) it is an open, clamped (endpoint-interpolating) curve whose
+    end knots carry multiplicity ``degree+1``. When ``closed`` is true it is a
+    *periodic* B-spline -- a smooth closed loop through the poles (all knots
+    multiplicity 1, count ``poles+1``, uniform on ``[0, 1]``) that can back a
+    face, the freeform analogue of a closed polygon. A human pushes/pulls
+    control points by hand; here the poles, the degree and the exact
+    knot/multiplicity vector come from one description, written byte-exact.
+    Optional rational ``weights`` (one per pole) bend it toward heavy poles. The
+    result is a ``Part::GeomBSplineCurve`` that extrudes / sweeps straight from
+    file. 道法自然.
     """
     if not isinstance(name, str) or not name.strip():
         raise ValueError("bspline: needs a non-empty name")
@@ -2307,14 +2313,27 @@ def bspline(
         raise ValueError("bspline: 'weights' must give one number per pole")
     if not isinstance(construction, bool):
         raise ValueError("bspline: 'construction' must be a bool")
-    # clamped uniform knot vector: end knots carry multiplicity degree+1, the
-    # (n-degree) interior knots one each -- sum == poles + degree + 1.
+    if not isinstance(closed, bool):
+        raise ValueError("bspline: 'closed' must be a bool")
     n = len(norm_poles)
-    interior = n - degree - 1
-    knots = [0.0] + [float(i + 1) for i in range(interior)] + [float(interior + 1)]
-    mults = [degree + 1] + [1] * interior + [degree + 1]
+    if closed:
+        # periodic uniform knot vector: poles+1 knots, all multiplicity 1,
+        # evenly spaced on [0, 1] (knots[i] = i/n) -- sum == poles + 1. This is
+        # what the kernel's buildFromPoles(..., periodic=True) yields, matched
+        # byte-exact so the closed loop round-trips.
+        knots = [float(i) / float(n) for i in range(n + 1)]
+        mults = [1] * (n + 1)
+    else:
+        # clamped uniform knot vector: end knots carry multiplicity degree+1,
+        # the (n-degree) interior knots one each -- sum == poles + degree + 1.
+        interior = n - degree - 1
+        knots = ([0.0] + [float(i + 1) for i in range(interior)]
+                 + [float(interior + 1)])
+        mults = [degree + 1] + [1] * interior + [degree + 1]
     inner: Dict[str, Any] = {"poles": norm_poles, "knots": knots,
                              "mults": mults, "degree": degree}
+    if closed:
+        inner["periodic"] = True
     if weights is not None:
         inner["weights"] = [float(w) for w in weights]
     seg: Dict[str, Any] = {"bspline": inner}

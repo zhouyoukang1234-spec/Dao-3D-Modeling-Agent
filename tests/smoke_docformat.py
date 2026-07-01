@@ -1073,8 +1073,37 @@ def main():
             assert token in str(exc), (token, exc)
         else:
             raise AssertionError("expected ValueError for %r" % kwargs)
+    # a closed (periodic) B-spline: a smooth freeform loop through the poles,
+    # the curved analogue of a closed polygon. poles+1 knots all mult 1, uniform
+    # on [0,1]; the kernel rebuilds one periodic edge that bounds a face.
+    clg = docformat.bspline(
+        "CL", [[0, 0], [10, 2], [12, 10], [4, 14], [-4, 8]], degree=3,
+        closed=True)
+    cl_inner = clg["geometry"][0]["bspline"]
+    assert cl_inner["periodic"] is True, cl_inner
+    assert cl_inner["mults"] == [1, 1, 1, 1, 1, 1], cl_inner
+    assert sum(cl_inner["mults"]) == len(cl_inner["poles"]) + 1, cl_inner
+    cl_p = os.path.join(OUT, "synth_bspline_closed.FCStd")
+    docformat.synthesize(cl_p, [clg])
+    cl_rt = os.path.join(OUT, "synth_bspline_closed_rt.FCStd")
+    docformat.synthesize(cl_rt, docformat.summarize(cl_p))
+    assert docformat.fingerprint(cl_p) == docformat.fingerprint(cl_rt)
+    cld = App.openDocument(cl_p)
+    try:
+        for o in cld.Objects:
+            o.touch()
+        cld.recompute(None, True)
+        cl_edge = cld.getObject("CL").Shape.Edges[0]
+        cl_periodic = cl_edge.Curve.isPeriodic()
+        cl_face_area = Part.Face(Part.Wire(
+            cld.getObject("CL").Shape.Edges)).Area
+    finally:
+        App.closeDocument(cld.Name)
+    assert cl_periodic is True, cl_periodic
+    assert cl_face_area > 100.0, cl_face_area
     print("docformat bspline: degree-3 freeform through 6 poles -> single "
-          "BSplineCurve edge (+ rational weights, round-trip exact)")
+          "BSplineCurve edge (+ rational weights, round-trip exact); closed "
+          "periodic loop bounds a face (area %g)" % cl_face_area)
 
     # ---- Part::Extrusion: sweep a sketch profile into a solid ------------ #
     # the join between the sketch layer and the solid layer: author a 10x5

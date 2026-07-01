@@ -223,7 +223,8 @@ def _doc_handlers(state):
             obj = df.bspline(
                 a.get("name"), a.get("poles"), degree=a.get("degree", 3),
                 weights=a.get("weights"),
-                construction=a.get("construction", False))
+                construction=a.get("construction", False),
+                closed=a.get("closed", False))
         else:
             raise ValueError(
                 "doc.profile 'shape' must be 'regular_polygon', 'slot', "
