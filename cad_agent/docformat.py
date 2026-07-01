@@ -800,6 +800,8 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             if (isinstance(taper, (int, float)) and not isinstance(taper, bool)
                     and taper):
                 spec["taper"] = taper
+            if props.get("Symmetric", {}).get("value") is True:
+                spec["symmetric"] = True
             solid = props.get("Solid", {}).get("value")
             if solid is False:
                 spec["solid"] = False
@@ -2236,8 +2238,10 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     (draft angle in degrees) authors a ``TaperAngle`` so the swept walls splay
     out (positive) or draw in (negative) along ``Dir`` -- the drafted extrusion
     of a mould/cast; it is written only when non-zero so a plain extrude stays
-    byte-identical. The kernel does the sweep on recompute; the file just
-    declares it.
+    byte-identical. An optional ``symmetric`` sweeps half the ``LengthFwd`` to
+    each side of the profile plane (``+L/2 .. -L/2``) instead of all one way --
+    the balanced pad; it too is written only when true. The kernel does the
+    sweep on recompute; the file just declares it.
     """
     bp = ET.SubElement(parent, "Property",
                        {"name": "Base", "type": "App::PropertyLink"})
@@ -2260,6 +2264,10 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
         tp = ET.SubElement(parent, "Property",
                            {"name": "TaperAngle", "type": "App::PropertyAngle"})
         ET.SubElement(tp, "Float", {"value": "%.16f" % float(taper)})
+    if spec.get("symmetric"):
+        yp = ET.SubElement(parent, "Property",
+                           {"name": "Symmetric", "type": "App::PropertyBool"})
+        ET.SubElement(yp, "Bool", {"value": "true"})
     solid = spec.get("solid", True)
     sp = ET.SubElement(parent, "Property",
                        {"name": "Solid", "type": "App::PropertyBool"})
@@ -2801,10 +2809,13 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: extrusion %s 'taper' must be within "
                     "(-90, 90) degrees" % name)
+            if "symmetric" in spec and not isinstance(spec["symmetric"], bool):
+                raise ValueError(
+                    "synthesize: extrusion %s 'symmetric' must be a bool" % name)
             if spec.get("properties"):
                 raise ValueError(
-                    "synthesize: extrusion %s takes base/length/dir/solid/taper, "
-                    "not properties" % name)
+                    "synthesize: extrusion %s takes base/length/dir/solid/taper/"
+                    "symmetric, not properties" % name)
         elif otype == _REVOLVE_TYPE:
             src = spec.get("source")
             if not isinstance(src, str) or not src.strip():
@@ -3136,6 +3147,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
                       + (6 if is_extrude else 0)
                       + (1 if is_extrude and spec.get("taper") else 0)
+                      + (1 if is_extrude and spec.get("symmetric") else 0)
                       + (6 if is_revolve else 0)
                       + (1 if is_revolve and spec.get("symmetric") else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
