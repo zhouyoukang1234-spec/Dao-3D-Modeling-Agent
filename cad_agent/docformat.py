@@ -668,6 +668,18 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                 spec["approximation"] = True
             if props.get("Refine", {}).get("value") is True:
                 spec["refine"] = True
+        elif otype == _HELIX_TYPE:
+            for key, pname in (("pitch", "Pitch"), ("height", "Height"),
+                               ("radius", "Radius"), ("angle", "Angle")):
+                v = props.get(pname, {}).get("value")
+                if isinstance(v, (int, float)):
+                    spec[key] = v
+            hand_i = props.get("LocalCoord", {}).get("value")
+            if isinstance(hand_i, int) and 0 < hand_i < len(_HELIX_HANDS):
+                spec["hand"] = _HELIX_HANDS[hand_i]
+            style_i = props.get("Style", {}).get("value")
+            if isinstance(style_i, int) and 0 < style_i < len(_HELIX_STYLES):
+                spec["style"] = _HELIX_STYLES[style_i]
         elif otype in _LINKLIST_TYPES:
             key, prop_name = _LINKLIST_TYPES[otype]
             ll_val = props.get(prop_name, {}).get("value")
@@ -1502,6 +1514,20 @@ _OFFSET_JOINS = _THICKNESS_JOINS
 _RULED_TYPE = "Part::RuledSurface"
 _RULED_ORIENTS = ("Automatic", "Forward", "Reversed")
 
+# Part::Helix -- a parametric helical edge (the archetypal spring / thread spine).
+# Four scalars fix the curve: ``Pitch`` (axial rise per turn), ``Height`` (total
+# axial length -- the number of turns is Height/Pitch), ``Radius`` and ``Angle``
+# (a cone half-angle taper: 0 is a plain cylinder helix, non-zero spirals the
+# radius in/out into a conical helix). Two enumerations by index set the chirality
+# and the parametrisation: ``LocalCoord`` -- ``Right-handed`` / ``Left-handed`` --
+# and ``Style`` -- ``Old style`` / ``New style``. Like every primitive its
+# ``execute()`` rebuilds the edge from these alone; no BREP is written, and the
+# read-only computed ``Length`` is left for the kernel to regenerate. Fed as a
+# Sweep spine it drives screws, springs and threads. 綿綿若存.
+_HELIX_TYPE = "Part::Helix"
+_HELIX_HANDS = ("Right-handed", "Left-handed")
+_HELIX_STYLES = ("Old style", "New style")
+
 
 def _edge_treatment_size_keys(otype: str) -> "tuple":
     """The (scalar, pair1, pair2, noun) spec keys an edge treatment reads its
@@ -1805,6 +1831,63 @@ def _ruled_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
                        {"name": "Orientation", "type": "App::PropertyEnumeration"})
     ET.SubElement(op, "Integer",
                   {"value": str(_RULED_ORIENTS.index(norm["orientation"]))})
+
+
+def _norm_helix(spec: "Dict[str, Any]") -> "Dict[str, Any]":
+    """Validate a ``Part::Helix`` spec and return it normalised: positive
+    ``pitch`` / ``height`` / ``radius``, a taper ``angle`` in (-90, 90) degrees,
+    and valid ``hand`` / ``style`` enumeration names. Raises ``ValueError``
+    (naming the object) so a degenerate helix never reaches the kernel."""
+    name = spec.get("name")
+    out = {}
+    for key in ("pitch", "height", "radius"):
+        val = spec.get(key)
+        if not isinstance(val, (int, float)) or isinstance(val, bool) or val <= 0:
+            raise ValueError(
+                "synthesize: helix %s needs a positive %r (got %r)"
+                % (name, key, val))
+        out[key] = float(val)
+    angle = spec.get("angle", 0.0)
+    if not isinstance(angle, (int, float)) or isinstance(angle, bool) \
+            or not -90.0 < float(angle) < 90.0:
+        raise ValueError(
+            "synthesize: helix %s taper angle %r must be within (-90, 90) degrees"
+            % (name, angle))
+    out["angle"] = float(angle)
+    hand = spec.get("hand", "Right-handed")
+    if hand not in _HELIX_HANDS:
+        raise ValueError(
+            "synthesize: helix %s hand %r must be one of %s"
+            % (name, hand, ", ".join(_HELIX_HANDS)))
+    out["hand"] = hand
+    style = spec.get("style", "Old style")
+    if style not in _HELIX_STYLES:
+        raise ValueError(
+            "synthesize: helix %s style %r must be one of %s"
+            % (name, style, ", ".join(_HELIX_STYLES)))
+    out["style"] = style
+    return out
+
+
+def _helix_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
+    """Append the ``Part::Helix`` properties: the four length/angle scalars
+    (``Pitch`` / ``Height`` / ``Radius`` as ``App::PropertyLength``, ``Angle`` as
+    ``App::PropertyAngle``) and the two enumerations (``LocalCoord`` chirality,
+    ``Style``) written as their integer indices. No BREP; the read-only ``Length``
+    is left for the kernel to recompute."""
+    norm = _norm_helix(spec)
+    for pname, key, ptype in (("Pitch", "pitch", "App::PropertyLength"),
+                              ("Height", "height", "App::PropertyLength"),
+                              ("Radius", "radius", "App::PropertyLength"),
+                              ("Angle", "angle", "App::PropertyAngle")):
+        pp = ET.SubElement(parent, "Property", {"name": pname, "type": ptype})
+        ET.SubElement(pp, "Float", {"value": "%.16f" % norm[key]})
+    lp = ET.SubElement(parent, "Property",
+                       {"name": "LocalCoord", "type": "App::PropertyEnumeration"})
+    ET.SubElement(lp, "Integer", {"value": str(_HELIX_HANDS.index(norm["hand"]))})
+    sp = ET.SubElement(parent, "Property",
+                       {"name": "Style", "type": "App::PropertyEnumeration"})
+    ET.SubElement(sp, "Integer", {"value": str(_HELIX_STYLES.index(norm["style"]))})
 
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
@@ -2198,7 +2281,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 and otype != _LOFT_TYPE and otype != _SWEEP_TYPE
                 and otype not in _EDGE_TREATMENTS
                 and otype != _THICKNESS_TYPE and otype not in _OFFSET_TYPES
-                and otype != _RULED_TYPE and otype != _SECTION_TYPE):
+                and otype != _RULED_TYPE and otype != _SECTION_TYPE
+                and otype != _HELIX_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
@@ -2207,7 +2291,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
                        _EXTRUDE_TYPE, _REVOLVE_TYPE, _LOFT_TYPE,
                        _SWEEP_TYPE, _THICKNESS_TYPE, _RULED_TYPE,
-                       _SECTION_TYPE}))))
+                       _SECTION_TYPE, _HELIX_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -2276,6 +2360,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: section %s takes base/tool, not properties"
                     % name)
+        elif otype == _HELIX_TYPE:
+            _norm_helix(spec)  # validates pitch/height/radius/angle/hand/style
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: helix %s takes pitch/height/radius/angle, "
+                    "not properties" % name)
         elif otype == _MIRROR_TYPE:
             src = spec.get("source")
             if not isinstance(src, str) or not src.strip():
@@ -2733,10 +2823,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_offset = otype in _OFFSET_TYPES
         is_ruled = otype == _RULED_TYPE
         is_section = otype == _SECTION_TYPE
+        is_helix = otype == _HELIX_TYPE
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
                         or is_sketch or is_extrude or is_revolve or is_loft
                         or is_sweep or is_edge or is_thick or is_offset
-                        or is_ruled or is_section)
+                        or is_ruled or is_section or is_helix)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
@@ -2777,7 +2868,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
                              or is_sketch or is_extrude or is_revolve or is_loft
                              or is_sweep or is_edge or is_thick or is_offset
-                             or is_ruled or is_section)
+                             or is_ruled or is_section or is_helix)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
@@ -2787,7 +2878,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
                       + (3 if is_edge else 0) + (6 if is_thick else 0)
                       + (7 if is_offset else 0) + (3 if is_ruled else 0)
-                      + (4 if is_section else 0))
+                      + (4 if is_section else 0) + (6 if is_helix else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -2816,6 +2907,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             _offset_properties(props_el, spec)
         if is_ruled:
             _ruled_properties(props_el, spec)
+        if is_helix:
+            _helix_properties(props_el, spec)
         if is_section:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
@@ -3477,6 +3570,33 @@ def section(name: str, base: str, tool: str, approximation: bool = False,
     return {"type": _SECTION_TYPE, "name": name, "base": str(base),
             "tool": str(tool), "approximation": bool(approximation),
             "refine": bool(refine)}
+
+
+def helix(name: str, pitch: float, height: float, radius: float,
+          angle: float = 0.0, hand: str = "Right-handed",
+          style: str = "Old style",
+          placement: "Optional[Dict[str, Any]]" = None) -> "Dict[str, Any]":
+    """Generate a ``Part::Helix`` object spec: a parametric helical edge.
+
+    The archetypal spring / thread spine. ``pitch`` is the axial rise per turn and
+    ``height`` the total axial length, so the turn count is ``height / pitch``;
+    ``radius`` is the helix radius and ``angle`` a cone half-angle taper in degrees
+    (``0`` a plain cylindrical helix, non-zero a conical one that spirals the
+    radius in/out). ``hand`` sets the chirality -- ``Right-handed`` or
+    ``Left-handed`` -- and ``style`` the parametrisation (``Old style`` /
+    ``New style``). Feed the result into :func:`synthesize` on its own, or as the
+    ``spine`` of a :func:`sweep` to drive screws, springs and threads; the kernel
+    rebuilds the edge on recompute from these scalars alone. 綿綿若存.
+    """
+    spec: Dict[str, Any] = {"type": _HELIX_TYPE, "name": name,
+                            "pitch": pitch, "height": height, "radius": radius,
+                            "angle": angle, "hand": hand, "style": style}
+    if placement:
+        spec["placement"] = placement
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("%s: needs a non-empty name" % _HELIX_TYPE)
+    _norm_helix(spec)
+    return spec
 
 
 def _rodrigues(v: "List[float]", axis: "List[float]", angle_deg: float) -> "List[float]":
