@@ -297,6 +297,11 @@ def _build_handlers(state):
         handlers.update(freecad_resource.register(state))
     except Exception as exc:  # network resource search is optional
         sys.stderr.write("resource load failed: %r\n" % (exc,))
+    try:
+        import freecad_reflect
+        handlers.update(freecad_reflect.register(state))
+    except Exception as exc:  # reflective universal dispatch is optional
+        sys.stderr.write("reflect load failed: %r\n" % (exc,))
     return handlers
 
 
