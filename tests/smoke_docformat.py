@@ -1577,6 +1577,48 @@ def main():
           "center-of-mass z ~0 (vs one-sided %g), round-trips, guarded"
           % (round(ex_sym_vol, 2), round(ex_one_z, 2)))
 
+    # ---- Part::Extrusion length_rev: asymmetric two-sided pad ------------- #
+    # the same square base grown 5 along +Z and another 3 along -Z (LengthRev):
+    # total extent 8 (span z in [-3, 5]), so volume 200*8 = 1600 -- same as a
+    # one-sided pad of 8 -- but the solid straddles the plane off-center, its
+    # center-of-mass z = (5 - 3)/2 = 1 (vs 0 symmetric, 4 one-sided). The reverse
+    # extent is authored only when non-zero and round-trips; negative is guarded.
+    lr_p = os.path.join(OUT, "synth_extrude_lrev.FCStd")
+    docformat.synthesize(lr_p, [
+        {"type": "Part::RegularPolygon", "name": "Sq",
+         "properties": {"Polygon": 4, "Circumradius": 10}},
+        {"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+         "length": 5, "length_rev": 3}])
+    lr_spec = next(s for s in docformat.summarize(lr_p) if s["name"] == "Ext")
+    assert lr_spec.get("length_rev") == 3, lr_spec
+    lr_rt = os.path.join(OUT, "synth_extrude_lrev_rt.FCStd")
+    docformat.synthesize(lr_rt, docformat.summarize(lr_p))
+    assert docformat.fingerprint(lr_p) == docformat.fingerprint(lr_rt)
+    lrd = App.openDocument(lr_p)
+    try:
+        for o in lrd.Objects:
+            o.touch()
+        lrd.recompute(None, True)
+        lr_sh = lrd.getObject("Ext").Shape
+        lr_ok, lr_vol, lr_z = lr_sh.isValid(), lr_sh.Volume, lr_sh.CenterOfMass.z
+    finally:
+        App.closeDocument(lrd.Name)
+    assert lr_ok and abs(lr_vol - 1600.0) < 1e-6, (lr_ok, lr_vol)
+    assert abs(lr_z - 1.0) < 1e-6, lr_z
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_lrev.FCStd"), [
+            {"type": "Part::RegularPolygon", "name": "Sq",
+             "properties": {"Polygon": 4, "Circumradius": 5}},
+            {"type": "Part::Extrusion", "name": "Ex", "base": "Sq",
+             "length": 5, "length_rev": -2}])
+    except ValueError as exc:
+        assert "'length_rev' must be >= 0" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for negative length_rev")
+    print("docformat Part::Extrusion length_rev: 5 fwd + 3 rev -> vol %g (extent "
+          "8), center-of-mass z %g (off-center), round-trips, guarded"
+          % (round(lr_vol, 2), round(lr_z, 2)))
+
     # ---- Part::Revolution: spin a sketch profile into a solid ------------ #
     # the lathe to the extrusion's mill: author a 3x4 rectangle offset from the
     # y-axis (x in [2,5]) + a full revolution about that axis. By Pappus the

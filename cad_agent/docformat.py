@@ -796,6 +796,10 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             dir_vec = _vector_spec(props.get("Dir"))
             if dir_vec and dir_vec != _EXTRUDE_DEFAULT_DIR:
                 spec["dir"] = dir_vec
+            lrev = props.get("LengthRev", {}).get("value")
+            if (isinstance(lrev, (int, float)) and not isinstance(lrev, bool)
+                    and lrev):
+                spec["length_rev"] = lrev
             taper = props.get("TaperAngle", {}).get("value")
             if (isinstance(taper, (int, float)) and not isinstance(taper, bool)
                     and taper):
@@ -2240,7 +2244,10 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     of a mould/cast; it is written only when non-zero so a plain extrude stays
     byte-identical. An optional ``symmetric`` sweeps half the ``LengthFwd`` to
     each side of the profile plane (``+L/2 .. -L/2``) instead of all one way --
-    the balanced pad; it too is written only when true. The kernel does the
+    the balanced pad; it too is written only when true. An optional
+    ``length_rev`` authors a ``LengthRev`` so the sweep also grows the other way
+    along ``-Dir`` -- the asymmetric two-sided pad (total extent
+    ``length + length_rev``); written only when non-zero. The kernel does the
     sweep on recompute; the file just declares it.
     """
     bp = ET.SubElement(parent, "Property",
@@ -2259,6 +2266,10 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     lp = ET.SubElement(parent, "Property",
                        {"name": "LengthFwd", "type": "App::PropertyDistance"})
     ET.SubElement(lp, "Float", {"value": "%.16f" % float(spec["length"])})
+    if spec.get("length_rev"):
+        rp = ET.SubElement(parent, "Property",
+                           {"name": "LengthRev", "type": "App::PropertyDistance"})
+        ET.SubElement(rp, "Float", {"value": "%.16f" % float(spec["length_rev"])})
     taper = spec.get("taper")
     if taper:
         tp = ET.SubElement(parent, "Property",
@@ -2812,10 +2823,19 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             if "symmetric" in spec and not isinstance(spec["symmetric"], bool):
                 raise ValueError(
                     "synthesize: extrusion %s 'symmetric' must be a bool" % name)
+            lrev = spec.get("length_rev")
+            if lrev is not None and (isinstance(lrev, bool)
+                                     or not isinstance(lrev, (int, float))):
+                raise ValueError(
+                    "synthesize: extrusion %s 'length_rev' must be a number"
+                    % name)
+            if isinstance(lrev, (int, float)) and lrev < 0:
+                raise ValueError(
+                    "synthesize: extrusion %s 'length_rev' must be >= 0" % name)
             if spec.get("properties"):
                 raise ValueError(
                     "synthesize: extrusion %s takes base/length/dir/solid/taper/"
-                    "symmetric, not properties" % name)
+                    "symmetric/length_rev, not properties" % name)
         elif otype == _REVOLVE_TYPE:
             src = spec.get("source")
             if not isinstance(src, str) or not src.strip():
@@ -3148,6 +3168,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (6 if is_extrude else 0)
                       + (1 if is_extrude and spec.get("taper") else 0)
                       + (1 if is_extrude and spec.get("symmetric") else 0)
+                      + (1 if is_extrude and spec.get("length_rev") else 0)
                       + (6 if is_revolve else 0)
                       + (1 if is_revolve and spec.get("symmetric") else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
