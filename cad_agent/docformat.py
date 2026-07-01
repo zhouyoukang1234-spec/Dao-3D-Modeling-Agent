@@ -836,6 +836,17 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                 spec["intersection"] = True
             if props.get("SelfIntersection", {}).get("value") is True:
                 spec["self_intersection"] = True
+        elif otype == _RULED_TYPE:
+            for key, pname in (("curve1", "Curve1"), ("curve2", "Curve2")):
+                val = props.get(pname, {}).get("value")
+                if isinstance(val, dict):
+                    spec[key] = val.get("link")
+                    subs = val.get("subs") or []
+                    if subs:
+                        spec[key + "_edges"] = subs
+            orient_i = props.get("Orientation", {}).get("value")
+            if isinstance(orient_i, int) and 0 < orient_i < len(_RULED_ORIENTS):
+                spec["orientation"] = _RULED_ORIENTS[orient_i]
         else:
             raise ValueError(
                 "summarize: object %s has type %r that synthesize cannot author"
@@ -1461,6 +1472,19 @@ _OFFSET_TYPES = frozenset({_OFFSET_TYPE, _OFFSET2D_TYPE})
 _OFFSET_MODES = _THICKNESS_MODES
 _OFFSET_JOINS = _THICKNESS_JOINS
 
+# Part::RuledSurface -- skin a single ruled surface between *two* edges/wires by
+# joining them with straight generatrix lines (the elementary loft: exactly two
+# sections, linear interpolation). Each section is an ``App::PropertyLinkSub``
+# (``Curve1`` / ``Curve2``) naming an object plus, optionally, the sub-edge of it
+# to use -- a bare object link (count 0) uses the object's whole single edge, as
+# a ``Part::Circle`` / ``Part::Line`` provides. ``Orientation`` (an enumeration
+# by index) picks how the two curves' senses are matched: ``Automatic`` lets the
+# kernel choose, ``Forward`` / ``Reversed`` force it (a reversal twists the strip
+# into a saddle). The kernel rebuilds the surface on recompute from the two links
+# + the enum alone; no BREP is written. 兩儀生象.
+_RULED_TYPE = "Part::RuledSurface"
+_RULED_ORIENTS = ("Automatic", "Forward", "Reversed")
+
 
 def _edge_treatment_size_keys(otype: str) -> "tuple":
     """The (scalar, pair1, pair2, noun) spec keys an edge treatment reads its
@@ -1706,6 +1730,64 @@ def _offset_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
         bp = ET.SubElement(parent, "Property",
                            {"name": pname, "type": "App::PropertyBool"})
         ET.SubElement(bp, "Bool", {"value": "true" if flag else "false"})
+
+
+def _norm_ruled(spec: "Dict[str, Any]") -> "Dict[str, Any]":
+    """Validate a ``Part::RuledSurface`` spec and return it normalised: two
+    section links ``curve1`` / ``curve2`` (each a ``(name, subs)`` pair, ``subs``
+    a list of ``Edge<n>`` sub-element names, possibly empty for a whole-object
+    link) and a valid ``orientation`` enumeration name. Raises ``ValueError``
+    (naming the object) so a malformed surface never reaches the kernel."""
+    name = spec.get("name")
+    out = {}
+    for key in ("curve1", "curve2"):
+        link = spec.get(key)
+        if not isinstance(link, str) or not link.strip():
+            raise ValueError(
+                "synthesize: ruled surface %s needs a '%s' object name"
+                % (name, key))
+        subs = spec.get(key + "_edges", []) or []
+        if not isinstance(subs, (list, tuple)) or not all(
+                isinstance(s, str) and s.strip() for s in subs):
+            raise ValueError(
+                "synthesize: ruled surface %s '%s_edges' must be a list of "
+                "sub-element names" % (name, key))
+        out[key] = str(link)
+        out[key + "_edges"] = [str(s) for s in subs]
+    if out["curve1"] == out["curve2"] and not (
+            out["curve1_edges"] or out["curve2_edges"]):
+        raise ValueError(
+            "synthesize: ruled surface %s needs two distinct curves "
+            "(or sub-edges) to skin between" % name)
+    orient = spec.get("orientation", "Automatic")
+    if orient not in _RULED_ORIENTS:
+        raise ValueError(
+            "synthesize: ruled surface %s orientation %r must be one of %s"
+            % (name, orient, ", ".join(_RULED_ORIENTS)))
+    out["orientation"] = orient
+    return out
+
+
+def _ruled_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
+    """Append the ``Part::RuledSurface`` properties skinning between two curves.
+
+    ``Curve1`` / ``Curve2`` are each an ``App::PropertyLinkSub`` naming a section
+    object plus its optional ``Edge<n>`` subs (a bare link, count 0, uses the
+    object's whole edge); ``Orientation`` the sense-matching enumeration written
+    as its integer index."""
+    norm = _norm_ruled(spec)
+    for key, pname in (("curve1", "Curve1"), ("curve2", "Curve2")):
+        subs = norm[key + "_edges"]
+        lp = ET.SubElement(parent, "Property",
+                           {"name": pname, "type": "App::PropertyLinkSub"})
+        ls = ET.SubElement(lp, "LinkSub",
+                           {"value": norm[key], "count": str(len(subs))})
+        for s in subs:
+            ET.SubElement(ls, "Sub", {"value": s})
+    op = ET.SubElement(parent, "Property",
+                       {"name": "Orientation", "type": "App::PropertyEnumeration"})
+    ET.SubElement(op, "Integer",
+                  {"value": str(_RULED_ORIENTS.index(norm["orientation"]))})
 
 
 def _cells_element(parent: ET.Element, cells: "Dict[str, Any]") -> None:
@@ -2098,7 +2180,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 and otype != _EXTRUDE_TYPE and otype != _REVOLVE_TYPE
                 and otype != _LOFT_TYPE and otype != _SWEEP_TYPE
                 and otype not in _EDGE_TREATMENTS
-                and otype != _THICKNESS_TYPE and otype not in _OFFSET_TYPES):
+                and otype != _THICKNESS_TYPE and otype not in _OFFSET_TYPES
+                and otype != _RULED_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
@@ -2106,7 +2189,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     | _EDGE_TREATMENTS | _OFFSET_TYPES
                     | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
                        _EXTRUDE_TYPE, _REVOLVE_TYPE, _LOFT_TYPE,
-                       _SWEEP_TYPE, _THICKNESS_TYPE}))))
+                       _SWEEP_TYPE, _THICKNESS_TYPE, _RULED_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -2486,6 +2569,17 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: offset %s takes source/value, not properties"
                     % name)
+        elif otype == _RULED_TYPE:
+            for key in ("curve1", "curve2"):
+                if spec.get(key) == name:
+                    raise ValueError(
+                        "synthesize: ruled surface %s cannot reference itself"
+                        % name)
+            _norm_ruled(spec)  # validates curve1 / curve2 / orientation
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: ruled surface %s takes curve1/curve2, "
+                    "not properties" % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -2554,6 +2648,12 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: offset %s source=%r is not a defined object"
                     % (spec["name"], spec["source"]))
+        elif spec["type"] == _RULED_TYPE:
+            for key in ("curve1", "curve2"):
+                if spec[key] not in all_names:
+                    raise ValueError(
+                        "synthesize: ruled surface %s %s=%r is not a defined "
+                        "object" % (spec["name"], key, spec[key]))
         elif spec["type"] in _LINKLIST_TYPES:
             key, _prop = _LINKLIST_TYPES[spec["type"]]
             for ref in spec[key]:
@@ -2593,9 +2693,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_edge = otype in _EDGE_TREATMENTS
         is_thick = otype == _THICKNESS_TYPE
         is_offset = otype in _OFFSET_TYPES
+        is_ruled = otype == _RULED_TYPE
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
                         or is_sketch or is_extrude or is_revolve or is_loft
-                        or is_sweep or is_edge or is_thick or is_offset)
+                        or is_sweep or is_edge or is_thick or is_offset
+                        or is_ruled)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
@@ -2610,6 +2712,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                  else [spec["base"]] if is_edge
                  else [spec["base"]] if is_thick
                  else [spec["source"]] if is_offset
+                 else [spec["curve1"], spec["curve2"]] if is_ruled
                  else [])
         dep_set = list(links)
         for other in all_names:
@@ -2634,7 +2737,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         has_placement = bool(position or axis or angle)
         prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
                              or is_sketch or is_extrude or is_revolve or is_loft
-                             or is_sweep or is_edge or is_thick or is_offset)
+                             or is_sweep or is_edge or is_thick or is_offset
+                             or is_ruled)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
@@ -2643,7 +2747,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (6 if is_extrude else 0) + (6 if is_revolve else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
                       + (3 if is_edge else 0) + (6 if is_thick else 0)
-                      + (7 if is_offset else 0))
+                      + (7 if is_offset else 0) + (3 if is_ruled else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -2670,6 +2774,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                                {"name": "Source", "type": "App::PropertyLink"})
             ET.SubElement(sp, "Link", {"value": spec["source"]})
             _offset_properties(props_el, spec)
+        if is_ruled:
+            _ruled_properties(props_el, spec)
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
@@ -3262,6 +3368,37 @@ def offset2d(name: str, source: str, value: float, mode: str = "Skin",
                             "intersection": intersection,
                             "self_intersection": self_intersection}
     _norm_offset(spec)
+    return spec
+
+
+def ruled_surface(name: str, curve1: str, curve2: str,
+                  curve1_edges: "Optional[List[str]]" = None,
+                  curve2_edges: "Optional[List[str]]" = None,
+                  orientation: str = "Automatic") -> "Dict[str, Any]":
+    """Generate a ``Part::RuledSurface`` object spec skinning between two curves.
+
+    The elementary loft: join two section edges/wires (``curve1`` / ``curve2``)
+    with straight generatrix lines into a single ruled surface. Each curve names
+    an object providing an edge (a ``Part::Circle`` / ``Part::Line`` / sketch);
+    pass ``curve1_edges`` / ``curve2_edges`` (lists of ``"Edge<n>"``) to pick a
+    specific sub-edge of an object that has several, else the object's whole edge
+    is used. ``orientation`` matches the two curves' senses -- ``Automatic``
+    (kernel-chosen), ``Forward`` or ``Reversed`` (a reversal twists the strip into
+    a saddle). Feed the result alongside the two section specs into
+    :func:`synthesize`; the kernel rebuilds the surface on recompute from the two
+    links + the enum alone. 兩儀生象.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("%s: needs a non-empty name" % _RULED_TYPE)
+    spec: Dict[str, Any] = {"type": _RULED_TYPE, "name": name,
+                            "curve1": str(curve1) if curve1 else curve1,
+                            "curve2": str(curve2) if curve2 else curve2,
+                            "orientation": orientation}
+    if curve1_edges:
+        spec["curve1_edges"] = list(curve1_edges)
+    if curve2_edges:
+        spec["curve2_edges"] = list(curve2_edges)
+    _norm_ruled(spec)
     return spec
 
 

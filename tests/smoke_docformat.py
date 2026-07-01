@@ -1877,6 +1877,102 @@ def main():
           "identically; 3 synthesize + 3 generator guards hold" %
           round(ring_area, 3))
 
+    # ---- Part::RuledSurface: skin a surface between two edges --------------- #
+    # the elementary loft: join two section edges with straight generatrix lines
+    # into one ruled surface. A radius-5 circle at z=0 and a radius-3 circle at
+    # z=10 skin a truncated-cone strip (a single valid face). Curve1/Curve2 are
+    # whole-object LinkSubs (count 0); Orientation is an enum by index. No binary
+    # member; round-trips byte-identically. 兩儀生象.
+    rs_p = os.path.join(OUT, "synth_ruled.FCStd")
+    docformat.synthesize(rs_p, [
+        {"type": "Part::Circle", "name": "C1", "properties": {"Radius": 5}},
+        {"type": "Part::Circle", "name": "C2", "properties": {"Radius": 3},
+         "placement": {"position": [0, 0, 10]}},
+        docformat.ruled_surface("Skin", "C1", "C2"),
+    ])
+    assert zipfile.ZipFile(rs_p).namelist() == ["Document.xml"]
+    rs_spec = next(s for s in docformat.summarize(rs_p) if s["name"] == "Skin")
+    assert rs_spec["type"] == "Part::RuledSurface", rs_spec
+    assert rs_spec["curve1"] == "C1" and rs_spec["curve2"] == "C2", rs_spec
+    assert "orientation" not in rs_spec, rs_spec  # Automatic (index 0) is default
+    rs_deps = docformat.inspect_document(rs_p)["dependencies"].get("Skin", [])
+    assert rs_deps == ["C1", "C2"], rs_deps
+    rs_rt = os.path.join(OUT, "synth_ruled_rt.FCStd")
+    docformat.synthesize(rs_rt, docformat.summarize(rs_p))
+    assert docformat.fingerprint(rs_p) == docformat.fingerprint(rs_rt)
+    rsd = App.openDocument(rs_p)
+    try:
+        for o in rsd.Objects:
+            o.touch()
+        rsd.recompute(None, True)
+        skinsh = rsd.getObject("Skin").Shape
+        skin_area = skinsh.Area
+        skin_ok = skinsh.isValid()
+        skin_faces = len(skinsh.Faces)
+    finally:
+        App.closeDocument(rsd.Name)
+    assert skin_ok and skin_faces == 1, (skin_ok, skin_faces)
+    assert skin_area > 100.0, skin_area
+    # a forced Reversed orientation persists + round-trips; a sub-edge selection
+    # (Edge1) on both curves round-trips too.
+    rs2_p = os.path.join(OUT, "synth_ruled_b.FCStd")
+    docformat.synthesize(rs2_p, [
+        {"type": "Part::Line", "name": "L1",
+         "properties": {"X1": 0, "Y1": 0, "Z1": 0, "X2": 10, "Y2": 0, "Z2": 0}},
+        {"type": "Part::Line", "name": "L2",
+         "properties": {"X1": 0, "Y1": 5, "Z1": 0, "X2": 10, "Y2": 5, "Z2": 0}},
+        docformat.ruled_surface("Strip", "L1", "L2",
+                                curve1_edges=["Edge1"], curve2_edges=["Edge1"],
+                                orientation="Reversed"),
+    ])
+    rs2_spec = next(s for s in docformat.summarize(rs2_p) if s["name"] == "Strip")
+    assert rs2_spec["orientation"] == "Reversed", rs2_spec
+    assert rs2_spec["curve1_edges"] == ["Edge1"], rs2_spec
+    assert rs2_spec["curve2_edges"] == ["Edge1"], rs2_spec
+    rs2_rt = os.path.join(OUT, "synth_ruled_b_rt.FCStd")
+    docformat.synthesize(rs2_rt, docformat.summarize(rs2_p))
+    assert docformat.fingerprint(rs2_p) == docformat.fingerprint(rs2_rt)
+    for bad, token in (
+            ([{"type": "Part::RuledSurface", "name": "R", "curve1": "Gone",
+               "curve2": "C2"},
+              {"type": "Part::Circle", "name": "C2",
+               "properties": {"Radius": 3}}], "is not a defined object"),
+            ([{"type": "Part::RuledSurface", "name": "R", "curve2": "C2"},
+              {"type": "Part::Circle", "name": "C2",
+               "properties": {"Radius": 3}}], "needs a 'curve1'"),
+            ([{"type": "Part::Circle", "name": "C1",
+               "properties": {"Radius": 5}},
+              {"type": "Part::RuledSurface", "name": "R", "curve1": "C1",
+               "curve2": "C1"}], "two distinct curves"),
+            ([{"type": "Part::Circle", "name": "C1",
+               "properties": {"Radius": 5}},
+              {"type": "Part::Circle", "name": "C2",
+               "properties": {"Radius": 3}},
+              {"type": "Part::RuledSurface", "name": "R", "curve1": "C1",
+               "curve2": "C2", "orientation": "Sideways"}], "orientation")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_ruled.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    for badcall in (
+            lambda: docformat.ruled_surface("", "C1", "C2"),
+            lambda: docformat.ruled_surface("R", "", "C2"),
+            lambda: docformat.ruled_surface("R", "C1", "C1"),
+            lambda: docformat.ruled_surface("R", "C1", "C2",
+                                            orientation="Sideways")):
+        try:
+            badcall()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError from ruled_surface")
+    print("docformat Part::RuledSurface: circles r5@z0 and r3@z10 skin a valid "
+          "cone strip (area %g); whole-object + sub-edge links and forced "
+          "Reversed orientation round-trip identically; 4 synthesize + 4 "
+          "generator guards hold" % round(skin_area, 3))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
