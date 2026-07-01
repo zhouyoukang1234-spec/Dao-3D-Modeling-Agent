@@ -1340,6 +1340,16 @@ _PRIMITIVES: "Dict[str, Dict[str, str]]" = {
     "Part::Circle": {"Radius": "App::PropertyLength",
                      "Angle1": "App::PropertyAngle",
                      "Angle2": "App::PropertyAngle"},
+    # ``Part::Ellipse`` is the circle's flattened sibling: a parametric elliptic
+    # *edge* of ``MajorRadius`` / ``MinorRadius`` swept from ``Angle1`` to
+    # ``Angle2`` degrees (a full ellipse at 0..360). Like the circle its
+    # execute() rebuilds the edge from these scalars so its placement survives a
+    # reload -- an elliptic section to stack in a ``Part::Loft`` or spine a
+    # ``Part::Sweep``. 圆之变也.
+    "Part::Ellipse": {"MajorRadius": "App::PropertyLength",
+                      "MinorRadius": "App::PropertyLength",
+                      "Angle1": "App::PropertyAngle",
+                      "Angle2": "App::PropertyAngle"},
     # ``Part::Line`` is the other parametric edge: a straight segment from
     # (X1,Y1,Z1) to (X2,Y2,Z2), its geometry rebuilt from these scalars on
     # execute() so it too survives a reload. It is the natural straight *spine*

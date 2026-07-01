@@ -787,6 +787,43 @@ def main():
           "(-> point %s) author with no BREP and round-trip identically"
           % (pl_area, vx_pt))
 
+    # ---- Part::Ellipse: the circle's flattened parametric-edge sibling ------ #
+    # a MajorRadius x MinorRadius elliptic edge rebuilt from scalars on execute()
+    # (no BREP), so it round-trips identically and its placement survives reload
+    # -- an elliptic loft section / sweep spine. A partial arc (Angle1..Angle2)
+    # persists its two angles too. 圆之变也.
+    el_p = os.path.join(OUT, "synth_ellipse.FCStd")
+    docformat.synthesize(el_p, [
+        {"type": "Part::Ellipse", "name": "El",
+         "properties": {"MajorRadius": 8, "MinorRadius": 5}},
+        {"type": "Part::Ellipse", "name": "Ea",
+         "properties": {"MajorRadius": 6, "MinorRadius": 3,
+                        "Angle1": 0, "Angle2": 180}},
+    ])
+    assert zipfile.ZipFile(el_p).namelist() == ["Document.xml"]
+    el_specs = {s["name"]: s for s in docformat.summarize(el_p)}
+    assert el_specs["El"]["properties"]["MajorRadius"] == 8 \
+        and el_specs["El"]["properties"]["MinorRadius"] == 5, el_specs["El"]
+    assert el_specs["Ea"]["properties"]["Angle2"] == 180, el_specs["Ea"]
+    el_rt = os.path.join(OUT, "synth_ellipse_rt.FCStd")
+    docformat.synthesize(el_rt, list(el_specs.values()))
+    assert docformat.fingerprint(el_p) == docformat.fingerprint(el_rt)
+    eld = App.openDocument(el_p)
+    try:
+        for o in eld.Objects:
+            o.touch()
+        eld.recompute(None, True)
+        el_sh = eld.getObject("El").Shape
+        el_len = el_sh.Length
+        el_ok = el_sh.isValid() and len(el_sh.Edges) == 1
+        ea_ok = eld.getObject("Ea").Shape.isValid()
+    finally:
+        App.closeDocument(eld.Name)
+    assert el_ok and el_len > 0, el_len
+    assert ea_ok, "elliptic arc must recompute valid"
+    print("docformat Part::Ellipse: 8x5 ellipse -> one valid edge (length %g); "
+          "half-ellipse arc round-trips (angles persist), no BREP" % round(el_len, 3))
+
     # ---- Sketcher::SketchObject: author a 2D profile from file ----------- #
     # the most upstream authoring surface: draw a closed 10x5 rectangle as four
     # line segments straight into the Part::PropertyGeometryList. The kernel
