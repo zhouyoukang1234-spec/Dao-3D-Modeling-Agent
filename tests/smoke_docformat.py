@@ -609,6 +609,55 @@ def main():
     print("docformat.synthesize: authored Part::MultiFuse over 3 cubes -> kernel "
           "folds union vol %g in one recompute (N-ary CSG from file)" % uvol)
 
+    # ---- synthesize N-ary boolean refine: weld the fold's seams ------------ #
+    # three 10-cubes in a row sharing faces; the raw MultiFuse keeps both seams
+    # (14 faces, 28 edges), an optional 'refine' welds them into one clean
+    # 30x10x10 bar (6 faces, 12 edges) at the same volume 3000. Written only when
+    # true (compound never takes it); round-trips and guards non-bool / compound.
+    def _mfuse(refine):
+        p = os.path.join(OUT, "synth_mfuse_ref%d.FCStd" % refine)
+        u = {"type": "Part::MultiFuse", "name": "U", "shapes": ["A", "B", "C"]}
+        if refine:
+            u["refine"] = True
+        docformat.synthesize(p, [
+            cube("A", [0, 0, 0]), cube("B", [10, 0, 0]), cube("C", [20, 0, 0]), u])
+        d = App.openDocument(p)
+        try:
+            for o in d.Objects:
+                o.touch()
+            d.recompute(None, True)
+            sh = d.getObject("U").Shape
+            return p, sh.isValid(), sh.Volume, len(sh.Faces), len(sh.Edges)
+        finally:
+            App.closeDocument(d.Name)
+    mr_raw_p, mr_raw_ok, mr_raw_v, mr_raw_f, mr_raw_e = _mfuse(0)
+    mr_p, mr_ok, mr_v, mr_f, mr_e = _mfuse(1)
+    assert next(s for s in docformat.summarize(mr_p)
+                if s["name"] == "U").get("refine") is True
+    assert "refine" not in next(s for s in docformat.summarize(mr_raw_p)
+                                if s["name"] == "U")
+    mr_rt = os.path.join(OUT, "synth_mfuse_ref_rt.FCStd")
+    docformat.synthesize(mr_rt, docformat.summarize(mr_p))
+    assert docformat.fingerprint(mr_p) == docformat.fingerprint(mr_rt)
+    assert mr_raw_ok and mr_ok, (mr_raw_ok, mr_ok)
+    assert abs(mr_v - mr_raw_v) < 1e-6 and abs(mr_v - 3000.0) < 1e-6, (mr_v, mr_raw_v)
+    assert mr_f < mr_raw_f and mr_e < mr_raw_e, (mr_f, mr_raw_f, mr_e, mr_raw_e)
+    for bad, needle in (
+            ({"type": "Part::MultiFuse", "name": "U", "shapes": ["A", "B"],
+              "refine": 1}, "'refine' must be a bool"),
+            ({"type": "Part::Compound", "name": "U", "links": ["A", "B"],
+              "refine": True}, "does not take 'refine'")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_mref.FCStd"),
+                                 [cube("A", [0, 0, 0]), cube("B", [5, 0, 0]), bad])
+        except ValueError as exc:
+            assert needle in str(exc), (needle, str(exc))
+        else:
+            raise AssertionError("expected ValueError for %s" % needle)
+    print("docformat Part::MultiFuse refine: welds %d->%d faces, %d->%d edges at "
+          "vol %g, round-trips, guarded"
+          % (mr_raw_f, mr_f, mr_raw_e, mr_e, round(mr_v, 2)))
+
     # ---- synthesize Part::Compound: group disjoint shapes, no CSG ---------- #
     # two non-overlapping 10-cubes grouped into one Compound; no union/carve --
     # the shapes coexist, so the compound volume is the plain sum 2000. Authored

@@ -715,6 +715,9 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
             spec[key] = (list(ll_val["link_list"])
                          if isinstance(ll_val, dict)
                          and "link_list" in ll_val else [])
+            if (otype in _MULTI_BOOLEANS
+                    and props.get("Refine", {}).get("value") is True):
+                spec["refine"] = True
         elif otype == _MIRROR_TYPE:
             spec["source"] = _link_target(props.get("Source"))
             base_vec = _vector_spec(props.get("Base"))
@@ -1460,7 +1463,9 @@ _SECTION_TYPE = "Part::Section"
 # operands and folds the CSG across all of them in one recompute. A human drives
 # these as repeated pairwise GUI operations; authored from file the whole
 # multi-operand fold is written at once -- the file layer's leverage over the
-# step-by-step tool flow.
+# step-by-step tool flow. Like the pairwise booleans they accept an optional
+# ``refine`` (a ``Refine`` bool written only when true) so the kernel welds the
+# coplanar seams the fold leaves behind; the plain compound below never does.
 _MULTI_BOOLEANS = {"Part::MultiFuse", "Part::MultiCommon"}
 
 # A ``Part::Compound`` *groups* two or more shapes into one object without any
@@ -2555,6 +2560,14 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: %s has duplicate operands in '%s'"
                     % (name, key))
+            if "refine" in spec:
+                if otype not in _MULTI_BOOLEANS:
+                    raise ValueError(
+                        "synthesize: %s (%s) does not take 'refine'"
+                        % (name, otype))
+                if not isinstance(spec["refine"], bool):
+                    raise ValueError(
+                        "synthesize: %s 'refine' must be a bool" % name)
             if spec.get("properties"):
                 raise ValueError(
                     "synthesize: %s takes %s, not properties" % (name, key))
@@ -3196,7 +3209,10 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
                       + (1 if is_bool and spec.get("refine") else 0)
-                      + (1 if is_linklist else 0) + (1 if is_sheet else 0)
+                      + (1 if is_linklist else 0)
+                      + (1 if (otype in _MULTI_BOOLEANS and spec.get("refine"))
+                         else 0)
+                      + (1 if is_sheet else 0)
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
                       + (6 if is_extrude else 0)
                       + (1 if is_extrude and spec.get("taper") else 0)
@@ -3273,6 +3289,10 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             ll = ET.SubElement(lp, "LinkList", {"count": str(len(operands))})
             for ref in operands:
                 ET.SubElement(ll, "Link", {"value": ref})
+            if otype in _MULTI_BOOLEANS and spec.get("refine"):
+                bp = ET.SubElement(props_el, "Property",
+                                   {"name": "Refine", "type": "App::PropertyBool"})
+                ET.SubElement(bp, "Bool", {"value": "true"})
         if is_mirror:
             sp = ET.SubElement(props_el, "Property",
                                {"name": "Source", "type": "App::PropertyLink"})
