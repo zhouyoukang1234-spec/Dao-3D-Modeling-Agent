@@ -1526,6 +1526,57 @@ def main():
     print("docformat Part::Extrusion taper: 10 deg draft -> valid splayed solid "
           "vol %g (>1400), draft round-trips, guarded to (-90,90)" % round(tx_vol, 2))
 
+    # ---- Part::Extrusion symmetric: balanced +/-L/2 pad ------------------- #
+    # the same square base padded 8 along +Z. A plain extrude sweeps 0..8 to one
+    # side (center-of-mass z = 4); symmetric sweeps +4..-4, so the identical-
+    # volume solid straddles the profile plane (center-of-mass z ~ 0). The flag
+    # is authored only when true (a one-sided pad stays byte-identical) and
+    # round-trips. 大方無隅.
+    def _pad8(sym):
+        p = os.path.join(OUT, "synth_extrude_sym%d.FCStd" % sym)
+        spec = {"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+                "length": 8}
+        if sym:
+            spec["symmetric"] = True
+        docformat.synthesize(p, [
+            {"type": "Part::RegularPolygon", "name": "Sq",
+             "properties": {"Polygon": 4, "Circumradius": 10}}, spec])
+        d = App.openDocument(p)
+        try:
+            for o in d.Objects:
+                o.touch()
+            d.recompute(None, True)
+            sh = d.getObject("Ext").Shape
+            return p, sh.isValid(), sh.Volume, sh.CenterOfMass.z
+        finally:
+            App.closeDocument(d.Name)
+    ex_one_p, ex_one_ok, ex_one_vol, ex_one_z = _pad8(0)
+    ex_sym_p, ex_sym_ok, ex_sym_vol, ex_sym_z = _pad8(1)
+    ex_sym_spec = next(s for s in docformat.summarize(ex_sym_p)
+                       if s["name"] == "Ext")
+    assert ex_sym_spec.get("symmetric") is True, ex_sym_spec
+    assert "symmetric" not in next(s for s in docformat.summarize(ex_one_p)
+                                   if s["name"] == "Ext")
+    ex_sym_rt = os.path.join(OUT, "synth_extrude_sym_rt.FCStd")
+    docformat.synthesize(ex_sym_rt, docformat.summarize(ex_sym_p))
+    assert docformat.fingerprint(ex_sym_p) == docformat.fingerprint(ex_sym_rt)
+    assert ex_one_ok and ex_sym_ok, (ex_one_ok, ex_sym_ok)
+    assert abs(ex_one_vol - ex_sym_vol) < 1e-6, (ex_one_vol, ex_sym_vol)
+    assert abs(ex_sym_z) < 1e-6 < abs(ex_one_z), (ex_sym_z, ex_one_z)
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_ex_sym.FCStd"), [
+            {"type": "Part::RegularPolygon", "name": "Sq",
+             "properties": {"Polygon": 4, "Circumradius": 5}},
+            {"type": "Part::Extrusion", "name": "Ex", "base": "Sq",
+             "length": 5, "symmetric": 1}])
+    except ValueError as exc:
+        assert "'symmetric' must be a bool" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for non-bool symmetric")
+    print("docformat Part::Extrusion symmetric: +/-4 balanced pad, same vol %g, "
+          "center-of-mass z ~0 (vs one-sided %g), round-trips, guarded"
+          % (round(ex_sym_vol, 2), round(ex_one_z, 2)))
+
     # ---- Part::Revolution: spin a sketch profile into a solid ------------ #
     # the lathe to the extrusion's mill: author a 3x4 rectangle offset from the
     # y-axis (x in [2,5]) + a full revolution about that axis. By Pappus the
