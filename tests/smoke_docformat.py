@@ -1770,6 +1770,57 @@ def main():
           "(> %g without), round-trips, guarded to (-90,90)"
           % (round(tv_vol, 2), round(tv_base_vol, 2)))
 
+    # ---- Part::Extrusion reversed: sweep the other way along -Dir ---------- #
+    # the same square pad 8 along the profile normal. A plain extrude sweeps
+    # 0..+8 (center-of-mass z = +4); 'reversed' sweeps 0..-8, so the identical-
+    # volume solid sits on the far side (center-of-mass z = -4). Authored only
+    # when true (a plain pad stays byte-identical); round-trips and guards. 反者
+    # 道之動.
+    def _revpad(rev):
+        p = os.path.join(OUT, "synth_extrude_rev%d.FCStd" % rev)
+        spec = {"type": "Part::Extrusion", "name": "Ext", "base": "Sq",
+                "length": 8}
+        if rev:
+            spec["reversed"] = True
+        docformat.synthesize(p, [
+            {"type": "Part::RegularPolygon", "name": "Sq",
+             "properties": {"Polygon": 4, "Circumradius": 10}}, spec])
+        d = App.openDocument(p)
+        try:
+            for o in d.Objects:
+                o.touch()
+            d.recompute(None, True)
+            sh = d.getObject("Ext").Shape
+            return p, sh.isValid(), sh.Volume, sh.CenterOfMass.z
+        finally:
+            App.closeDocument(d.Name)
+    er_fwd_p, er_fwd_ok, er_fwd_vol, er_fwd_z = _revpad(0)
+    er_rev_p, er_rev_ok, er_rev_vol, er_rev_z = _revpad(1)
+    assert next(s for s in docformat.summarize(er_rev_p)
+                if s["name"] == "Ext").get("reversed") is True
+    assert "reversed" not in next(s for s in docformat.summarize(er_fwd_p)
+                                  if s["name"] == "Ext")
+    er_rt = os.path.join(OUT, "synth_extrude_rev_rt.FCStd")
+    docformat.synthesize(er_rt, docformat.summarize(er_rev_p))
+    assert docformat.fingerprint(er_rev_p) == docformat.fingerprint(er_rt)
+    assert er_fwd_ok and er_rev_ok, (er_fwd_ok, er_rev_ok)
+    assert abs(er_fwd_vol - er_rev_vol) < 1e-6, (er_fwd_vol, er_rev_vol)
+    assert abs(er_fwd_z - er_rev_z) > 1e-6 and abs(er_fwd_z + er_rev_z) < 1e-6, (
+        er_fwd_z, er_rev_z)
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_ex_rev.FCStd"), [
+            {"type": "Part::RegularPolygon", "name": "Sq",
+             "properties": {"Polygon": 4, "Circumradius": 5}},
+            {"type": "Part::Extrusion", "name": "Ex", "base": "Sq",
+             "length": 5, "reversed": 1}])
+    except ValueError as exc:
+        assert "'reversed' must be a bool" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for non-bool reversed")
+    print("docformat Part::Extrusion reversed: -Dir pad, same vol %g, center-of-"
+          "mass z %g (vs +%g forward), round-trips, guarded"
+          % (round(er_rev_vol, 2), round(er_rev_z, 2), round(er_fwd_z, 2)))
+
     # ---- Part::Revolution: spin a sketch profile into a solid ------------ #
     # the lathe to the extrusion's mill: author a 3x4 rectangle offset from the
     # y-axis (x in [2,5]) + a full revolution about that axis. By Pappus the

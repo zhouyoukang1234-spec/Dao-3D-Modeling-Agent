@@ -815,6 +815,8 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                 spec["taper_rev"] = taper_rev
             if props.get("Symmetric", {}).get("value") is True:
                 spec["symmetric"] = True
+            if props.get("Reversed", {}).get("value") is True:
+                spec["reversed"] = True
             solid = props.get("Solid", {}).get("value")
             if solid is False:
                 spec["solid"] = False
@@ -2264,8 +2266,11 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     ``length + length_rev``); written only when non-zero. An optional
     ``taper_rev`` authors a ``TaperAngleRev`` -- an independent draft on that
     reverse extent, so a two-sided pad can splay differently each way; written
-    only when non-zero and guarded to ``(-90, 90)`` like ``taper``. The kernel
-    does the sweep on recompute; the file just declares it.
+    only when non-zero and guarded to ``(-90, 90)`` like ``taper``. An optional
+    ``reversed`` authors a ``Reversed`` bool so the whole sweep runs along
+    ``-Dir`` instead of ``+Dir`` (same volume, mirrored across the profile
+    plane); written only when true so a plain extrude stays byte-identical. The
+    kernel does the sweep on recompute; the file just declares it.
     """
     bp = ET.SubElement(parent, "Property",
                        {"name": "Base", "type": "App::PropertyLink"})
@@ -2301,6 +2306,10 @@ def _extrusion_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
         yp = ET.SubElement(parent, "Property",
                            {"name": "Symmetric", "type": "App::PropertyBool"})
         ET.SubElement(yp, "Bool", {"value": "true"})
+    if spec.get("reversed"):
+        rvp = ET.SubElement(parent, "Property",
+                            {"name": "Reversed", "type": "App::PropertyBool"})
+        ET.SubElement(rvp, "Bool", {"value": "true"})
     solid = spec.get("solid", True)
     sp = ET.SubElement(parent, "Property",
                        {"name": "Solid", "type": "App::PropertyBool"})
@@ -2877,10 +2886,14 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             if isinstance(lrev, (int, float)) and lrev < 0:
                 raise ValueError(
                     "synthesize: extrusion %s 'length_rev' must be >= 0" % name)
+            if "reversed" in spec and not isinstance(spec["reversed"], bool):
+                raise ValueError(
+                    "synthesize: extrusion %s 'reversed' must be a bool" % name)
             if spec.get("properties"):
                 raise ValueError(
                     "synthesize: extrusion %s takes base/length/dir/solid/taper/"
-                    "taper_rev/symmetric/length_rev, not properties" % name)
+                    "taper_rev/symmetric/length_rev/reversed, not properties"
+                    % name)
         elif otype == _REVOLVE_TYPE:
             src = spec.get("source")
             if not isinstance(src, str) or not src.strip():
@@ -3219,6 +3232,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (1 if is_extrude and spec.get("taper_rev") else 0)
                       + (1 if is_extrude and spec.get("symmetric") else 0)
                       + (1 if is_extrude and spec.get("length_rev") else 0)
+                      + (1 if is_extrude and spec.get("reversed") else 0)
                       + (6 if is_revolve else 0)
                       + (1 if is_revolve and spec.get("symmetric") else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
