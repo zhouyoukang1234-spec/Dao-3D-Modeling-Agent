@@ -59,6 +59,9 @@ PREFIX_DOMAIN: Dict[str, Optional[str]] = {
     "mesh": "Mesh", "surface": "Surface", "points": "Points", "draft": "Draft",
     "draw": "TechDraw", "fem": "Fem", "path": "Path", "asm": None,
     "resource": None, "doc": None, "view": None, "out": None,
+    # reflective universal dispatch spans every module (no single kernel module),
+    # so it rolls up under the app layer like asm/doc.
+    "reflect": None,
 }
 
 # A kernel module is rarely used under its own bare name: PartDesign is reached
