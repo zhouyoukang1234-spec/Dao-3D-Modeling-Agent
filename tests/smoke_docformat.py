@@ -1801,6 +1801,82 @@ def main():
           "identically; 8 synthesize + 3 generator guards hold" %
           round(of_vol, 3))
 
+    # ---- Part::Offset2D: planar wire offset ------------------------------- #
+    # the planar sibling: offset a planar wire/edge Source within its own plane.
+    # A radius-5 circle offset +2 with Fill walls the ring between r=5 and r=7
+    # into a face of area pi*(7^2-5^2) = 24*pi ~= 75.4. Shares the 3D offset's
+    # property schema (Source/Value/Mode/Join/Fill + flags) and its generator
+    # guards; no binary member, round-trips byte-identically. 大方無隅.
+    o2_p = os.path.join(OUT, "synth_offset2d.FCStd")
+    docformat.synthesize(o2_p, [
+        {"type": "Part::Circle", "name": "Cir", "properties": {"Radius": 5}},
+        docformat.offset2d("Ring", "Cir", 2.0, fill=True),
+    ])
+    assert zipfile.ZipFile(o2_p).namelist() == ["Document.xml"]
+    o2_spec = next(s for s in docformat.summarize(o2_p) if s["name"] == "Ring")
+    assert o2_spec["type"] == "Part::Offset2D", o2_spec
+    assert o2_spec["source"] == "Cir" and o2_spec["value"] == 2, o2_spec
+    assert o2_spec["fill"] is True, o2_spec
+    o2_rt = os.path.join(OUT, "synth_offset2d_rt.FCStd")
+    docformat.synthesize(o2_rt, docformat.summarize(o2_p))
+    assert docformat.fingerprint(o2_p) == docformat.fingerprint(o2_rt)
+    o2_deps = docformat.inspect_document(o2_p)["dependencies"].get("Ring", [])
+    assert o2_deps == ["Cir"], o2_deps
+    o2d = App.openDocument(o2_p)
+    try:
+        for o in o2d.Objects:
+            o.touch()
+        o2d.recompute(None, True)
+        ringsh = o2d.getObject("Ring").Shape
+        ring_area = ringsh.Area
+        ring_ok = ringsh.isValid()
+        ring_faces = len(ringsh.Faces)
+    finally:
+        App.closeDocument(o2d.Name)
+    assert ring_ok and ring_faces == 1, (ring_ok, ring_faces)
+    assert abs(ring_area - 24.0 * math.pi) < 1.0, ring_area
+    # the shared offset guards fire under the 2D type too, and inward-offset
+    # (negative value) with a non-default mode round-trips identically.
+    o2b_p = os.path.join(OUT, "synth_offset2d_b.FCStd")
+    docformat.synthesize(o2b_p, [
+        {"type": "Part::Circle", "name": "Cir", "properties": {"Radius": 5}},
+        docformat.offset2d("R2", "Cir", -1.0, mode="Pipe"),
+    ])
+    o2b_spec = next(s for s in docformat.summarize(o2b_p) if s["name"] == "R2")
+    assert o2b_spec["value"] == -1 and o2b_spec["mode"] == "Pipe", o2b_spec
+    o2b_rt = os.path.join(OUT, "synth_offset2d_b_rt.FCStd")
+    docformat.synthesize(o2b_rt, docformat.summarize(o2b_p))
+    assert docformat.fingerprint(o2b_p) == docformat.fingerprint(o2b_rt)
+    for bad, token in (
+            ([{"type": "Part::Offset2D", "name": "R", "source": "Gone",
+               "value": 1}], "is not a defined object"),
+            ([{"type": "Part::Offset2D", "name": "R", "value": 1}],
+             "needs a 'source'"),
+            ([{"type": "Part::Circle", "name": "Cir",
+               "properties": {"Radius": 5}},
+              {"type": "Part::Offset2D", "name": "R", "source": "Cir",
+               "value": 0}], "non-zero")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_o2d.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    for badcall in (
+            lambda: docformat.offset2d("", "Cir", 1.0),
+            lambda: docformat.offset2d("R", "", 1.0),
+            lambda: docformat.offset2d("R", "Cir", 0)):
+        try:
+            badcall()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError from offset2d generator")
+    print("docformat Part::Offset2D: radius-5 circle offset +2 (Fill) -> planar "
+          "ring face area %g (~24*pi); shares the offset schema, round-trips "
+          "identically; 3 synthesize + 3 generator guards hold" %
+          round(ring_area, 3))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an

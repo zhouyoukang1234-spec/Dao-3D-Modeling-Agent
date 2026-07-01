@@ -819,7 +819,7 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                 spec["intersection"] = True
             if props.get("SelfIntersection", {}).get("value") is True:
                 spec["self_intersection"] = True
-        elif otype == _OFFSET_TYPE:
+        elif otype in _OFFSET_TYPES:
             spec["source"] = _link_target(props.get("Source"))
             val = props.get("Value", {}).get("value")
             if isinstance(val, (int, float)) and not isinstance(val, bool):
@@ -1451,6 +1451,13 @@ _THICKNESS_JOINS = ("Arc", "Tangent", "Intersection")
 # the gap between original and offset into a hollow solid. The kernel rebuilds it
 # on recompute from these scalars + the link alone; no BREP is written.
 _OFFSET_TYPE = "Part::Offset"
+# Part::Offset2D -- the planar sibling: offset a *planar* wire/edge ``Source`` in
+# its own plane by ``Value`` (outward positive, inward negative), ``Fill`` walling
+# the ring between original and offset into a face. Its property schema is
+# identical to the 3D offset (Source/Value/Mode/Join/Fill + the two flags), so
+# both share ``_norm_offset`` / ``_offset_properties``; only the type id differs.
+_OFFSET2D_TYPE = "Part::Offset2D"
+_OFFSET_TYPES = frozenset({_OFFSET_TYPE, _OFFSET2D_TYPE})
 _OFFSET_MODES = _THICKNESS_MODES
 _OFFSET_JOINS = _THICKNESS_JOINS
 
@@ -2091,15 +2098,15 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 and otype != _EXTRUDE_TYPE and otype != _REVOLVE_TYPE
                 and otype != _LOFT_TYPE and otype != _SWEEP_TYPE
                 and otype not in _EDGE_TREATMENTS
-                and otype != _THICKNESS_TYPE and otype != _OFFSET_TYPE):
+                and otype != _THICKNESS_TYPE and otype not in _OFFSET_TYPES):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
                     set(_PRIMITIVES) | _BOOLEANS | set(_LINKLIST_TYPES)
-                    | _EDGE_TREATMENTS
+                    | _EDGE_TREATMENTS | _OFFSET_TYPES
                     | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
                        _EXTRUDE_TYPE, _REVOLVE_TYPE, _LOFT_TYPE,
-                       _SWEEP_TYPE, _THICKNESS_TYPE, _OFFSET_TYPE}))))
+                       _SWEEP_TYPE, _THICKNESS_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -2466,7 +2473,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: thickness %s takes base/faces/value, "
                     "not properties" % name)
-        elif otype == _OFFSET_TYPE:
+        elif otype in _OFFSET_TYPES:
             source = spec.get("source")
             if not isinstance(source, str) or not source.strip():
                 raise ValueError(
@@ -2542,7 +2549,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: thickness %s base=%r is not a defined object"
                     % (spec["name"], spec["base"]))
-        elif spec["type"] == _OFFSET_TYPE:
+        elif spec["type"] in _OFFSET_TYPES:
             if spec["source"] not in all_names:
                 raise ValueError(
                     "synthesize: offset %s source=%r is not a defined object"
@@ -2585,7 +2592,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_sweep = otype == _SWEEP_TYPE
         is_edge = otype in _EDGE_TREATMENTS
         is_thick = otype == _THICKNESS_TYPE
-        is_offset = otype == _OFFSET_TYPE
+        is_offset = otype in _OFFSET_TYPES
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
                         or is_sketch or is_extrude or is_revolve or is_loft
                         or is_sweep or is_edge or is_thick or is_offset)
@@ -3224,6 +3231,32 @@ def offset(name: str, source: str, value: float, mode: str = "Skin",
         raise ValueError(
             "%s: 'source' must be a non-empty object name" % _OFFSET_TYPE)
     spec: Dict[str, Any] = {"type": _OFFSET_TYPE, "name": name,
+                            "source": str(source), "value": value,
+                            "mode": mode, "join": join, "fill": fill,
+                            "intersection": intersection,
+                            "self_intersection": self_intersection}
+    _norm_offset(spec)
+    return spec
+
+
+def offset2d(name: str, source: str, value: float, mode: str = "Skin",
+             join: str = "Arc", fill: bool = False, intersection: bool = False,
+             self_intersection: bool = False) -> "Dict[str, Any]":
+    """Generate a ``Part::Offset2D`` object spec offsetting a *planar* wire.
+
+    The planar sibling of :func:`offset`: ``source`` must be a planar edge/wire
+    (e.g. a sketch or a ``Part::Circle``), which is offset within its own plane
+    by ``value`` (outward positive, inward negative). ``fill`` walls the ring
+    between the original and offset wire into a face. ``mode`` / ``join`` carry
+    the same offset-algorithm / corner-rule meaning as the 3D offset. The kernel
+    rebuilds the wire on recompute from these scalars + the link alone. 大方無隅.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("%s: needs a non-empty name" % _OFFSET2D_TYPE)
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError(
+            "%s: 'source' must be a non-empty object name" % _OFFSET2D_TYPE)
+    spec: Dict[str, Any] = {"type": _OFFSET2D_TYPE, "name": name,
                             "source": str(source), "value": value,
                             "mode": mode, "join": join, "fill": fill,
                             "intersection": intersection,
