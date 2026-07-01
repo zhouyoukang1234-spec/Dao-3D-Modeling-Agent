@@ -2056,6 +2056,72 @@ def main():
           "Approximation/Refine flags round-trip identically; 3 synthesize + 3 "
           "generator guards hold" % sec_edges[1])
 
+    # ---- Part::Helix: a parametric helical edge (spring / thread spine) ----- #
+    # four scalars (pitch / height / radius / taper angle) + two enums (chirality,
+    # style) fix a helical edge; like every primitive the kernel rebuilds it from
+    # these alone -- no BREP written, and the read-only computed Length is left
+    # for recompute to regenerate. A pitch-3 height-20 radius-5 helix winds ~6.7
+    # turns into one valid edge; round-trips byte-identically. 綿綿若存.
+    hx_p = os.path.join(OUT, "synth_helix.FCStd")
+    docformat.synthesize(hx_p, [docformat.helix("H", 3, 20, 5)])
+    assert zipfile.ZipFile(hx_p).namelist() == ["Document.xml"]
+    hx_spec = next(s for s in docformat.summarize(hx_p) if s["name"] == "H")
+    assert hx_spec["type"] == "Part::Helix", hx_spec
+    assert hx_spec["pitch"] == 3 and hx_spec["height"] == 20 \
+        and hx_spec["radius"] == 5, hx_spec
+    assert "hand" not in hx_spec and "style" not in hx_spec, hx_spec  # defaults
+    hx_rt = os.path.join(OUT, "synth_helix_rt.FCStd")
+    docformat.synthesize(hx_rt, docformat.summarize(hx_p))
+    assert docformat.fingerprint(hx_p) == docformat.fingerprint(hx_rt)
+    hxd = App.openDocument(hx_p)
+    try:
+        for o in hxd.Objects:
+            o.touch()
+        hxd.recompute(None, True)
+        hxsh = hxd.getObject("H").Shape
+        hx_edges = len(hxsh.Edges)
+        hx_len = hxsh.Length
+        hx_ok = hxsh.isValid()
+    finally:
+        App.closeDocument(hxd.Name)
+    assert hx_ok and hx_edges == 1 and hx_len > 0, (hx_edges, hx_len)
+    # a left-handed, new-style, cone-tapered helix persists its two enums + taper
+    # and round-trips identically.
+    hx2_p = os.path.join(OUT, "synth_helix_b.FCStd")
+    docformat.synthesize(hx2_p, [docformat.helix(
+        "H", 2, 10, 4, angle=10, hand="Left-handed", style="New style")])
+    hx2_spec = next(s for s in docformat.summarize(hx2_p) if s["name"] == "H")
+    assert hx2_spec["angle"] == 10 and hx2_spec["hand"] == "Left-handed" \
+        and hx2_spec["style"] == "New style", hx2_spec
+    hx2_rt = os.path.join(OUT, "synth_helix_b_rt.FCStd")
+    docformat.synthesize(hx2_rt, docformat.summarize(hx2_p))
+    assert docformat.fingerprint(hx2_p) == docformat.fingerprint(hx2_rt)
+    hx2d = App.openDocument(hx2_p)
+    try:
+        for o in hx2d.Objects:
+            o.touch()
+        hx2d.recompute(None, True)
+        hx2_ok = hx2d.getObject("H").Shape.isValid()
+    finally:
+        App.closeDocument(hx2d.Name)
+    assert hx2_ok, "left-handed tapered helix must recompute valid"
+    for badcall in (
+            lambda: docformat.helix("", 3, 20, 5),
+            lambda: docformat.helix("H", 0, 20, 5),
+            lambda: docformat.helix("H", 3, 20, -5),
+            lambda: docformat.helix("H", 3, 20, 5, angle=90),
+            lambda: docformat.helix("H", 3, 20, 5, hand="Sideways"),
+            lambda: docformat.helix("H", 3, 20, 5, style="Fancy")):
+        try:
+            badcall()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError from helix generator")
+    print("docformat Part::Helix: pitch-3 height-20 radius-5 helix -> one valid "
+          "edge (length %g); taper + Left-handed/New-style enums round-trip "
+          "identically; 6 generator guards hold" % round(hx_len, 3))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
