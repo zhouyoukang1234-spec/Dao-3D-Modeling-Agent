@@ -819,6 +819,23 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
                 spec["intersection"] = True
             if props.get("SelfIntersection", {}).get("value") is True:
                 spec["self_intersection"] = True
+        elif otype == _OFFSET_TYPE:
+            spec["source"] = _link_target(props.get("Source"))
+            val = props.get("Value", {}).get("value")
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                spec["value"] = _tidy_size(val)
+            mode_i = props.get("Mode", {}).get("value")
+            if isinstance(mode_i, int) and 0 < mode_i < len(_OFFSET_MODES):
+                spec["mode"] = _OFFSET_MODES[mode_i]
+            join_i = props.get("Join", {}).get("value")
+            if isinstance(join_i, int) and 0 < join_i < len(_OFFSET_JOINS):
+                spec["join"] = _OFFSET_JOINS[join_i]
+            if props.get("Fill", {}).get("value") is True:
+                spec["fill"] = True
+            if props.get("Intersection", {}).get("value") is True:
+                spec["intersection"] = True
+            if props.get("SelfIntersection", {}).get("value") is True:
+                spec["self_intersection"] = True
         else:
             raise ValueError(
                 "summarize: object %s has type %r that synthesize cannot author"
@@ -1425,6 +1442,18 @@ _THICKNESS_TYPE = "Part::Thickness"
 _THICKNESS_MODES = ("Skin", "Pipe", "RectoVerso")
 _THICKNESS_JOINS = ("Arc", "Tangent", "Intersection")
 
+# Part::Offset -- 3D offset: grow (positive ``Value``) or shrink (negative) the
+# whole ``Source`` solid/shell by a uniform distance, its faces pushed along
+# their normals and reconnected at the corners. It shares the shelling family's
+# offset vocabulary -- ``Mode`` (Skin/Pipe/RectoVerso) and ``Join`` (Arc/Tangent/
+# Intersection), both enumerations persisted by index -- but takes a plain
+# ``Source`` link (no face selection) and a ``Fill`` flag that, when set, walls
+# the gap between original and offset into a hollow solid. The kernel rebuilds it
+# on recompute from these scalars + the link alone; no BREP is written.
+_OFFSET_TYPE = "Part::Offset"
+_OFFSET_MODES = _THICKNESS_MODES
+_OFFSET_JOINS = _THICKNESS_JOINS
+
 
 def _edge_treatment_size_keys(otype: str) -> "tuple":
     """The (scalar, pair1, pair2, noun) spec keys an edge treatment reads its
@@ -1607,6 +1636,65 @@ def _thickness_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
     ET.SubElement(jp, "Integer",
                   {"value": str(_THICKNESS_JOINS.index(norm["join"]))})
     for pname, flag in (("Intersection", norm["intersection"]),
+                        ("SelfIntersection", norm["self_intersection"])):
+        bp = ET.SubElement(parent, "Property",
+                           {"name": pname, "type": "App::PropertyBool"})
+        ET.SubElement(bp, "Bool", {"value": "true" if flag else "false"})
+
+
+def _norm_offset(spec: "Dict[str, Any]") -> "Dict[str, Any]":
+    """Validate a ``Part::Offset`` spec and return it normalised: ``value`` a
+    non-zero float, ``mode`` / ``join`` valid enumeration names, the three flags
+    bools. Raises ``ValueError`` (naming the object) so a malformed offset never
+    reaches the kernel."""
+    name = spec.get("name")
+    value = spec.get("value")
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or value == 0):
+        raise ValueError(
+            "synthesize: offset %s 'value' must be a non-zero number" % name)
+    mode = spec.get("mode", "Skin")
+    if mode not in _OFFSET_MODES:
+        raise ValueError(
+            "synthesize: offset %s mode %r must be one of %s"
+            % (name, mode, ", ".join(_OFFSET_MODES)))
+    join = spec.get("join", "Arc")
+    if join not in _OFFSET_JOINS:
+        raise ValueError(
+            "synthesize: offset %s join %r must be one of %s"
+            % (name, join, ", ".join(_OFFSET_JOINS)))
+    for flag in ("fill", "intersection", "self_intersection"):
+        if flag in spec and not isinstance(spec[flag], bool):
+            raise ValueError(
+                "synthesize: offset %s '%s' must be a bool" % (name, flag))
+    return {"value": float(value), "mode": mode, "join": join,
+            "fill": bool(spec.get("fill", False)),
+            "intersection": bool(spec.get("intersection", False)),
+            "self_intersection": bool(spec.get("self_intersection", False))}
+
+
+def _offset_properties(parent: ET.Element, spec: "Dict[str, Any]") -> None:
+    """Append the ``Part::Offset`` properties growing/shrinking ``Source``.
+
+    ``Value`` is the (signed) offset distance (a plain ``PropertyFloat``, unlike
+    the shelling ``Quantity``); ``Mode`` / ``Join`` the offset algorithm + corner
+    rule (each an enumeration written as its integer index); ``Fill`` whether to
+    wall the gap into a solid; ``Intersection`` / ``SelfIntersection`` the two
+    self-collision flags. The ``Source`` link is written by the object loop."""
+    norm = _norm_offset(spec)
+    vp = ET.SubElement(parent, "Property",
+                       {"name": "Value", "type": "App::PropertyFloat"})
+    ET.SubElement(vp, "Float", {"value": "%.16f" % norm["value"]})
+    mp = ET.SubElement(parent, "Property",
+                       {"name": "Mode", "type": "App::PropertyEnumeration"})
+    ET.SubElement(mp, "Integer",
+                  {"value": str(_OFFSET_MODES.index(norm["mode"]))})
+    jp = ET.SubElement(parent, "Property",
+                       {"name": "Join", "type": "App::PropertyEnumeration"})
+    ET.SubElement(jp, "Integer",
+                  {"value": str(_OFFSET_JOINS.index(norm["join"]))})
+    for pname, flag in (("Fill", norm["fill"]),
+                        ("Intersection", norm["intersection"]),
                         ("SelfIntersection", norm["self_intersection"])):
         bp = ET.SubElement(parent, "Property",
                            {"name": pname, "type": "App::PropertyBool"})
@@ -2003,7 +2091,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 and otype != _EXTRUDE_TYPE and otype != _REVOLVE_TYPE
                 and otype != _LOFT_TYPE and otype != _SWEEP_TYPE
                 and otype not in _EDGE_TREATMENTS
-                and otype != _THICKNESS_TYPE):
+                and otype != _THICKNESS_TYPE and otype != _OFFSET_TYPE):
             raise ValueError(
                 "synthesize: object #%d has unknown type %r (supported: %s)"
                 % (idx, otype, ", ".join(sorted(
@@ -2011,7 +2099,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                     | _EDGE_TREATMENTS
                     | {_SHEET_TYPE, _MIRROR_TYPE, _SKETCH_TYPE,
                        _EXTRUDE_TYPE, _REVOLVE_TYPE, _LOFT_TYPE,
-                       _SWEEP_TYPE, _THICKNESS_TYPE}))))
+                       _SWEEP_TYPE, _THICKNESS_TYPE, _OFFSET_TYPE}))))
         name = spec.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("synthesize: object #%d needs a non-empty name" % idx)
@@ -2378,6 +2466,19 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: thickness %s takes base/faces/value, "
                     "not properties" % name)
+        elif otype == _OFFSET_TYPE:
+            source = spec.get("source")
+            if not isinstance(source, str) or not source.strip():
+                raise ValueError(
+                    "synthesize: offset %s needs a 'source' object name" % name)
+            if source == name:
+                raise ValueError(
+                    "synthesize: offset %s cannot reference itself" % name)
+            _norm_offset(spec)  # validates value / mode / join / flags
+            if spec.get("properties"):
+                raise ValueError(
+                    "synthesize: offset %s takes source/value, not properties"
+                    % name)
         else:
             props = spec.get("properties") or {}
             if not isinstance(props, dict):
@@ -2441,6 +2542,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 raise ValueError(
                     "synthesize: thickness %s base=%r is not a defined object"
                     % (spec["name"], spec["base"]))
+        elif spec["type"] == _OFFSET_TYPE:
+            if spec["source"] not in all_names:
+                raise ValueError(
+                    "synthesize: offset %s source=%r is not a defined object"
+                    % (spec["name"], spec["source"]))
         elif spec["type"] in _LINKLIST_TYPES:
             key, _prop = _LINKLIST_TYPES[spec["type"]]
             for ref in spec[key]:
@@ -2479,9 +2585,10 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         is_sweep = otype == _SWEEP_TYPE
         is_edge = otype in _EDGE_TREATMENTS
         is_thick = otype == _THICKNESS_TYPE
+        is_offset = otype == _OFFSET_TYPE
         props = ({} if (is_bool or is_linklist or is_sheet or is_mirror
                         or is_sketch or is_extrude or is_revolve or is_loft
-                        or is_sweep or is_edge or is_thick)
+                        or is_sweep or is_edge or is_thick or is_offset)
                  else (spec.get("properties") or {}))
         exprs = spec.get("expressions") or {}
         # links: an explicit DAG (boolean operands) plus every *other* object
@@ -2495,6 +2602,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                  else [spec["spine"]] + list(spec["sections"]) if is_sweep
                  else [spec["base"]] if is_edge
                  else [spec["base"]] if is_thick
+                 else [spec["source"]] if is_offset
                  else [])
         dep_set = list(links)
         for other in all_names:
@@ -2519,7 +2627,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
         has_placement = bool(position or axis or angle)
         prop_items = ([] if (is_bool or is_linklist or is_sheet or is_mirror
                              or is_sketch or is_extrude or is_revolve or is_loft
-                             or is_sweep or is_edge or is_thick)
+                             or is_sweep or is_edge or is_thick or is_offset)
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
@@ -2527,7 +2635,8 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
                       + (6 if is_extrude else 0) + (6 if is_revolve else 0)
                       + (4 if is_loft else 0) + (5 if is_sweep else 0)
-                      + (3 if is_edge else 0) + (6 if is_thick else 0))
+                      + (3 if is_edge else 0) + (6 if is_thick else 0)
+                      + (7 if is_offset else 0))
         props_el = ET.SubElement(
             od, "Properties", {"Count": str(prop_count), "TransientCount": "0"})
         if is_sheet:
@@ -2549,6 +2658,11 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
             _edge_treatment_properties(props_el, spec, edge_triples, member)
         if is_thick:
             _thickness_properties(props_el, spec)
+        if is_offset:
+            sp = ET.SubElement(props_el, "Property",
+                               {"name": "Source", "type": "App::PropertyLink"})
+            ET.SubElement(sp, "Link", {"value": spec["source"]})
+            _offset_properties(props_el, spec)
         if is_bool:
             for role_name, ref in (("Base", spec["base"]), ("Tool", spec["tool"])):
                 lp = ET.SubElement(props_el, "Property",
@@ -3088,6 +3202,33 @@ def thickness(name: str, base: str, faces: "List[int]", value: float,
                             "intersection": intersection,
                             "self_intersection": self_intersection}
     _norm_thickness(spec)
+    return spec
+
+
+def offset(name: str, source: str, value: float, mode: str = "Skin",
+           join: str = "Arc", fill: bool = False, intersection: bool = False,
+           self_intersection: bool = False) -> "Dict[str, Any]":
+    """Generate a ``Part::Offset`` object spec growing/shrinking ``source``.
+
+    ``value`` is the signed offset distance (positive grows the solid outward,
+    negative shrinks it inward), ``mode`` the offset algorithm (``Skin`` /
+    ``Pipe`` / ``RectoVerso``) and ``join`` how offset faces reconnect at a
+    corner (``Arc`` / ``Tangent`` / ``Intersection``). ``fill`` walls the gap
+    between original and offset into a hollow solid. Feed the result alongside
+    the ``source`` object's spec into :func:`synthesize`; the kernel rebuilds the
+    offset on recompute from these scalars + the link alone. 大巧若拙.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("%s: needs a non-empty name" % _OFFSET_TYPE)
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError(
+            "%s: 'source' must be a non-empty object name" % _OFFSET_TYPE)
+    spec: Dict[str, Any] = {"type": _OFFSET_TYPE, "name": name,
+                            "source": str(source), "value": value,
+                            "mode": mode, "join": join, "fill": fill,
+                            "intersection": intersection,
+                            "self_intersection": self_intersection}
+    _norm_offset(spec)
     return spec
 
 

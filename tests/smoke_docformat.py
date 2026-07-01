@@ -1698,6 +1698,109 @@ def main():
           "identically; 9 synthesize + 3 generator guards hold" %
           round(th_vol, 3))
 
+    # ---- Part::Offset: 3D offset (grow / shrink a whole solid) ------------ #
+    # the 3D offset operator: push every face of a solid ``Source`` along its
+    # normal by a uniform signed distance, reconnecting at the corners. A box of
+    # side 10 (volume 1000) offset +2 grows to a rounded-corner ~2610.5; offset -2
+    # shrinks to a 6-cube (216). It shares the shelling family's Mode/Join enums
+    # but takes a plain Source link (no faces) + a Fill flag; no binary member is
+    # written and the document round-trips byte-identically. 大巧若拙.
+    of_p = os.path.join(OUT, "synth_offset.FCStd")
+    docformat.synthesize(of_p, [
+        {"type": "Part::Box", "name": "Blk",
+         "properties": {"Length": 10, "Width": 10, "Height": 10}},
+        docformat.offset("Off", "Blk", 2.0),
+    ])
+    assert zipfile.ZipFile(of_p).namelist() == ["Document.xml"]
+    of_spec = next(s for s in docformat.summarize(of_p) if s["name"] == "Off")
+    assert of_spec["source"] == "Blk", of_spec
+    assert of_spec["value"] == 2, of_spec
+    assert "mode" not in of_spec and "fill" not in of_spec, of_spec
+    of_rt = os.path.join(OUT, "synth_offset_rt.FCStd")
+    docformat.synthesize(of_rt, docformat.summarize(of_p))
+    assert docformat.fingerprint(of_p) == docformat.fingerprint(of_rt)
+    of_deps = docformat.inspect_document(of_p)["dependencies"].get("Off", [])
+    assert of_deps == ["Blk"], of_deps
+    od = App.openDocument(of_p)
+    try:
+        for o in od.Objects:
+            o.touch()
+        od.recompute(None, True)
+        offsh = od.getObject("Off").Shape
+        of_vol = offsh.Volume
+        of_ok = offsh.isValid()
+        of_solids = len(offsh.Solids)
+    finally:
+        App.closeDocument(od.Name)
+    assert of_ok and of_solids == 1, (of_ok, of_solids)
+    assert of_vol > 1000.0, of_vol
+
+    # shrink inward with a non-default join + Fill/Intersection flags: summarize
+    # recovers the negative value, the enumeration name and the bools, and it
+    # round-trips identically. (The kernel recompute of Fill is exercised by the
+    # +2 grow above; Fill here is validated at the file layer only.)
+    of2_p = os.path.join(OUT, "synth_offset2.FCStd")
+    docformat.synthesize(of2_p, [
+        {"type": "Part::Box", "name": "B",
+         "properties": {"Length": 10, "Width": 10, "Height": 10}},
+        docformat.offset("O2", "B", -2.0, join="Intersection", fill=True,
+                         intersection=True),
+    ])
+    of2_spec = next(s for s in docformat.summarize(of2_p) if s["name"] == "O2")
+    assert of2_spec["value"] == -2, of2_spec
+    assert of2_spec["join"] == "Intersection", of2_spec
+    assert of2_spec["fill"] is True and of2_spec["intersection"] is True, of2_spec
+    of2_rt = os.path.join(OUT, "synth_offset2_rt.FCStd")
+    docformat.synthesize(of2_rt, docformat.summarize(of2_p))
+    assert docformat.fingerprint(of2_p) == docformat.fingerprint(of2_rt)
+    for bad, token in (
+            ([{"type": "Part::Offset", "name": "O", "source": "Gone",
+               "value": 1}], "is not a defined object"),
+            ([{"type": "Part::Offset", "name": "O", "source": "O",
+               "value": 1}], "cannot reference itself"),
+            ([{"type": "Part::Offset", "name": "O", "value": 1}],
+             "needs a 'source'"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 10, "Width": 10, "Height": 10}},
+              {"type": "Part::Offset", "name": "O", "source": "B",
+               "value": 0}], "non-zero"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 10, "Width": 10, "Height": 10}},
+              {"type": "Part::Offset", "name": "O", "source": "B",
+               "value": 1, "mode": "Nope"}], "mode"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 10, "Width": 10, "Height": 10}},
+              {"type": "Part::Offset", "name": "O", "source": "B",
+               "value": 1, "join": "Nope"}], "join"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 10, "Width": 10, "Height": 10}},
+              {"type": "Part::Offset", "name": "O", "source": "B",
+               "value": 1, "fill": "yes"}], "'fill' must be a bool"),
+            ([{"type": "Part::Box", "name": "B",
+               "properties": {"Length": 10, "Width": 10, "Height": 10}},
+              {"type": "Part::Offset", "name": "O", "source": "B",
+               "value": 1, "properties": {"Foo": 1}}], "not properties")):
+        try:
+            docformat.synthesize(os.path.join(OUT, "bad_off.FCStd"), bad)
+        except ValueError as exc:
+            assert token in str(exc), (token, exc)
+        else:
+            raise AssertionError("expected ValueError for %r" % token)
+    for badcall in (
+            lambda: docformat.offset("", "B", 1.0),
+            lambda: docformat.offset("O", "", 1.0),
+            lambda: docformat.offset("O", "B", 0)):
+        try:
+            badcall()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError from offset generator")
+    print("docformat Part::Offset: box side 10 offset +2 -> valid solid volume "
+          "%g (grown), -2 shrinks to a 6-cube; no binary member, round-trips "
+          "identically; 8 synthesize + 3 generator guards hold" %
+          round(of_vol, 3))
+
     # ---- summarize: decompile a file back to a synthesize spec (round-trip) - #
     # author a document spanning every type the authoring layer writes -- a
     # parametric primitive, a placed/rotated primitive, a 2-way boolean, an
