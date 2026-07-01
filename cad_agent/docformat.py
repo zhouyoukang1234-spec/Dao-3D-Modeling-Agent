@@ -680,6 +680,8 @@ def summarize(path: str) -> "List[Dict[str, Any]]":
         elif otype in _BOOLEANS:
             spec["base"] = _link_target(props.get("Base"))
             spec["tool"] = _link_target(props.get("Tool"))
+            if props.get("Refine", {}).get("value") is True:
+                spec["refine"] = True
         elif otype == _SECTION_TYPE:
             spec["base"] = _link_target(props.get("Base"))
             spec["tool"] = _link_target(props.get("Tool"))
@@ -1438,7 +1440,10 @@ _INT_PROP_TYPES = {"App::PropertyInteger", "App::PropertyIntegerConstraint"}
 # The Part boolean operators -- each is a ``Part::Boolean`` taking a ``Base`` and
 # a ``Tool`` link to two other objects, and the kernel performs the CSG on
 # recompute. Authoring these from file builds a constructive-solid-geometry tree
-# (an object-link DAG), the dual of the primitive leaves above.
+# (an object-link DAG), the dual of the primitive leaves above. An optional
+# ``refine`` authors a ``Refine`` bool so the kernel merges the coplanar faces /
+# collinear edges the CSG leaves behind (fewer faces, same volume) -- written
+# only when true so a plain boolean stays byte-identical.
 _BOOLEANS = {"Part::Cut", "Part::Fuse", "Part::Common"}
 
 # Part::Section -- the *cross-section* boolean: intersect a ``Base`` shape with a
@@ -2563,9 +2568,13 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 if ref == name:
                     raise ValueError(
                         "synthesize: boolean %s cannot reference itself" % name)
+            if "refine" in spec and not isinstance(spec["refine"], bool):
+                raise ValueError(
+                    "synthesize: boolean %s 'refine' must be a bool" % name)
             if spec.get("properties"):
                 raise ValueError(
-                    "synthesize: boolean %s takes base/tool, not properties" % name)
+                    "synthesize: boolean %s takes base/tool/refine, not properties"
+                    % name)
         elif otype == _SECTION_TYPE:
             for role in ("base", "tool"):
                 ref = spec.get(role)
@@ -3186,6 +3195,7 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                       else [(p, _PRIMITIVES[otype][p], v) for p, v in props.items()])
         prop_count = (len(prop_items) + (1 if has_placement else 0)
                       + (1 if exprs else 0) + (2 if is_bool else 0)
+                      + (1 if is_bool and spec.get("refine") else 0)
                       + (1 if is_linklist else 0) + (1 if is_sheet else 0)
                       + (3 if is_mirror else 0) + (1 if is_sketch else 0)
                       + (6 if is_extrude else 0)
@@ -3251,6 +3261,10 @@ def synthesize(path: str, objects: "List[Dict[str, Any]]",
                 lp = ET.SubElement(props_el, "Property",
                                    {"name": role_name, "type": "App::PropertyLink"})
                 ET.SubElement(lp, "Link", {"value": ref})
+            if spec.get("refine"):
+                bp = ET.SubElement(props_el, "Property",
+                                   {"name": "Refine", "type": "App::PropertyBool"})
+                ET.SubElement(bp, "Bool", {"value": "true"})
         if is_linklist:
             operands = spec[ll_key]
             lp = ET.SubElement(props_el, "Property",

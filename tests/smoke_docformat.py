@@ -458,6 +458,60 @@ def main():
     print("docformat.synthesize: authored CSG Cut(Base-Tool) -> kernel carves "
           "vol %.1f (file-first constructive solid geometry)" % cut_vol)
 
+    # ---- synthesize boolean refine: merge the seams a CSG leaves behind ---- #
+    # fuse two 10-cubes sharing the x=10 face. The raw union keeps the seam --
+    # the merged solid still carries the two coplanar half-faces (10 faces, 20
+    # edges); an optional 'refine' has the kernel weld them into one clean box
+    # (6 faces, 12 edges) at the same volume 2000. The flag is authored only when
+    # true (a plain boolean stays byte-identical) and round-trips. 大巧若拙.
+    def _fuse(refine):
+        p = os.path.join(OUT, "synth_fuse_ref%d.FCStd" % refine)
+        spec = {"type": "Part::Fuse", "name": "Fu", "base": "B1", "tool": "B2"}
+        if refine:
+            spec["refine"] = True
+        docformat.synthesize(p, [
+            {"type": "Part::Box", "name": "B1",
+             "properties": {"Length": 10, "Width": 10, "Height": 10}},
+            {"type": "Part::Box", "name": "B2",
+             "properties": {"Length": 10, "Width": 10, "Height": 10},
+             "placement": {"position": [10, 0, 0]}}, spec])
+        d = App.openDocument(p)
+        try:
+            for o in d.Objects:
+                o.touch()
+            d.recompute(None, True)
+            sh = d.getObject("Fu").Shape
+            return p, sh.isValid(), sh.Volume, len(sh.Faces), len(sh.Edges)
+        finally:
+            App.closeDocument(d.Name)
+    ru_raw_p, ru_raw_ok, ru_raw_v, ru_raw_f, ru_raw_e = _fuse(0)
+    ru_p, ru_ok, ru_v, ru_f, ru_e = _fuse(1)
+    ru_spec = next(s for s in docformat.summarize(ru_p) if s["name"] == "Fu")
+    assert ru_spec.get("refine") is True, ru_spec
+    assert "refine" not in next(s for s in docformat.summarize(ru_raw_p)
+                                if s["name"] == "Fu")
+    ru_rt = os.path.join(OUT, "synth_fuse_ref_rt.FCStd")
+    docformat.synthesize(ru_rt, docformat.summarize(ru_p))
+    assert docformat.fingerprint(ru_p) == docformat.fingerprint(ru_rt)
+    assert ru_raw_ok and ru_ok, (ru_raw_ok, ru_ok)
+    assert abs(ru_v - ru_raw_v) < 1e-6 and abs(ru_v - 2000.0) < 1e-6, (ru_v, ru_raw_v)
+    assert ru_f < ru_raw_f and ru_e < ru_raw_e, (ru_f, ru_raw_f, ru_e, ru_raw_e)
+    try:
+        docformat.synthesize(os.path.join(OUT, "bad_refine.FCStd"), [
+            {"type": "Part::Box", "name": "B1",
+             "properties": {"Length": 5, "Width": 5, "Height": 5}},
+            {"type": "Part::Box", "name": "B2",
+             "properties": {"Length": 5, "Width": 5, "Height": 5}},
+            {"type": "Part::Fuse", "name": "F", "base": "B1", "tool": "B2",
+             "refine": "yes"}])
+    except ValueError as exc:
+        assert "'refine' must be a bool" in str(exc), exc
+    else:
+        raise AssertionError("expected ValueError for non-bool refine")
+    print("docformat Part::Fuse refine: welds seams %d->%d faces, %d->%d edges at "
+          "vol %g, round-trips, guarded"
+          % (ru_raw_f, ru_f, ru_raw_e, ru_e, round(ru_v, 2)))
+
     # ---- synthesize rotation: an oriented primitive authored from nothing - #
     # a 10x2x2 bar rotated 90 deg about Z; FreeCAD persists a rotation twice
     # (quaternion + axis-angle) and honours the axis-angle, so synthesize must
