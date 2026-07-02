@@ -317,6 +317,11 @@ def _build_handlers(state):
         handlers.update(freecad_measure.register(state))
     except Exception as exc:  # Measure is optional
         sys.stderr.write("measure load failed: %r\n" % (exc,))
+    try:
+        import freecad_bop
+        handlers.update(freecad_bop.register(state))
+    except Exception as exc:  # BOPTools is optional
+        sys.stderr.write("bop load failed: %r\n" % (exc,))
     return handlers
 
 
