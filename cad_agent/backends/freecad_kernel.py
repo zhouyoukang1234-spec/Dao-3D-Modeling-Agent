@@ -312,6 +312,11 @@ def _build_handlers(state):
         handlers.update(freecad_wire.register(state))
     except Exception as exc:  # wire/DraftGeomUtils is optional
         sys.stderr.write("wire load failed: %r\n" % (exc,))
+    try:
+        import freecad_measure
+        handlers.update(freecad_measure.register(state))
+    except Exception as exc:  # Measure is optional
+        sys.stderr.write("measure load failed: %r\n" % (exc,))
     return handlers
 
 

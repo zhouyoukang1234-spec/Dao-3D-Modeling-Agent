@@ -56,7 +56,7 @@ def main():
     # ...and a module we never call (we build surfaces via Part.BSplineSurface,
     # not the Surface workbench) is honestly reported as uncovered.
     assert "Surface" in cov["uncovered_modules"], cov
-    assert "Measure" in cov["uncovered_modules"], cov
+    assert "Measure" in cov["covered_modules"], cov
     # prose can't masquerade as use: f.Surface (a Face attribute) must NOT make
     # the Surface module look covered.
     assert "Surface" not in usage, usage
