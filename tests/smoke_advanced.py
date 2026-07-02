@@ -121,6 +121,13 @@ def main():
     # Export a solid to STL, re-import it as a fusable mesh, repair, sew to BRep.
     stl = os.path.join(OUT, "ring.stl")
     assert s.act("mesh.export", {"name": "mA", "path": stl, "tolerance": 0.5}).ok
+    # a kept mesh (mesh.from_shape / mesh.boolean output) must also resolve
+    r = s.act("mesh.analyze", {"name": "MU"})
+    assert r.ok, "mesh.analyze must accept a kept mesh: %s" % r
+    assert "brep_volume" not in r.data
+    stl_mu = os.path.join(OUT, "mu.stl")
+    r = s.act("mesh.export", {"name": "MU", "path": stl_mu})
+    assert r.ok, "mesh.export must accept a kept mesh: %s" % r
     imp = s.act("mesh.import", {"path": stl, "out": "Ingested"})
     assert imp.ok, imp.error
     assert imp.data["facets"] > 0 and imp.data["format"] == "stl", imp.data

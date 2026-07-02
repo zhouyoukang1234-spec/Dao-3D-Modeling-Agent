@@ -302,6 +302,31 @@ def _build_handlers(state):
         handlers.update(freecad_reflect.register(state))
     except Exception as exc:  # reflective universal dispatch is optional
         sys.stderr.write("reflect load failed: %r\n" % (exc,))
+    try:
+        import freecad_arch
+        handlers.update(freecad_arch.register(state))
+    except Exception as exc:  # BIM/Arch is optional
+        sys.stderr.write("arch load failed: %r\n" % (exc,))
+    try:
+        import freecad_wire
+        handlers.update(freecad_wire.register(state))
+    except Exception as exc:  # wire/DraftGeomUtils is optional
+        sys.stderr.write("wire load failed: %r\n" % (exc,))
+    try:
+        import freecad_measure
+        handlers.update(freecad_measure.register(state))
+    except Exception as exc:  # Measure is optional
+        sys.stderr.write("measure load failed: %r\n" % (exc,))
+    try:
+        import freecad_bop
+        handlers.update(freecad_bop.register(state))
+    except Exception as exc:  # BOPTools is optional
+        sys.stderr.write("bop load failed: %r\n" % (exc,))
+    try:
+        import freecad_percept
+        handlers.update(freecad_percept.register(state))
+    except Exception as exc:  # structural perception is optional
+        sys.stderr.write("percept load failed: %r\n" % (exc,))
     return handlers
 
 

@@ -556,6 +556,9 @@ class GitHubClient:
             })
         return results
 
+    def search(self, query: str, limit: int = 20) -> list:
+        return self.search_repos(query, limit)
+
     def search_code(self, query: str, language: str = "python", limit: int = 10) -> list:
         params = urllib.parse.urlencode({
             "q": f"{query} language:{language}",

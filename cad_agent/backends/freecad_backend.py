@@ -177,9 +177,50 @@ def register_kernel_tools(registry: ToolRegistry, kernel: FreeCADKernel) -> None
             registry.register(tool_name, make(op), summary="FreeCAD live op: " + op)
 
 
+# The live-GUI (L2) command layer. Boots the full ``freecad`` GUI binary under
+# the Qt offscreen platform, so it is far heavier than the ``freecadcmd`` kernel
+# and is started lazily, only when a ``gui.*`` op is first called.
+_GUI_OPS = (
+    "gui.workbenches", "gui.activate", "gui.active", "gui.commands",
+    "gui.command_info", "gui.run", "gui.select", "gui.selection",
+    "gui.clear_selection", "gui.objects", "gui.recompute", "gui.save",
+)
+
+
+def register_gui_tools(registry: ToolRegistry) -> None:
+    """Register the GUI command layer (L2) as lazily-booted ``gui.*`` tools.
+
+    The full ``freecad`` GUI process is expensive to start, so the first ``gui.*``
+    call boots it and every later call reuses it via ``registry.gui_kernel``.
+    """
+    def ensure_kernel():
+        gk = getattr(registry, "gui_kernel", None)
+        if gk is None:
+            from .freecad_gui_backend import FreeCADGuiKernel
+            gk = FreeCADGuiKernel()
+            registry.gui_kernel = gk  # type: ignore[attr-defined]
+        return gk
+
+    for op in _GUI_OPS:
+        def make(op_name: str):
+            def handler(args: Dict[str, Any]) -> ToolResult:
+                gk = ensure_kernel()
+                frame = gk.call(op_name, args, timeout=180)
+                if frame.get("ok"):
+                    return ToolResult.success(**frame.get("data", {}))
+                return ToolResult.failure(frame.get("error", "gui kernel error"),
+                                          trace=frame.get("trace"))
+            return handler
+
+        if not registry.has(op):
+            registry.register(op, make(op), summary="FreeCAD live GUI op: " + op)
+
+
 def build_freecad_registry(kernel: Optional[FreeCADKernel] = None) -> ToolRegistry:
     kernel = kernel or FreeCADKernel()
     reg = ToolRegistry()
     register_kernel_tools(reg, kernel)
     reg.kernel = kernel  # type: ignore[attr-defined]
+    reg.gui_kernel = None  # type: ignore[attr-defined]  # lazily booted on 1st gui.*
+    register_gui_tools(reg)
     return reg

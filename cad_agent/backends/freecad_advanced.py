@@ -295,19 +295,21 @@ def register(state):
 
     # ---- mesh analysis --------------------------------------------------- #
     def op_mesh_analyze(a):
-        import Mesh
-        shape = _shape(a["name"])
-        tol = _num(a, "tolerance", 0.2, "mesh tolerance")
-        mesh = Mesh.Mesh(shape.tessellate(tol))
-        return {"points": mesh.CountPoints, "facets": mesh.CountFacets,
-                "solid": bool(mesh.isSolid()), "has_non_manifolds": bool(mesh.hasNonManifolds()),
-                "self_intersections": bool(mesh.hasSelfIntersections()),
-                "mesh_volume": _round(mesh.Volume), "brep_volume": _round(shape.Volume),
-                "watertight": bool(mesh.isSolid() and not mesh.hasNonManifolds())}
+        mesh, kind = _resolve_mesh(a, "mesh.analyze", tol_default=0.2)
+        out = {"points": mesh.CountPoints, "facets": mesh.CountFacets,
+               "solid": bool(mesh.isSolid()),
+               "has_non_manifolds": bool(mesh.hasNonManifolds()),
+               "self_intersections": bool(mesh.hasSelfIntersections()),
+               "mesh_volume": _round(mesh.Volume),
+               "watertight": bool(mesh.isSolid()
+                                  and not mesh.hasNonManifolds())}
+        if kind == "solid":
+            shape = _shape(a.get("name", a.get("mesh")))
+            out["brep_volume"] = _round(shape.Volume)
+        return out
 
     def op_mesh_export(a):
-        import Mesh
-        shape = _shape(a["name"])
+        mesh, _kind = _resolve_mesh(a, "mesh.export")
         path = a.get("path")
         # Mesh.write's path must be a filesystem string; a non-string leaks a
         # raw TypeError.
@@ -315,8 +317,6 @@ def register(state):
             raise ValueError(
                 "mesh.export 'path' must be a non-empty file path string (got %r)"
                 % (path,))
-        tol = _num(a, "tolerance", 0.1, "mesh tolerance")
-        mesh = Mesh.Mesh(shape.tessellate(tol))
         mesh.write(path)
         return {"path": path, "facets": mesh.CountFacets,
                 "bytes": os.path.getsize(path) if os.path.exists(path) else 0}

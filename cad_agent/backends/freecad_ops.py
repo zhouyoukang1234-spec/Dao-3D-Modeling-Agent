@@ -559,7 +559,19 @@ def register(state):
         # also consume the parametric feature tree's result.
         oname = state.shapes.get(name) or state.bodies.get(name)
         if not oname:
-            raise KeyError("no such solid: %s" % name)
+            # cross-module fallback: other tool groups (wire.*, bim.*, ...)
+            # add document objects that carry solids without registering in
+            # the solid.* namespace; adopt them by Name or Label.
+            cand = doc.getObject(name)
+            if cand is None:
+                labelled = doc.getObjectsByLabel(name)
+                cand = labelled[0] if labelled else None
+            if cand is not None and hasattr(cand, "Shape") \
+                    and getattr(cand.Shape, "Solids", None):
+                state.shapes[name] = cand.Name
+                oname = cand.Name
+            else:
+                raise KeyError("no such solid: %s" % name)
         obj = doc.getObject(oname)
         if obj is None:
             raise KeyError("solid object missing: %s" % name)
@@ -704,10 +716,42 @@ def register(state):
         # makeThickness cannot hollow a solid without at least one removed face:
         # an empty list returns a null shape with an opaque OCC error. Require the
         # opening explicitly and report a clear, actionable message instead.
+        if open_faces is None:
+            open_faces = a.get("faces")
         if not open_faces:
             raise ValueError(
-                "solid.shell needs 'open_faces': indices of the face(s) to remove "
-                "to open the shell (a solid cannot be hollowed without an opening)")
+                "solid.shell needs 'open_faces': face indices, a selector "
+                "string like 'zmax'/'xmin', or {'axis': 'z', 'side': 'max'} "
+                "(a solid cannot be hollowed without an opening)")
+        if isinstance(open_faces, (str, dict)):
+            if isinstance(open_faces, str):
+                sel = open_faces.strip().lower()
+                if len(sel) != 4 or sel[0] not in "xyz" or \
+                        sel[1:] not in ("max", "min"):
+                    raise ValueError(
+                        "solid.shell face selector must look like 'zmax' or "
+                        "'xmin' (got %r)" % open_faces)
+                ax, side = sel[0], sel[1:]
+            else:
+                ax = str(open_faces.get("axis", "")).lower()
+                side = str(open_faces.get("side", "")).lower()
+                if ax not in "xyz" or ax == "" or side not in ("max", "min"):
+                    raise ValueError(
+                        "solid.shell face selector dict needs 'axis' in "
+                        "x/y/z and 'side' in max/min (got %r)" % open_faces)
+            comp = {"x": 0, "y": 1, "z": 2}[ax]
+            bb = obj.Shape.BoundBox
+            extreme = (bb.XMax, bb.YMax, bb.ZMax)[comp] if side == "max" \
+                else (bb.XMin, bb.YMin, bb.ZMin)[comp]
+            tol = 1e-6 * max(1.0, bb.DiagonalLength)
+            open_faces = [
+                i for i, f in enumerate(obj.Shape.Faces)
+                if abs((f.CenterOfMass.x, f.CenterOfMass.y,
+                        f.CenterOfMass.z)[comp] - extreme) < tol]
+            if not open_faces:
+                raise ValueError(
+                    "solid.shell: no face lies on the %s%s side of the solid"
+                    % (ax, side))
         bad = [i for i in open_faces if i < 0 or i >= nf]
         if bad:
             raise ValueError("open_faces %s out of range (solid has %d faces 0..%d)"
@@ -1834,6 +1878,28 @@ def register(state):
         }
 
     def op_interference(a):
+        # whole-assembly form: 'names' checks every pair in one call
+        names = a.get("names")
+        if names is not None:
+            if not isinstance(names, list) or len(names) < 2:
+                raise ValueError(
+                    "interference 'names' must list >= 2 solids (got %r)"
+                    % (names,))
+            shapes = [(n, _get(n).Shape) for n in names]
+            pairs = []
+            for i, (na, sa) in enumerate(shapes):
+                for nb, sb in shapes[i + 1:]:
+                    common = sa.common(sb)
+                    vol = common.Volume if common.Solids else 0.0
+                    if vol > 1e-6:
+                        pairs.append({"a": na, "b": nb,
+                                      "overlap_volume": _round(vol)})
+            return {"interfering": bool(pairs), "pairs": pairs,
+                    "checked": len(shapes) * (len(shapes) - 1) // 2}
+        if "a" not in a or "b" not in a:
+            raise ValueError(
+                "interference needs 'a' and 'b' (two solid names) or "
+                "'names' (a list of solids to check pairwise)")
         sa = _get(a["a"]).Shape
         sb = _get(a["b"]).Shape
         common = sa.common(sb)
