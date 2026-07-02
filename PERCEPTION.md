@@ -90,6 +90,7 @@ Agent 现在可以在**从零搭建**或**接手既有模型**时先 `percept.sc
 | 5 | 单级减速箱（壳体+阶梯轴+运动学，29/29） | 环形面凹凸性误判（质心在孔内）、shell 需手查面索引、github 资源搜索崩溃 | 棱边切向×法向探针定面内方向、shell 支持 'zmax' 语义选择器、GitHubClient.search |
 | 6 | 管路撬块（wire/bop/bim/measure，21/21） | wire.extrude 不认 out/dir、bim 按 Label 找不到对象、solid.* 看不见其他模块产物 | 参数别名归一、Label 解析、跨模块实体自动收养 |
 | 7 | 涡轮叶片自由曲面（surface/mesh/points/ss，13/13） | mesh.analyze/export 无法读取 mesh.from_shape 产出的保留网格 | 统一走 _resolve_mesh：保留网格与实体细分同路解析 |
+| 8 | 机加工支架（draft/fem/path/doc 版本，19/19） | 倒角后 percept.describe 在缝合棱边上崩溃（OCC undefined curve type） | _curve_info 容忍无法求曲线类型的棱边（报 unknown 而非崩溃） |
 
 感知层本身也在被感知：每轮实战先用 percept.* 读出真实结构，与设计意图比对，
 不符即为缺陷 —— 缺陷是进化的入口，循环不息。
