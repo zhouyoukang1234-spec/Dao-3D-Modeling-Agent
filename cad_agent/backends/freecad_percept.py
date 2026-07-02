@@ -165,10 +165,13 @@ def _build_topology(shape):
 
 
 def _recognize_features(shape, topo=None):
-    """Holes, bosses, fillets from cylinder-face convexity + cap analysis."""
+    """Holes, bosses, fillets from cylinder-face concavity + end probing."""
     topo = topo or _build_topology(shape)
     features = []
-    bb = shape.BoundBox
+    smooth_faces = set()
+    for ed in topo["edges"]:
+        if ed.get("convexity") == "smooth":
+            smooth_faces.update(ed["faces"])
     for fd in topo["faces"]:
         if fd["kind"] != "cylinder":
             continue
@@ -187,26 +190,88 @@ def _recognize_features(shape, topo=None):
         if to_axis.Length > 1e-9:
             to_axis.normalize()
         concave = n.dot(to_axis) > 0
-        height = face.BoundBox.DiagonalLength
-        if concave:
-            # through-hole if the cylinder spans the whole bbox along its axis
-            axis_extent = abs(axis_dir.x) * bb.XLength + \
-                abs(axis_dir.y) * bb.YLength + abs(axis_dir.z) * bb.ZLength
-            span = face.BoundBox.XLength * abs(axis_dir.x) + \
-                face.BoundBox.YLength * abs(axis_dir.y) + \
-                face.BoundBox.ZLength * abs(axis_dir.z)
-            through = span >= axis_extent - 1e-6
-            features.append({
-                "type": "through_hole" if through else "blind_hole",
-                "face": fd["id"], "radius": fd["radius"],
-                "axis": fd["axis"], "center": fd["center"]})
+        # extent of this face along its own axis
+        ts = [(vx.Point - axis_pt).dot(axis_dir) for vx in face.Vertexes]
+        if ts:
+            t_lo, t_hi = min(ts), max(ts)
         else:
-            kind = "fillet" if fd["radius"] < 0.2 * bb.DiagonalLength else "boss"
+            t_lo = t_hi = 0.0
+        depth = t_hi - t_lo
+        if concave:
+            # probe on the hole axis just beyond each end: material there
+            # means that end is capped (blind); both ends open => through.
+            eps = max(depth * 0.02, shape.BoundBox.DiagonalLength * 1e-4)
+            tol = shape.BoundBox.DiagonalLength * 1e-7
+            lo_open = not shape.isInside(
+                axis_pt + axis_dir * (t_lo - eps), tol, False)
+            hi_open = not shape.isInside(
+                axis_pt + axis_dir * (t_hi + eps), tol, False)
+            if lo_open and hi_open:
+                kind = "through_hole"
+            elif lo_open or hi_open:
+                kind = "blind_hole"
+            else:
+                kind = "internal_void"
+            features.append({
+                "type": kind, "face": fd["id"], "radius": fd["radius"],
+                "depth": _round(depth), "axis": fd["axis"],
+                "center": fd["center"]})
+        else:
+            # a fillet blends tangentially into its neighbours (smooth edges);
+            # a boss meets them at sharp edges.
+            kind = "fillet" if fd["id"] in smooth_faces else "boss"
             features.append({
                 "type": kind, "face": fd["id"], "radius": fd["radius"],
                 "axis": fd["axis"], "center": fd["center"],
-                "height": _round(height)})
+                "height": _round(depth)})
     return features
+
+
+def _detect_patterns(features):
+    """Group repeated same-size features into circular / linear patterns.
+
+    Repetition is design intent (a bolt circle, a rack of holes); reading it
+    back collapses N features into one describable fact.
+    """
+    groups = {}
+    for f in features:
+        key = (f["type"], round(f["radius"], 4),
+               tuple(round(abs(c), 4) for c in f.get("axis", [0, 0, 0])))
+        groups.setdefault(key, []).append(f)
+    patterns = []
+    for (ftype, radius, _axis), members in groups.items():
+        if len(members) < 3:
+            continue
+        centers = [V(*m["center"]) for m in members]
+        centroid = V(0, 0, 0)
+        for c in centers:
+            centroid = centroid + c
+        centroid = centroid * (1.0 / len(centers))
+        dists = [(c - centroid).Length for c in centers]
+        mean_d = sum(dists) / len(dists)
+        if mean_d > 1e-6 and all(abs(d - mean_d) < 1e-3 + mean_d * 1e-3
+                                 for d in dists):
+            patterns.append({
+                "type": "circular_pattern", "of": ftype, "count": len(members),
+                "feature_radius": radius, "circle_radius": _round(mean_d),
+                "center": _v(centroid),
+                "members": [m["face"] for m in members]})
+            continue
+        # linear: all centers collinear with equal spacing
+        d0 = centers[-1] - centers[0]
+        if d0.Length > 1e-6:
+            d0.normalize()
+            offs = sorted((c - centers[0]).dot(d0) for c in centers)
+            steps = [offs[i + 1] - offs[i] for i in range(len(offs) - 1)]
+            coll = all(((c - centers[0]) - d0 * (c - centers[0]).dot(d0)).Length
+                       < 1e-3 for c in centers)
+            if coll and steps and all(abs(st - steps[0]) < 1e-3 for st in steps):
+                patterns.append({
+                    "type": "linear_pattern", "of": ftype,
+                    "count": len(members), "feature_radius": radius,
+                    "spacing": _round(steps[0]), "direction": _v(d0),
+                    "members": [m["face"] for m in members]})
+    return patterns
 
 
 def _describe(name, shape, topo, features):
@@ -232,9 +297,23 @@ def _describe(name, shape, topo, features):
         ", ".join("%d %s" % (n, k) for k, n in sorted(conv.items())) or "n/a",
         topo["counts"]["vertices"]))
     if features:
+        patterns = _detect_patterns(features)
+        pattern_members = set()
         fparts = []
+        for pt in patterns:
+            pattern_members.update(pt["members"])
+            if pt["type"] == "circular_pattern":
+                fparts.append("%d x %s r=%.4g on a %.4g-radius circle at %s" % (
+                    pt["count"], pt["of"], pt["feature_radius"],
+                    pt["circle_radius"], pt["center"]))
+            else:
+                fparts.append("%d x %s r=%.4g spaced %.4g along %s" % (
+                    pt["count"], pt["of"], pt["feature_radius"],
+                    pt["spacing"], pt["direction"]))
         for ft in features:
-            if "hole" in ft["type"]:
+            if ft["face"] in pattern_members:
+                continue
+            if "hole" in ft["type"] or ft["type"] == "internal_void":
                 fparts.append("%s r=%.4g at %s along %s" % (
                     ft["type"], ft["radius"], ft["center"], ft["axis"]))
             else:
@@ -277,7 +356,42 @@ def register(state):
         name = _req_name(a, "percept.features")
         _, shape = _get(name)
         feats = _recognize_features(shape)
-        return {"object": name, "features": feats, "count": len(feats)}
+        return {"object": name, "features": feats, "count": len(feats),
+                "patterns": _detect_patterns(feats)}
+
+    def diff(a):
+        na = _req_name(a, "percept.diff", "a")
+        nb = _req_name(a, "percept.diff", "b")
+        _, sa = _get(na)
+        _, sb = _get(nb)
+        added = sb.cut(sa)
+        removed = sa.cut(sb)
+        fa = _recognize_features(sa)
+        fb = _recognize_features(sb)
+
+        def sig(f):
+            return (f["type"], round(f["radius"], 3),
+                    tuple(round(x, 3) for x in f["center"]))
+
+        sa_sigs = {sig(f) for f in fa}
+        sb_sigs = {sig(f) for f in fb}
+        ba, bb_ = sa.BoundBox, sb.BoundBox
+        return {
+            "a": na, "b": nb,
+            "volume_delta": _round(sb.Volume - sa.Volume),
+            "area_delta": _round(sb.Area - sa.Area),
+            "material_added": _round(added.Volume if added.Solids else 0.0),
+            "material_removed": _round(
+                removed.Volume if removed.Solids else 0.0),
+            "bbox_delta": [_round(bb_.XLength - ba.XLength),
+                           _round(bb_.YLength - ba.YLength),
+                           _round(bb_.ZLength - ba.ZLength)],
+            "face_count_delta": len(sb.Faces) - len(sa.Faces),
+            "features_gained": [f for f in fb if sig(f) not in sa_sigs],
+            "features_lost": [f for f in fa if sig(f) not in sb_sigs],
+            "identical": (abs(sb.Volume - sa.Volume) < 1e-9
+                          and not (added.Solids or removed.Solids)),
+        }
 
     def section(a):
         name = _req_name(a, "percept.section")
@@ -392,4 +506,5 @@ def register(state):
         "percept.relations": relations,
         "percept.scene": scene,
         "percept.describe": describe,
+        "percept.diff": diff,
     }

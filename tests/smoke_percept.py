@@ -116,6 +116,52 @@ def main():
     assert "through_hole" in desc and "6 plane" in desc
     print("describe:", desc)
 
+    # --- percept.diff: structural before/after comparison ---
+    r = s.act("percept.diff", {"a": "pblock", "b": "pplate"})
+    assert r.ok, "percept.diff failed: %s" % r
+    d = r.data
+    assert d["volume_delta"] < 0, "deeper hole removes material"
+    assert any(f["type"] == "through_hole" for f in d["features_gained"]), \
+        "diff should report the through-hole as gained: %s" % d
+    assert any(f["type"] == "blind_hole" for f in d["features_lost"]), \
+        "diff should report the blind-hole as lost: %s" % d
+    r = s.act("percept.diff", {"a": "pplate", "b": "pplate"})
+    assert r.ok and r.data["identical"], "same shape must diff as identical"
+    print("diff ok:", {k: d[k] for k in ("volume_delta", "material_removed")})
+
+    # --- pattern detection: 4 holes on a bolt circle ---
+    r = s.act("solid.cylinder", {"name": "pdisc", "radius": 30, "height": 8})
+    assert r.ok
+    for i, (x, y) in enumerate([(20, 0), (0, 20), (-20, 0), (0, -20)]):
+        r = s.act("solid.cylinder", {"name": "pd%d" % i, "radius": 3,
+                                     "height": 8, "pos": [x, y, 0]})
+        assert r.ok
+        r = s.act("solid.cut", {"a": "pdisc", "b": "pd%d" % i, "out": "pdisc"})
+        assert r.ok
+    r = s.act("percept.features", {"object": "pdisc"})
+    assert r.ok
+    pats = r.data["patterns"]
+    circ = [p for p in pats if p["type"] == "circular_pattern"]
+    assert len(circ) == 1 and circ[0]["count"] == 4 \
+        and abs(circ[0]["circle_radius"] - 20) < 1e-3, \
+        "expected 4-hole bolt circle R=20, got %s" % pats
+    print("pattern:", circ[0]["count"], "x r=%s on R=%s"
+          % (circ[0]["feature_radius"], circ[0]["circle_radius"]))
+    r = s.act("percept.describe", {"object": "pdisc"})
+    assert r.ok and "4 x through_hole" in r.data["description"], \
+        "describe should collapse the pattern: %s" % r.data
+    print("pattern describe ok")
+
+    # --- multi-object interference sweep ---
+    r = s.act("solid.interference", {"names": ["pplate", "pfar", "pover"]})
+    assert r.ok, "solid.interference names-form failed: %s" % r
+    assert r.data["checked"] == 3 and r.data["interfering"]
+    assert any(p["a"] == "pplate" and p["b"] == "pover"
+               for p in r.data["pairs"])
+    print("interference sweep:", r.data)
+    r = s.act("solid.interference", {"names": ["pplate"]})
+    assert not r.ok, "should reject a single-name interference sweep"
+
     # --- guards ---
     r = s.act("percept.topology", {"object": "nonexistent"})
     assert not r.ok, "should reject nonexistent object"

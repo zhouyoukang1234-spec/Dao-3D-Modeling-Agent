@@ -1834,6 +1834,28 @@ def register(state):
         }
 
     def op_interference(a):
+        # whole-assembly form: 'names' checks every pair in one call
+        names = a.get("names")
+        if names is not None:
+            if not isinstance(names, list) or len(names) < 2:
+                raise ValueError(
+                    "interference 'names' must list >= 2 solids (got %r)"
+                    % (names,))
+            shapes = [(n, _get(n).Shape) for n in names]
+            pairs = []
+            for i, (na, sa) in enumerate(shapes):
+                for nb, sb in shapes[i + 1:]:
+                    common = sa.common(sb)
+                    vol = common.Volume if common.Solids else 0.0
+                    if vol > 1e-6:
+                        pairs.append({"a": na, "b": nb,
+                                      "overlap_volume": _round(vol)})
+            return {"interfering": bool(pairs), "pairs": pairs,
+                    "checked": len(shapes) * (len(shapes) - 1) // 2}
+        if "a" not in a or "b" not in a:
+            raise ValueError(
+                "interference needs 'a' and 'b' (two solid names) or "
+                "'names' (a list of solids to check pairwise)")
         sa = _get(a["a"]).Shape
         sb = _get(a["b"]).Shape
         common = sa.common(sb)
