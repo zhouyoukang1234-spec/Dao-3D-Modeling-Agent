@@ -302,6 +302,16 @@ def _build_handlers(state):
         handlers.update(freecad_reflect.register(state))
     except Exception as exc:  # reflective universal dispatch is optional
         sys.stderr.write("reflect load failed: %r\n" % (exc,))
+    try:
+        import freecad_arch
+        handlers.update(freecad_arch.register(state))
+    except Exception as exc:  # BIM/Arch is optional
+        sys.stderr.write("arch load failed: %r\n" % (exc,))
+    try:
+        import freecad_wire
+        handlers.update(freecad_wire.register(state))
+    except Exception as exc:  # wire/DraftGeomUtils is optional
+        sys.stderr.write("wire load failed: %r\n" % (exc,))
     return handlers
 
 
