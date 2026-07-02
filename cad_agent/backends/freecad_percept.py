@@ -30,6 +30,7 @@ Runs inside freecadcmd (headless).
 import math
 
 import FreeCAD as App
+import Part
 
 V = App.Vector
 
@@ -115,9 +116,21 @@ def _edge_convexity(shape, edge, face_a, face_b):
         if n1.getAngle(n2) < 0.05:  # ~3 degrees: tangent-continuous
             return "smooth"
 
+        tv = edge.tangentAt(t)
+        eps = max(1e-6, shape.BoundBox.DiagonalLength * 1e-3)
+
         def into_face(face, n):
-            # direction from the edge point into the face interior: toward the
-            # face centroid, flattened onto the tangent plane at p.
+            # in-surface direction perpendicular to the edge; pick the sign
+            # whose probe point actually lies on the face (a centroid heading
+            # misleads on annular faces, whose centroid sits in the hole).
+            d = n.cross(tv)
+            if d.Length > 1e-9:
+                d.normalize()
+                for cand in (d, -d):
+                    q = p + cand * eps
+                    dist = face.distToShape(Part.Vertex(q))[0]
+                    if dist < eps * 0.5:
+                        return cand
             d = face.CenterOfMass - p
             d = d - n * d.dot(n)
             if d.Length < 1e-9:

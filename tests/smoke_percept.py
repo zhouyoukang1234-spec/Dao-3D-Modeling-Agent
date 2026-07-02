@@ -162,6 +162,36 @@ def main():
     r = s.act("solid.interference", {"names": ["pplate"]})
     assert not r.ok, "should reject a single-name interference sweep"
 
+    # --- stepped shaft: shoulder edge must read concave (annulus faces) ---
+    r = s.act("solid.cylinder", {"name": "pshaft", "radius": 10, "height": 60})
+    assert r.ok
+    r = s.act("solid.cylinder", {"name": "pstep", "radius": 16, "height": 20,
+                                 "pos": [0, 0, 20]})
+    assert r.ok
+    r = s.act("solid.union", {"a": "pshaft", "b": "pstep", "out": "pshaft"})
+    assert r.ok
+    r = s.act("percept.topology", {"object": "pshaft"})
+    assert r.ok
+    convs = [e.get("convexity") for e in r.data["edges"]
+             if e.get("convexity")]
+    assert convs.count("concave") == 2, \
+        "stepped shaft must show 2 concave shoulder edges: %s" % convs
+    print("stepped shaft convexity ok:", convs)
+
+    # --- solid.shell selector form ('zmax' opens the top) ---
+    r = s.act("solid.box", {"name": "pbox2", "length": 40, "width": 30,
+                            "height": 20})
+    assert r.ok
+    vol0 = r.data["volume"]
+    r = s.act("solid.shell", {"name": "pbox2", "thickness": 3,
+                              "faces": "zmax"})
+    assert r.ok, "solid.shell selector form failed: %s" % r
+    assert r.data["volume"] != vol0
+    r = s.act("solid.shell", {"name": "pbox2", "thickness": 3,
+                              "open_faces": "diagonal"})
+    assert not r.ok, "should reject a malformed shell selector"
+    print("shell selector ok")
+
     # --- guards ---
     r = s.act("percept.topology", {"object": "nonexistent"})
     assert not r.ok, "should reject nonexistent object"

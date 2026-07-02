@@ -704,10 +704,42 @@ def register(state):
         # makeThickness cannot hollow a solid without at least one removed face:
         # an empty list returns a null shape with an opaque OCC error. Require the
         # opening explicitly and report a clear, actionable message instead.
+        if open_faces is None:
+            open_faces = a.get("faces")
         if not open_faces:
             raise ValueError(
-                "solid.shell needs 'open_faces': indices of the face(s) to remove "
-                "to open the shell (a solid cannot be hollowed without an opening)")
+                "solid.shell needs 'open_faces': face indices, a selector "
+                "string like 'zmax'/'xmin', or {'axis': 'z', 'side': 'max'} "
+                "(a solid cannot be hollowed without an opening)")
+        if isinstance(open_faces, (str, dict)):
+            if isinstance(open_faces, str):
+                sel = open_faces.strip().lower()
+                if len(sel) != 4 or sel[0] not in "xyz" or \
+                        sel[1:] not in ("max", "min"):
+                    raise ValueError(
+                        "solid.shell face selector must look like 'zmax' or "
+                        "'xmin' (got %r)" % open_faces)
+                ax, side = sel[0], sel[1:]
+            else:
+                ax = str(open_faces.get("axis", "")).lower()
+                side = str(open_faces.get("side", "")).lower()
+                if ax not in "xyz" or ax == "" or side not in ("max", "min"):
+                    raise ValueError(
+                        "solid.shell face selector dict needs 'axis' in "
+                        "x/y/z and 'side' in max/min (got %r)" % open_faces)
+            comp = {"x": 0, "y": 1, "z": 2}[ax]
+            bb = obj.Shape.BoundBox
+            extreme = (bb.XMax, bb.YMax, bb.ZMax)[comp] if side == "max" \
+                else (bb.XMin, bb.YMin, bb.ZMin)[comp]
+            tol = 1e-6 * max(1.0, bb.DiagonalLength)
+            open_faces = [
+                i for i, f in enumerate(obj.Shape.Faces)
+                if abs((f.CenterOfMass.x, f.CenterOfMass.y,
+                        f.CenterOfMass.z)[comp] - extreme) < tol]
+            if not open_faces:
+                raise ValueError(
+                    "solid.shell: no face lies on the %s%s side of the solid"
+                    % (ax, side))
         bad = [i for i in open_faces if i < 0 or i >= nf]
         if bad:
             raise ValueError("open_faces %s out of range (solid has %d faces 0..%d)"
